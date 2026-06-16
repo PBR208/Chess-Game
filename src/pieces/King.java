@@ -17,4 +17,14 @@ public class King extends Piece{
 
         this.front = img.getSubimage(0 * imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }
+
+    public boolean isValidMovement(int col, int row){
+        int colDiff = Math.abs(col - this.col);
+        int rowDiff = Math.abs(row - this.row);
+
+        return colDiff <= 1
+                && rowDiff <= 1
+                && (colDiff != 0 || rowDiff != 0);
+    }
+    public boolean isValidCollide(int col, int row){return false;}
 }
