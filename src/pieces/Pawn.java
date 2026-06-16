@@ -20,9 +20,9 @@ public class Pawn extends Piece {
 
     public boolean isValidMovement(int col, int row) {
 
-        int colorIndex = isWhite ? 1 : -1;
+        int colorIndex = this.isWhite ? 1 : -1;
 
-        // push pawn after move 1
+        // push pawn after move 1 (move = 1 tile radius)
         if (this.col == col && row == this.row - colorIndex && b.getPiece(col, row) == null) {
             return true;
         }
@@ -42,6 +42,15 @@ public class Pawn extends Piece {
                 return true;
             }
         }
+
+        // en passant
+
+        if (Math.abs(col - this.col) == 1 &&
+                row == this.row - colorIndex &&
+                b.getTileNum(col, row) == b.getEnPassantTile()) {
+            return true;
+        }
+
 
         return false;
     }
