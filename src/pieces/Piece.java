@@ -16,6 +16,8 @@ public class Piece {
     protected String name;
     protected int value;
 
+    private boolean isFirstmove = true;
+
     BufferedImage img = null;
     {
         try {
@@ -42,6 +44,8 @@ public class Piece {
 
         g2d.drawImage(front, xPos, yPos, null);
     }
+
+    // GETTER
 
     public int getCol() {
         return col;
@@ -71,6 +75,12 @@ public class Piece {
         return value;
     }
 
+    public boolean isFirstmove() {
+        return isFirstmove;
+    }
+
+    // SETTER
+
     public void setCol(int col) {
         this.col = col;
     }
@@ -97,5 +107,9 @@ public class Piece {
 
     public void setValue(int value) {
         this.value = value;
+    }
+
+    public void setFirstmove(boolean firstmove) {
+        isFirstmove = firstmove;
     }
 }
