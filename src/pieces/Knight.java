@@ -17,4 +17,8 @@ public class Knight extends Piece{
 
         this.front = img.getSubimage(3 * imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }
+
+    public boolean isValidMovement(int col, int row){
+        return Math.abs(col - this.col) * Math.abs(row - this.row) == 2;
+    }
 }
