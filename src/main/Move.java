@@ -38,4 +38,8 @@ public class Move {
     public Piece getCapture() {
         return capture;
     }
+
+    public void setCapture(Piece capture) {
+        this.capture = capture;
+    }
 }
