@@ -16,8 +16,10 @@ public class Board extends JPanel{
     private ArrayList<Piece> pieces = new ArrayList<>();
 
     private Piece selectedPiece;
+    private int enPassantTile = -1;
 
     private Input input = new Input(this);
+
 
     public Board(){
         JFrame board = new JFrame();
@@ -93,6 +95,43 @@ public class Board extends JPanel{
     // SECTION for making MOVES
 
     public void makeMove(Move m){
+
+        if (m.getPiece().getName().equals("Pawn")){
+            movePawn(m);
+        } else {
+            m.getPiece().setCol(m.getNewCol());
+            m.getPiece().setRow(m.getNewRow());
+            m.getPiece().setxPos(m.getNewCol() * tileSize);
+            m.getPiece().setyPos(m.getNewRow() * tileSize);
+
+            m.getPiece().setFirstmove(false);
+
+            capture(m);
+        }
+    }
+
+    public void movePawn(Move m){
+
+        // en passent
+        int colorIndex = m.getPiece().isWhite() ? 1 : -1;
+
+        if (getTileNum(m.getNewCol(), m.getNewRow()) == enPassantTile){
+            m.setCapture(getPiece(m.getNewCol(), m.getNewRow() + colorIndex));
+        }
+
+        if (Math.abs(m.getPiece().getRow() - m.getNewRow()) == 2){
+            enPassantTile = getTileNum(m.getNewCol(), m.getNewRow() + colorIndex);
+        } else {
+            enPassantTile = -1;
+        }
+
+        //promotion
+
+        colorIndex = m.getPiece().isWhite() ? 0 : 7;
+        if (m.getNewRow() == colorIndex){
+            promotePawn(m);
+        }
+
         m.getPiece().setCol(m.getNewCol());
         m.getPiece().setRow(m.getNewRow());
         m.getPiece().setxPos(m.getNewCol() * tileSize);
@@ -101,6 +140,11 @@ public class Board extends JPanel{
         m.getPiece().setFirstmove(false);
 
         capture(m);
+    }
+
+    private void promotePawn(Move m){
+        pieces.add(new Queen(this, m.getNewCol(), m.getNewRow(), m.getPiece().isWhite()));
+        pieces.remove(m.getPiece());
     }
 
     public void capture(Move m){
@@ -131,6 +175,8 @@ public class Board extends JPanel{
         return false;
     }
 
+
+
     // GETTER
 
     public Piece getPiece(int col, int row){
@@ -148,6 +194,14 @@ public class Board extends JPanel{
 
     public Piece getSelectedPiece() {
         return selectedPiece;
+    }
+
+    public int getTileNum(int col, int row){
+        return row * rows + col * cols;
+    }
+
+    public int getEnPassantTile() {
+        return enPassantTile;
     }
 
     // SETTER
