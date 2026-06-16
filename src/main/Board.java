@@ -15,11 +15,28 @@ public class Board extends JPanel{
 
     ArrayList<Piece> pieces = new ArrayList<>();
 
+    public Piece selectedPiece;
+
+    Input input = new Input(this);
     public Board(){
         JFrame board = new JFrame();
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize));
+
+        this.addMouseListener(input);
+        this.addMouseMotionListener(input);
+
         addPieces();
     }
+
+    public Piece getPiece(int col, int row){
+        for (Piece p : pieces){
+            if (p.getCol() == col && p.getRow() == row){
+                return p;
+            }
+        }
+        return null;
+    }
+
 
     public void addPieces(){
 
@@ -68,4 +85,39 @@ public class Board extends JPanel{
             p.paint(g2d);
         }
     }
+
+    public void makeMove(Move m){
+        m.piece.setCol(m.newCol);
+        m.piece.setRow(m.newRow);
+        m.piece.setxPos(m.newCol * tileSize);
+        m.piece.setyPos(m.newRow * tileSize);
+
+        capture(m);
+    }
+
+    public void capture(Move m){
+        pieces.remove(m.capture);
+    }
+
+    public boolean isValidMove(Move m){
+
+        if (isSameTeam(m.piece, m.capture)){
+            return false;
+        }
+
+        return true;
+    }
+
+    private boolean isSameTeam(Piece p1, Piece p2) {
+        if (p1 != null && p2 != null) {
+            if (p1.isWhite() == p2.isWhite()) {
+                return true;
+            }
+
+            return false;
+        }
+        return false;
+    }
+
+
 }
