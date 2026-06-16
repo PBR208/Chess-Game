@@ -4,7 +4,7 @@ import main.Board;
 
 import java.awt.image.BufferedImage;
 
-public class Pawn extends Piece{
+public class Pawn extends Piece {
     public Pawn(Board b, int col, int row, boolean isWhite) {
         super(b);
         this.col = col;
@@ -17,4 +17,33 @@ public class Pawn extends Piece{
 
         this.front = img.getSubimage(5 * imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }
+
+    public boolean isValidMovement(int col, int row) {
+
+        int colorIndex = isWhite ? 1 : -1;
+
+        // push pawn after move 1
+        if (this.col == col && row == this.row - colorIndex && b.getPiece(col, row) == null) {
+            return true;
+        }
+
+        // push pawn move 1
+        if (isFirstmove() && this.col == col && row == this.row - colorIndex * 2 && b.getPiece(col, row) == null && b.getPiece(col, row + colorIndex) == null) {
+            return true;
+        }
+
+        //capture
+        if (Math.abs(col - this.col) == 1 &&
+                row == this.row - colorIndex) {
+
+            Piece target = b.getPiece(col, row);
+
+            if (target != null && target.isWhite() != this.isWhite) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
 }
