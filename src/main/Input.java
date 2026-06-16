@@ -7,7 +7,7 @@ import java.awt.event.MouseEvent;
 
 public class Input extends MouseAdapter {
 
-    Board b;
+    private Board b;
 
     public Input(Board b){
         this.b = b;
@@ -16,21 +16,21 @@ public class Input extends MouseAdapter {
     @Override
     public void mousePressed(MouseEvent e) {
 
-        int col = e.getX() / b.tileSize;
-        int row = e.getY() / b.tileSize;
+        int col = e.getX() / b.getTileSize();
+        int row = e.getY() / b.getTileSize();
 
         Piece pAtLocation = b.getPiece(col, row);
         if (pAtLocation != null){
-            b.selectedPiece = pAtLocation;
+            b.setSelectedPiece(pAtLocation);
         }
     }
 
     @Override
     public void mouseDragged(MouseEvent e) {
 
-        if (b.selectedPiece != null){
-            b.selectedPiece.setxPos(e.getX() - b.tileSize / 2); // /2 for centering on the tile
-            b.selectedPiece.setyPos(e.getY() - b.tileSize / 2);
+        if (b.getSelectedPiece() != null){
+            b.getSelectedPiece().setxPos(e.getX() - b.getTileSize() / 2); // /2 for centering on the tile
+            b.getSelectedPiece().setyPos(e.getY() - b.getTileSize() / 2);
 
             b.repaint();
         }
@@ -39,21 +39,21 @@ public class Input extends MouseAdapter {
     @Override
     public void mouseReleased(MouseEvent e) {
 
-        int col = e.getX() / b.tileSize;
-        int row = e.getY() / b.tileSize;
+        int col = e.getX() / b.getTileSize();
+        int row = e.getY() / b.getTileSize();
 
-        if (b.selectedPiece != null){
-            Move m = new Move(b, b.selectedPiece, col, row);
+        if (b.getSelectedPiece() != null){
+            Move m = new Move(b, b.getSelectedPiece(), col, row);
 
             if (b.isValidMove(m)){
                 b.makeMove(m);
             } else {
-                b.selectedPiece.setxPos(b.selectedPiece.getCol() * b.tileSize);
-                b.selectedPiece.setyPos(b.selectedPiece.getRow() * b.tileSize);
+                b.getSelectedPiece().setxPos(b.getSelectedPiece().getCol() * b.getTileSize());
+                b.getSelectedPiece().setyPos(b.getSelectedPiece().getRow() * b.getTileSize());
             }
         }
 
-        b.selectedPiece = null;
+        b.setSelectedPiece(null);
         b.repaint();
     }
 }

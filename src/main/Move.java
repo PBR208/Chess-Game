@@ -4,13 +4,13 @@ import pieces.Piece;
 
 public class Move {
 
-    int oldCol;
-    int newCol;
-    int oldRow;
-    int newRow;
+    private int oldCol;
+    private int newCol;
+    private int oldRow;
+    private int newRow;
 
-    Piece piece;
-    Piece capture;
+    private Piece piece;
+    private Piece capture;
 
     public Move(Board b, Piece p, int newCol, int newRow){
 
@@ -21,5 +21,21 @@ public class Move {
 
         this.piece = p;
         this.capture = b.getPiece(newCol, newRow);
+    }
+
+    public int getNewCol() {
+        return newCol;
+    }
+
+    public int getNewRow() {
+        return newRow;
+    }
+
+    public Piece getPiece() {
+        return piece;
+    }
+
+    public Piece getCapture() {
+        return capture;
     }
 }

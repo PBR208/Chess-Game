@@ -9,12 +9,12 @@ public class Bishop extends Piece{
         super(b);
         this.col = col;
         this.row = row;
-        this.xPos = col * b.tileSize;
-        this.yPos = row * b.tileSize;
+        this.xPos = col * b.getTileSize();
+        this.yPos = row * b.getTileSize();
 
         this.isWhite = isWhite;
         this.name = "Bishop";
 
-        this.front = img.getSubimage(2 * imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.tileSize, b.tileSize, BufferedImage.SCALE_SMOOTH);
+        this.front = img.getSubimage(2 * imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }
 }

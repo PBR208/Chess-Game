@@ -8,16 +8,17 @@ import java.util.ArrayList;
 
 public class Board extends JPanel{
 
-    public int tileSize = 85;
+    private int tileSize = 85;
 
     private int rows = 8;
     private int cols = 8;
 
-    ArrayList<Piece> pieces = new ArrayList<>();
+    private ArrayList<Piece> pieces = new ArrayList<>();
 
-    public Piece selectedPiece;
+    private Piece selectedPiece;
 
-    Input input = new Input(this);
+    private Input input = new Input(this);
+
     public Board(){
         JFrame board = new JFrame();
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize));
@@ -27,16 +28,6 @@ public class Board extends JPanel{
 
         addPieces();
     }
-
-    public Piece getPiece(int col, int row){
-        for (Piece p : pieces){
-            if (p.getCol() == col && p.getRow() == row){
-                return p;
-            }
-        }
-        return null;
-    }
-
 
     public void addPieces(){
 
@@ -86,22 +77,24 @@ public class Board extends JPanel{
         }
     }
 
+    // SECTION for making MOVES
+
     public void makeMove(Move m){
-        m.piece.setCol(m.newCol);
-        m.piece.setRow(m.newRow);
-        m.piece.setxPos(m.newCol * tileSize);
-        m.piece.setyPos(m.newRow * tileSize);
+        m.getPiece().setCol(m.getNewCol());
+        m.getPiece().setRow(m.getNewRow());
+        m.getPiece().setxPos(m.getNewCol() * tileSize);
+        m.getPiece().setyPos(m.getNewRow() * tileSize);
 
         capture(m);
     }
 
     public void capture(Move m){
-        pieces.remove(m.capture);
+        pieces.remove(m.getCapture());
     }
 
     public boolean isValidMove(Move m){
 
-        if (isSameTeam(m.piece, m.capture)){
+        if (isSameTeam(m.getPiece(), m.getCapture())){
             return false;
         }
 
@@ -117,6 +110,31 @@ public class Board extends JPanel{
             return false;
         }
         return false;
+    }
+
+    // GETTER
+
+    public Piece getPiece(int col, int row){
+        for (Piece p : pieces){
+            if (p.getCol() == col && p.getRow() == row){
+                return p;
+            }
+        }
+        return null;
+    }
+
+    public int getTileSize() {
+        return tileSize;
+    }
+
+    public Piece getSelectedPiece() {
+        return selectedPiece;
+    }
+
+    // SETTER
+
+    public void setSelectedPiece(Piece selectedPiece) {
+        this.selectedPiece = selectedPiece;
     }
 
 
