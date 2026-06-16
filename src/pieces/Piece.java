@@ -39,4 +39,60 @@ public class Piece {
 
         g2d.drawImage(front, xPos, yPos, null);
     }
+
+    public int getCol() {
+        return col;
+    }
+
+    public int getRow() {
+        return row;
+    }
+
+    public int getxPos() {
+        return xPos;
+    }
+
+    public int getyPos() {
+        return yPos;
+    }
+
+    public boolean isWhite() {
+        return isWhite;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public int getValue() {
+        return value;
+    }
+
+    public void setCol(int col) {
+        this.col = col;
+    }
+
+    public void setRow(int row) {
+        this.row = row;
+    }
+
+    public void setxPos(int xPos) {
+        this.xPos = xPos;
+    }
+
+    public void setyPos(int yPos) {
+        this.yPos = yPos;
+    }
+
+    public void setWhite(boolean white) {
+        isWhite = white;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public void setValue(int value) {
+        this.value = value;
+    }
 }
