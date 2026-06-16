@@ -72,6 +72,19 @@ public class Board extends JPanel{
 
         }
 
+        if (selectedPiece != null) {
+            for (int r = 0; r < rows; r++) {
+                for (int c = 0; c < cols; c++) {
+
+                    if (isValidMove(new Move(this, selectedPiece, c, r))) {
+
+                        g2d.setColor(new Color(81, 168, 0, 200));
+                        g2d.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
+                    }
+
+                }
+            }
+        }
         for (Piece p : pieces){
             p.paint(g2d);
         }
@@ -94,11 +107,15 @@ public class Board extends JPanel{
 
     public boolean isValidMove(Move m){
 
-        if (isSameTeam(m.getPiece(), m.getCapture())){
-            return false;
+        if (!isSameTeam(m.getPiece(), m.getCapture())) {
+            if (m.getPiece().isValidMovement(m.getNewCol(), m.getNewRow())) {
+                if (!m.getPiece().isValidCollide(m.getNewCol(), m.getNewRow())) {
+                    return true;
+                }
+            }
         }
 
-        return true;
+        return false;
     }
 
     private boolean isSameTeam(Piece p1, Piece p2) {
