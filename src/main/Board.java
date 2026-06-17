@@ -143,9 +143,38 @@ public class Board extends JPanel{
     }
 
     private void promotePawn(Move m){
-        pieces.add(new Queen(this, m.getNewCol(), m.getNewRow(), m.getPiece().isWhite()));
-        pieces.remove(m.getPiece());
-    }
+
+            JFrame frame = (JFrame) SwingUtilities.getWindowAncestor(this);
+
+            PromoteGUI dialog = new PromoteGUI(frame);
+            PromoteGUI.Choice choice = dialog.showDialog();
+
+            Piece newPiece;
+
+            boolean white = m.getPiece().isWhite();
+
+            switch (choice) {
+                case ROOK:
+                    newPiece = new Rook(this, m.getNewCol(), m.getNewRow(), white);
+                    break;
+
+                case BISHOP:
+                    newPiece = new Bishop(this, m.getNewCol(), m.getNewRow(), white);
+                    break;
+
+                case KNIGHT:
+                    newPiece = new Knight(this, m.getNewCol(), m.getNewRow(), white);
+                    break;
+
+                default:
+                    newPiece = new Queen(this, m.getNewCol(), m.getNewRow(), white);
+                    break;
+            }
+
+            pieces.remove(m.getPiece());
+            pieces.add(newPiece);
+        }
+
 
     public void capture(Move m){
         pieces.remove(m.getCapture());
