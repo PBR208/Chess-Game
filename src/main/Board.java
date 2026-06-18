@@ -5,6 +5,7 @@ import pieces.*;
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.List;
 
 public class Board extends JPanel{
 
@@ -19,6 +20,8 @@ public class Board extends JPanel{
     private int enPassantTile = -1;
 
     private Input input = new Input(this);
+
+    CheckScanner cs = new CheckScanner(this);
 
 
     public Board(){
@@ -173,7 +176,7 @@ public class Board extends JPanel{
 
             pieces.remove(m.getPiece());
             pieces.add(newPiece);
-        }
+    }
 
 
     public void capture(Move m){
@@ -185,7 +188,9 @@ public class Board extends JPanel{
         if (!isSameTeam(m.getPiece(), m.getCapture())) {
             if (m.getPiece().isValidMovement(m.getNewCol(), m.getNewRow())) {
                 if (!m.getPiece().isValidCollide(m.getNewCol(), m.getNewRow())) {
-                    return true;
+                    if (!cs.isKingLeftInCheck(m)) {
+                        return true;
+                    }
                 }
             }
         }
@@ -233,10 +238,19 @@ public class Board extends JPanel{
         return enPassantTile;
     }
 
+    public List<Piece> getPieces(){
+
+        return pieces;
+    }
+
     // SETTER
 
     public void setSelectedPiece(Piece selectedPiece) {
         this.selectedPiece = selectedPiece;
+    }
+
+    public void removePiece(Piece p){
+        pieces.remove(p);
     }
 
 
