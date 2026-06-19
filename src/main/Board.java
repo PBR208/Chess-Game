@@ -21,7 +21,7 @@ public class Board extends JPanel{
 
     private Input input = new Input(this);
 
-    CheckScanner cs = new CheckScanner(this);
+    private CheckScanner cs = new CheckScanner(this);
 
 
     public Board(){
@@ -98,6 +98,10 @@ public class Board extends JPanel{
     // SECTION for making MOVES
 
     public void makeMove(Move m){
+
+        if (m.getPiece() instanceof King && Math.abs(m.getNewCol() - m.getPiece().getCol()) == 2) {
+            castle((King)m.getPiece(), m.getNewCol());
+        }
 
         if (m.getPiece().getName().equals("Pawn")){
             movePawn(m);
@@ -178,6 +182,22 @@ public class Board extends JPanel{
             pieces.add(newPiece);
     }
 
+    private void castle(King king, int newCol) {
+
+        int row = king.getRow();
+
+        if (newCol == 6) { // kingside
+            Piece rook = getPiece(7, row);
+            rook.setCol(5);
+            rook.setxPos(5 * getTileSize());
+        }
+
+        if (newCol == 2) { // queenside
+            Piece rook = getPiece(0, row);
+            rook.setCol(3);
+            rook.setxPos(3 * getTileSize());
+        }
+    }
 
     public void capture(Move m){
         pieces.remove(m.getCapture());
@@ -241,6 +261,10 @@ public class Board extends JPanel{
     public List<Piece> getPieces(){
 
         return pieces;
+    }
+
+    public CheckScanner getCs() {
+        return cs;
     }
 
     // SETTER
