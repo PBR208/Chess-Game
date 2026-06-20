@@ -40,30 +40,61 @@ public class King extends Piece {
 
         if (!this.isFirstMove()) return false;
 
-        int rookCol = (col == 6) ? 7 : 0;
+        int rookCol;
+        int step;
+
+        // kingside
+        if (col == 6) {
+
+            rookCol = 7;
+            step = 1;
+
+        }
+
+        // queenside
+        else if (col == 2) {
+
+            rookCol = 0;
+            step = -1;
+
+        }
+
+        // anything else is NOT castling
+        else {
+            return false;
+        }
+
         Piece rook = b.getPiece(rookCol, row);
 
         if (!(rook instanceof Rook)) return false;
+
         if (!rook.isFirstMove()) return false;
 
-        // path must be empty
-        int step = (col == 6) ? 1 : -1;
-
+        // check empty squares between king and rook
         for (int c = this.col + step; c != rookCol; c += step) {
-            if (b.getPiece(c, row) != null) return false;
+
+            if (b.getPiece(c, row) != null) {
+                return false;
+            }
         }
 
-        // king may NOT be in check or pass through check
-        if (b.getCs().isKingInCheckRN(this.isWhite)) return false;
+        // king cannot start in check
+        if (b.getCs().isKingInCheckRN(this.isWhite)) {
+            return false;
+        }
 
-        // simulate squares king passes through
-        int mid1 = this.col + step;
-        int mid2 = col;
+        // king cannot pass through check
+        Move middle = new Move(b, this, this.col + step, row);
+        Move destination = new Move(b, this, col, row);
 
-        Move test1 = new Move(b, this, mid1, row);
-        Move test2 = new Move(b, this, mid2, row);
+        if (b.getCs().isKingLeftInCheck(middle)) {
+            return false;
+        }
 
-        if (b.getCs().isKingLeftInCheck(test1)) return false;
-        return !b.getCs().isKingLeftInCheck(test2);
+        if (b.getCs().isKingLeftInCheck(destination)) {
+            return false;
+        }
+        
+        return true;
     }
 }
