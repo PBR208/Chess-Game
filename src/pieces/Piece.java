@@ -4,6 +4,8 @@ import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Objects;
 
 import main.Board;
@@ -23,10 +25,14 @@ public class Piece {
 
     {
         try {
-            img = ImageIO.read(Objects.requireNonNull(ClassLoader.getSystemResourceAsStream("pieces.png")));
+            Path path = Paths.get(System.getProperty("user.dir"),
+                    "src", "resources", "pieces.png");
+
+            img = ImageIO.read(path.toFile());
+
         } catch (IOException e) {
             e.printStackTrace();
-            System.out.println("The resource folder must be marked as a Resource Root");
+            System.out.println("Failed to load image from filesystem path.");
         }
     }
 
