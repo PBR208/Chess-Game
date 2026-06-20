@@ -4,6 +4,7 @@ import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
+import java.util.Objects;
 
 import main.Board;
 
@@ -16,31 +17,37 @@ public class Piece {
     protected String name;
     protected int value;
 
-    private boolean isFirstmove = true;
+    private boolean isFirstMove = true;
 
     BufferedImage img = null;
+
     {
         try {
-
-            img = ImageIO.read(ClassLoader.getSystemResourceAsStream("pieces.png"));
-        } catch (IOException e){
+            img = ImageIO.read(Objects.requireNonNull(ClassLoader.getSystemResourceAsStream("pieces.png")));
+        } catch (IOException e) {
             e.printStackTrace();
+            System.out.println("The resource folder must be marked as a Resource Root");
         }
     }
 
-    protected int imgScale = img.getWidth()/6;
+    protected final int imgScale = img.getWidth() / 6;
 
     public Image front;
     public Board b;
 
-    public Piece(Board b){
+    public Piece(Board b) {
         this.b = b;
     }
 
-    public boolean isValidMovement(int col, int row){return true;}
-    public boolean isValidCollide(int col, int row){return false;}
+    public boolean isValidMovement(int col, int row) {
+        return true;
+    }
 
-    public void paint(Graphics2D g2d){
+    public boolean isValidCollide(int col, int row) {
+        return false;
+    }
+
+    public void paint(Graphics2D g2d) {
 
         g2d.drawImage(front, xPos, yPos, null);
     }
@@ -55,14 +62,6 @@ public class Piece {
         return row;
     }
 
-    public int getxPos() {
-        return xPos;
-    }
-
-    public int getyPos() {
-        return yPos;
-    }
-
     public boolean isWhite() {
         return isWhite;
     }
@@ -71,12 +70,8 @@ public class Piece {
         return name;
     }
 
-    public int getValue() {
-        return value;
-    }
-
-    public boolean isFirstmove() {
-        return isFirstmove;
+    public boolean isFirstMove() {
+        return isFirstMove;
     }
 
     // SETTER
@@ -97,19 +92,7 @@ public class Piece {
         this.yPos = yPos;
     }
 
-    public void setWhite(boolean white) {
-        isWhite = white;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public void setValue(int value) {
-        this.value = value;
-    }
-
-    public void setFirstmove(boolean firstmove) {
-        isFirstmove = firstmove;
+    public void setFirstMove(boolean firstMove) {
+        isFirstMove = firstMove;
     }
 }

@@ -4,7 +4,7 @@ import main.Board;
 
 import java.awt.image.BufferedImage;
 
-public class Bishop extends Piece{
+public class Bishop extends Piece {
     public Bishop(Board b, int col, int row, boolean isWhite) {
         super(b);
         this.col = col;
@@ -18,7 +18,7 @@ public class Bishop extends Piece{
         this.front = img.getSubimage(2 * imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }
 
-    public boolean isValidMovement(int col, int row){
+    public boolean isValidMovement(int col, int row) {
         return Math.abs(col - this.col) == Math.abs(row - this.row);
     }
 

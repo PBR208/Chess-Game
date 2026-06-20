@@ -28,13 +28,12 @@ public class Pawn extends Piece {
         }
 
         // push pawn move 1
-        if (isFirstmove() && this.col == col && row == this.row - colorIndex * 2 && b.getPiece(col, row) == null && b.getPiece(col, row + colorIndex) == null) {
+        if (isFirstMove() && this.col == col && row == this.row - colorIndex * 2 && b.getPiece(col, row) == null && b.getPiece(col, row + colorIndex) == null) {
             return true;
         }
 
         //capture
-        if (Math.abs(col - this.col) == 1 &&
-                row == this.row - colorIndex) {
+        if (Math.abs(col - this.col) == 1 && row == this.row - colorIndex) {
 
             Piece target = b.getPiece(col, row);
 
@@ -45,14 +44,7 @@ public class Pawn extends Piece {
 
         // en passant
 
-        if (Math.abs(col - this.col) == 1 &&
-                row == this.row - colorIndex &&
-                b.getTileNum(col, row) == b.getEnPassantTile()) {
-            return true;
-        }
-
-
-        return false;
+        return Math.abs(col - this.col) == 1 && row == this.row - colorIndex && b.getTileNum(col, row) == b.getEnPassantTile();
     }
 
 }

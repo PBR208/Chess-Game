@@ -4,7 +4,7 @@ import main.Board;
 
 import java.awt.image.BufferedImage;
 
-public class Queen extends Piece{
+public class Queen extends Piece {
     public Queen(Board b, int col, int row, boolean isWhite) {
         super(b);
         this.col = col;
@@ -15,7 +15,7 @@ public class Queen extends Piece{
         this.isWhite = isWhite;
         this.name = "Queen";
 
-        this.front = img.getSubimage(1 * imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
+        this.front = img.getSubimage(imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }
 
     public boolean isValidMovement(int col, int row) {

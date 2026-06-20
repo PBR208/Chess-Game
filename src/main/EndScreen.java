@@ -17,9 +17,7 @@ public class EndScreen extends JDialog {
         JButton restartButton = new JButton("Restart");
 
         restartButton.addActionListener(
-                e -> {
-                    dispose();
-                }
+                e -> dispose()
         );
 
         add(txt);

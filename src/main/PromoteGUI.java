@@ -22,10 +22,22 @@ public class PromoteGUI extends JDialog {
         JButton bishop = new JButton("Bishop");
         JButton knight = new JButton("Knight");
 
-        queen.addActionListener(e -> {choice = Choice.QUEEN; dispose(); });
-        rook.addActionListener(e -> { choice = Choice.ROOK; dispose(); });
-        bishop.addActionListener(e -> { choice = Choice.BISHOP; dispose(); });
-        knight.addActionListener(e -> { choice = Choice.KNIGHT; dispose(); });
+        queen.addActionListener(e -> {
+            choice = Choice.QUEEN;
+            dispose();
+        });
+        rook.addActionListener(e -> {
+            choice = Choice.ROOK;
+            dispose();
+        });
+        bishop.addActionListener(e -> {
+            choice = Choice.BISHOP;
+            dispose();
+        });
+        knight.addActionListener(e -> {
+            choice = Choice.KNIGHT;
+            dispose();
+        });
 
         // adding buttons
 

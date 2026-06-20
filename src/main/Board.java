@@ -7,34 +7,32 @@ import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
 
-public class Board extends JPanel{
+public class Board extends JPanel {
 
-    private int tileSize = 85;
+    private final int tileSize = 85;
 
-    private int rows = 8;
-    private int cols = 8;
+    private final int rows = 8;
+    private final int cols = 8;
 
     private ArrayList<Piece> pieces = new ArrayList<>();
 
     private Piece selectedPiece;
     private int enPassantTile = -1;
 
-    private Input input = new Input(this);
-
-    private CheckScanner cs = new CheckScanner(this);
+    private final CheckScanner cs = new CheckScanner(this);
 
 
-    public Board(){
-        JFrame board = new JFrame();
+    public Board() {
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize));
 
+        Input input = new Input(this);
         this.addMouseListener(input);
         this.addMouseMotionListener(input);
 
         pieces = addPieces();
     }
 
-    public ArrayList<Piece> addPieces(){
+    public ArrayList<Piece> addPieces() {
 
         ArrayList<Piece> newGame = new ArrayList<>();
 
@@ -69,16 +67,16 @@ public class Board extends JPanel{
         return newGame;
     }
 
-    public void restartGame(){
+    public void restartGame() {
         pieces = addPieces();
     }
 
-    public void paintComponent(Graphics g){
+    public void paintComponent(Graphics g) {
         Graphics2D g2d = (Graphics2D) g;
 
-        for (int r = 0; r < rows; r++){
-            for (int c = 0; c < cols; c++){
-                g2d.setColor((c+r) % 2 == 0 ? new Color( 232, 235, 239) : new Color(125, 135, 150));
+        for (int r = 0; r < rows; r++) {
+            for (int c = 0; c < cols; c++) {
+                g2d.setColor((c + r) % 2 == 0 ? new Color(232, 235, 239) : new Color(125, 135, 150));
                 g2d.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
             }
 
@@ -97,20 +95,20 @@ public class Board extends JPanel{
                 }
             }
         }
-        for (Piece p : pieces){
+        for (Piece p : pieces) {
             p.paint(g2d);
         }
     }
 
     // SECTION for making MOVES
 
-    public void makeMove(Move m){
+    public void makeMove(Move m) {
 
         if (m.getPiece() instanceof King && Math.abs(m.getNewCol() - m.getPiece().getCol()) == 2) {
-            castle((King)m.getPiece(), m.getNewCol());
+            castle((King) m.getPiece(), m.getNewCol());
         }
 
-        if (m.getPiece().getName().equals("Pawn")){
+        if (m.getPiece().getName().equals("Pawn")) {
             movePawn(m);
         } else {
             m.getPiece().setCol(m.getNewCol());
@@ -118,7 +116,7 @@ public class Board extends JPanel{
             m.getPiece().setxPos(m.getNewCol() * tileSize);
             m.getPiece().setyPos(m.getNewRow() * tileSize);
 
-            m.getPiece().setFirstmove(false);
+            m.getPiece().setFirstMove(false);
 
             capture(m);
         }
@@ -126,16 +124,16 @@ public class Board extends JPanel{
         checkGameEnd(m);
     }
 
-    public void movePawn(Move m){
+    public void movePawn(Move m) {
 
         // en passent
         int colorIndex = m.getPiece().isWhite() ? 1 : -1;
 
-        if (getTileNum(m.getNewCol(), m.getNewRow()) == enPassantTile){
+        if (getTileNum(m.getNewCol(), m.getNewRow()) == enPassantTile) {
             m.setCapture(getPiece(m.getNewCol(), m.getNewRow() + colorIndex));
         }
 
-        if (Math.abs(m.getPiece().getRow() - m.getNewRow()) == 2){
+        if (Math.abs(m.getPiece().getRow() - m.getNewRow()) == 2) {
             enPassantTile = getTileNum(m.getNewCol(), m.getNewRow() + colorIndex);
         } else {
             enPassantTile = -1;
@@ -144,7 +142,7 @@ public class Board extends JPanel{
         //promotion
 
         colorIndex = m.getPiece().isWhite() ? 0 : 7;
-        if (m.getNewRow() == colorIndex){
+        if (m.getNewRow() == colorIndex) {
             promotePawn(m);
         }
 
@@ -153,42 +151,31 @@ public class Board extends JPanel{
         m.getPiece().setxPos(m.getNewCol() * tileSize);
         m.getPiece().setyPos(m.getNewRow() * tileSize);
 
-        m.getPiece().setFirstmove(false);
+        m.getPiece().setFirstMove(false);
 
         capture(m);
     }
 
-    private void promotePawn(Move m){
+    private void promotePawn(Move m) {
 
-            JFrame frame = (JFrame) SwingUtilities.getWindowAncestor(this);
+        JFrame frame = (JFrame) SwingUtilities.getWindowAncestor(this);
 
-            PromoteGUI dialog = new PromoteGUI(frame);
-            PromoteGUI.Choice choice = dialog.showDialog();
+        PromoteGUI dialog = new PromoteGUI(frame);
+        PromoteGUI.Choice choice = dialog.showDialog();
 
-            Piece newPiece;
+        Piece newPiece;
 
-            boolean white = m.getPiece().isWhite();
+        boolean white = m.getPiece().isWhite();
 
-            switch (choice) {
-                case ROOK:
-                    newPiece = new Rook(this, m.getNewCol(), m.getNewRow(), white);
-                    break;
+        newPiece = switch (choice) {
+            case ROOK -> new Rook(this, m.getNewCol(), m.getNewRow(), white);
+            case BISHOP -> new Bishop(this, m.getNewCol(), m.getNewRow(), white);
+            case KNIGHT -> new Knight(this, m.getNewCol(), m.getNewRow(), white);
+            default -> new Queen(this, m.getNewCol(), m.getNewRow(), white);
+        };
 
-                case BISHOP:
-                    newPiece = new Bishop(this, m.getNewCol(), m.getNewRow(), white);
-                    break;
-
-                case KNIGHT:
-                    newPiece = new Knight(this, m.getNewCol(), m.getNewRow(), white);
-                    break;
-
-                default:
-                    newPiece = new Queen(this, m.getNewCol(), m.getNewRow(), white);
-                    break;
-            }
-
-            pieces.remove(m.getPiece());
-            pieces.add(newPiece);
+        pieces.remove(m.getPiece());
+        pieces.add(newPiece);
     }
 
     private void castle(King king, int newCol) {
@@ -208,12 +195,12 @@ public class Board extends JPanel{
         }
     }
 
-    private void checkGameEnd(Move m){
+    private void checkGameEnd(Move m) {
 
         boolean nextPlayer = !m.getPiece().isWhite();
         JFrame parent = (JFrame) SwingUtilities.getWindowAncestor(this);
 
-        if(cs.isCheckmate(nextPlayer)){
+        if (cs.isCheckmate(nextPlayer)) {
             String winner = m.getPiece().isWhite() ? "White wins!" : "Black wins!";
 
             EndScreen screen = new EndScreen(parent, winner);
@@ -221,7 +208,7 @@ public class Board extends JPanel{
 
             restartGame();
 
-        } else if(cs.isStalemate(nextPlayer)) {
+        } else if (cs.isStalemate(nextPlayer)) {
             EndScreen screen = new EndScreen(parent, "Stalemate - Draw");
             screen.setVisible(true);
 
@@ -229,18 +216,16 @@ public class Board extends JPanel{
         }
     }
 
-    public void capture(Move m){
+    public void capture(Move m) {
         pieces.remove(m.getCapture());
     }
 
-    public boolean isValidMove(Move m){
+    public boolean isValidMove(Move m) {
 
         if (!isSameTeam(m.getPiece(), m.getCapture())) {
             if (m.getPiece().isValidMovement(m.getNewCol(), m.getNewRow())) {
                 if (!m.getPiece().isValidCollide(m.getNewCol(), m.getNewRow())) {
-                    if (!cs.isKingLeftInCheck(m)) {
-                        return true;
-                    }
+                    return !cs.isKingLeftInCheck(m);
                 }
             }
         }
@@ -250,22 +235,17 @@ public class Board extends JPanel{
 
     private boolean isSameTeam(Piece p1, Piece p2) {
         if (p1 != null && p2 != null) {
-            if (p1.isWhite() == p2.isWhite()) {
-                return true;
-            }
-
-            return false;
+            return p1.isWhite() == p2.isWhite();
         }
         return false;
     }
 
 
-
     // GETTER
 
-    public Piece getPiece(int col, int row){
-        for (Piece p : pieces){
-            if (p.getCol() == col && p.getRow() == row){
+    public Piece getPiece(int col, int row) {
+        for (Piece p : pieces) {
+            if (p.getCol() == col && p.getRow() == row) {
                 return p;
             }
         }
@@ -280,7 +260,7 @@ public class Board extends JPanel{
         return selectedPiece;
     }
 
-    public int getTileNum(int col, int row){
+    public int getTileNum(int col, int row) {
         return row * rows + col * cols;
     }
 
@@ -288,7 +268,7 @@ public class Board extends JPanel{
         return enPassantTile;
     }
 
-    public List<Piece> getPieces(){
+    public List<Piece> getPieces() {
 
         return pieces;
     }
@@ -303,7 +283,7 @@ public class Board extends JPanel{
         this.selectedPiece = selectedPiece;
     }
 
-    public void removePiece(Piece p){
+    public void removePiece(Piece p) {
         pieces.remove(p);
     }
 

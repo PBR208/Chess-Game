@@ -5,7 +5,7 @@ import main.Move;
 
 import java.awt.image.BufferedImage;
 
-public class King extends Piece{
+public class King extends Piece {
     public King(Board b, int col, int row, boolean isWhite) {
         super(b);
         this.col = col;
@@ -16,10 +16,10 @@ public class King extends Piece{
         this.isWhite = isWhite;
         this.name = "King";
 
-        this.front = img.getSubimage(0 * imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
+        this.front = img.getSubimage(0, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }
 
-    public boolean isValidMovement(int col, int row){
+    public boolean isValidMovement(int col, int row) {
         int colDiff = Math.abs(col - this.col);
         int rowDiff = Math.abs(row - this.row);
 
@@ -28,20 +28,23 @@ public class King extends Piece{
                 && (colDiff != 0 || rowDiff != 0)
                 || canCastle(col, row);
     }
-    public boolean isValidCollide(int col, int row){return false;}
+
+    public boolean isValidCollide(int col, int row) {
+        return false;
+    }
 
     private boolean canCastle(int col, int row) {
 
         // must stay on same row
         if (row != this.row) return false;
 
-        if (!this.isFirstmove()) return false;
+        if (!this.isFirstMove()) return false;
 
         int rookCol = (col == 6) ? 7 : 0;
         Piece rook = b.getPiece(rookCol, row);
 
         if (!(rook instanceof Rook)) return false;
-        if (!rook.isFirstmove()) return false;
+        if (!rook.isFirstMove()) return false;
 
         // path must be empty
         int step = (col == 6) ? 1 : -1;
@@ -61,8 +64,6 @@ public class King extends Piece{
         Move test2 = new Move(b, this, mid2, row);
 
         if (b.getCs().isKingLeftInCheck(test1)) return false;
-        if (b.getCs().isKingLeftInCheck(test2)) return false;
-
-        return true;
+        return !b.getCs().isKingLeftInCheck(test2);
     }
 }

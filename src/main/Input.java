@@ -7,9 +7,9 @@ import java.awt.event.MouseEvent;
 
 public class Input extends MouseAdapter {
 
-    private Board b;
+    private final Board b;
 
-    public Input(Board b){
+    public Input(Board b) {
         this.b = b;
     }
 
@@ -20,7 +20,7 @@ public class Input extends MouseAdapter {
         int row = e.getY() / b.getTileSize();
 
         Piece pAtLocation = b.getPiece(col, row);
-        if (pAtLocation != null){
+        if (pAtLocation != null) {
             b.setSelectedPiece(pAtLocation);
         }
     }
@@ -28,7 +28,7 @@ public class Input extends MouseAdapter {
     @Override
     public void mouseDragged(MouseEvent e) {
 
-        if (b.getSelectedPiece() != null){
+        if (b.getSelectedPiece() != null) {
             b.getSelectedPiece().setxPos(e.getX() - b.getTileSize() / 2); // /2 for centering on the tile
             b.getSelectedPiece().setyPos(e.getY() - b.getTileSize() / 2);
 
@@ -42,10 +42,10 @@ public class Input extends MouseAdapter {
         int col = e.getX() / b.getTileSize();
         int row = e.getY() / b.getTileSize();
 
-        if (b.getSelectedPiece() != null){
+        if (b.getSelectedPiece() != null) {
             Move m = new Move(b, b.getSelectedPiece(), col, row);
 
-            if (b.isValidMove(m)){
+            if (b.isValidMove(m)) {
                 b.makeMove(m);
             } else {
                 b.getSelectedPiece().setxPos(b.getSelectedPiece().getCol() * b.getTileSize());

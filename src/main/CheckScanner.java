@@ -7,9 +7,9 @@ import java.util.List;
 
 public class CheckScanner {
 
-    Board b;
+    private final Board b;
 
-    public CheckScanner(Board b){
+    public CheckScanner(Board b) {
         this.b = b;
     }
 
@@ -69,13 +69,14 @@ public class CheckScanner {
 
     }
 
-    public Piece findKing(boolean isWhite){
-        List <Piece> pieces = b.getPieces();
-        for (Piece p : pieces){
-            if (isWhite == p.isWhite() && p.getName().equals("King")){
+    public Piece findKing(boolean isWhite) {
+        List<Piece> pieces = b.getPieces();
+        for (Piece p : pieces) {
+            if (isWhite == p.isWhite() && p.getName().equals("King")) {
                 return p;
             }
         }
+
         return null;
     }
 
@@ -102,7 +103,7 @@ public class CheckScanner {
 
         for (Piece p : new ArrayList<Piece>(b.getPieces())) {
 
-            // only check this players pieces
+            // only check players A or B pieces
             if (p.isWhite() != teamColorWhite) {
                 continue;
             }
@@ -112,9 +113,7 @@ public class CheckScanner {
 
                 for (int col = 0; col < 8; col++) {
 
-
                     Move move = new Move(b, p, col, row);
-
 
                     if (b.isValidMove(move)) {
                         return true;
