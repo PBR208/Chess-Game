@@ -21,6 +21,7 @@ public class Board extends JPanel {
 
     private final CheckScanner cs = new CheckScanner(this);
 
+    private boolean turnOfWhite = true;
 
     public Board() {
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize));
@@ -121,6 +122,7 @@ public class Board extends JPanel {
             capture(m);
         }
 
+        turnOfWhite = !turnOfWhite;
         checkGameEnd(m);
     }
 
@@ -221,6 +223,10 @@ public class Board extends JPanel {
     }
 
     public boolean isValidMove(Move m) {
+
+        if (m.getPiece().isWhite() != turnOfWhite) {
+            return false;
+        }
 
         if (!isSameTeam(m.getPiece(), m.getCapture())) {
             if (m.getPiece().isValidMovement(m.getNewCol(), m.getNewRow())) {
