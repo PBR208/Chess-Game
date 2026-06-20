@@ -42,9 +42,22 @@ public class Pawn extends Piece {
             }
         }
 
-        // en passant
+        //en passant
 
-        return Math.abs(col - this.col) == 1 && row == this.row - colorIndex && b.getTileNum(col, row) == b.getEnPassantTile();
+        if (Math.abs(col - this.col) == 1 &&
+                row == this.row - colorIndex &&
+                b.getTileNum(col, row) == b.getEnPassantTile()) {
+
+
+            Piece target = b.getPiece(col, row + colorIndex);
+
+
+            return target != null
+                    && target.getName().equals("Pawn")
+                    && target.isWhite() != this.isWhite;
+        }
+
+        return false;
     }
 
 }
