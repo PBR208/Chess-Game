@@ -115,6 +115,8 @@ public class Board extends JPanel{
 
             capture(m);
         }
+
+        checkGameEnd(m);
     }
 
     public void movePawn(Move m){
@@ -196,6 +198,27 @@ public class Board extends JPanel{
             Piece rook = getPiece(0, row);
             rook.setCol(3);
             rook.setxPos(3 * getTileSize());
+        }
+    }
+
+    private void checkGameEnd(Move m){
+
+        boolean nextPlayer = !m.getPiece().isWhite();
+        JFrame parent = (JFrame) SwingUtilities.getWindowAncestor(this);
+
+        if(cs.isCheckmate(nextPlayer)){
+            String winner = m.getPiece().isWhite() ? "White wins!" : "Black wins!";
+
+            EndScreen screen = new EndScreen(parent, winner);
+            screen.setVisible(true);
+
+            //restart game
+
+        } else if(cs.isStalemate(nextPlayer)) {
+            EndScreen screen = new EndScreen(parent, "Stalemate - Draw");
+            screen.setVisible(true);
+
+            //restart game
         }
     }
 
