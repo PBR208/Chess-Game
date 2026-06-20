@@ -2,6 +2,7 @@ package main;
 
 import pieces.Piece;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class CheckScanner {
@@ -78,6 +79,50 @@ public class CheckScanner {
         return null;
     }
 
-  
+    public boolean isCheckmate(boolean teamColorWhite) {
 
+        if (!isKingInCheckRN(teamColorWhite)) {
+            return false;
+        }
+
+        return !hasLegalMoves(teamColorWhite);
+    }
+
+
+    public boolean isStalemate(boolean teamColorWhite) {
+
+        if (isKingInCheckRN(teamColorWhite)) {
+            return false;
+        }
+
+        return !hasLegalMoves(teamColorWhite);
+    }
+
+    private boolean hasLegalMoves(boolean teamColorWhite) {
+
+        for (Piece p : new ArrayList<Piece>(b.getPieces())) {
+
+            // only check this players pieces
+            if (p.isWhite() != teamColorWhite) {
+                continue;
+            }
+
+            // try every square on board
+            for (int row = 0; row < 8; row++) {
+
+                for (int col = 0; col < 8; col++) {
+
+
+                    Move move = new Move(b, p, col, row);
+
+
+                    if (b.isValidMove(move)) {
+                        return true;
+                    }
+
+                }
+            }
+        }
+        return false;
+    }
 }
