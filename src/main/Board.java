@@ -70,6 +70,8 @@ public class Board extends JPanel {
 
     public void restartGame() {
         pieces = addPieces();
+        turnOfWhite = true;
+
     }
 
     public void paintComponent(Graphics g) {
@@ -188,12 +190,14 @@ public class Board extends JPanel {
             Piece rook = getPiece(7, row);
             rook.setCol(5);
             rook.setxPos(5 * getTileSize());
+            rook.setFirstMove(false);
         }
 
         if (newCol == 2) { // queenside
             Piece rook = getPiece(0, row);
             rook.setCol(3);
             rook.setxPos(3 * getTileSize());
+            rook.setFirstMove(false);
         }
     }
 
@@ -267,7 +271,7 @@ public class Board extends JPanel {
     }
 
     public int getTileNum(int col, int row) {
-        return row * rows + col * cols;
+        return row * cols + col;
     }
 
     public int getEnPassantTile() {
