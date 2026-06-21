@@ -1,7 +1,7 @@
 package pieces;
 
-import main.Board;
-import main.Move;
+import gui.Board;
+import gameLogic.Move;
 
 import java.awt.image.BufferedImage;
 
@@ -37,7 +37,6 @@ public class King extends Piece {
 
         // must stay on same row
         if (row != this.row) return false;
-
         if (!this.isFirstMove()) return false;
 
         int rookCol;
@@ -77,24 +76,6 @@ public class King extends Piece {
                 return false;
             }
         }
-
-        // king cannot start in check
-        if (b.getCs().isKingInCheckRN(this.isWhite)) {
-            return false;
-        }
-
-        // king cannot pass through check
-        Move middle = new Move(b, this, this.col + step, row);
-        Move destination = new Move(b, this, col, row);
-
-        if (b.getCs().isKingLeftInCheck(middle)) {
-            return false;
-        }
-
-        if (b.getCs().isKingLeftInCheck(destination)) {
-            return false;
-        }
-        
         return true;
     }
 }

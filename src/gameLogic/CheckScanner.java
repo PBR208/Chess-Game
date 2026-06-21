@@ -1,8 +1,8 @@
-package main;
+package gameLogic;
 
+import gui.Board;
 import pieces.Piece;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class CheckScanner {
@@ -69,7 +69,7 @@ public class CheckScanner {
 
     }
 
-    public Piece findKing(boolean isWhite) {
+    private Piece findKing(boolean isWhite) {
         List<Piece> pieces = b.getPieces();
         for (Piece p : pieces) {
             if (isWhite == p.isWhite() && p.getName().equals("King")) {
@@ -80,48 +80,5 @@ public class CheckScanner {
         return null;
     }
 
-    public boolean isCheckmate(boolean teamColorWhite) {
-
-        if (!isKingInCheckRN(teamColorWhite)) {
-            return false;
-        }
-
-        return !hasLegalMoves(teamColorWhite);
-    }
-
-
-    public boolean isStalemate(boolean teamColorWhite) {
-
-        if (isKingInCheckRN(teamColorWhite)) {
-            return false;
-        }
-
-        return !hasLegalMoves(teamColorWhite);
-    }
-
-    private boolean hasLegalMoves(boolean teamColorWhite) {
-
-        for (Piece p : new ArrayList<Piece>(b.getPieces())) {
-
-            // only check players A or B pieces
-            if (p.isWhite() != teamColorWhite) {
-                continue;
-            }
-
-            // try every square on board
-            for (int row = 0; row < 8; row++) {
-
-                for (int col = 0; col < 8; col++) {
-
-                    Move move = new Move(b, p, col, row);
-
-                    if (b.isValidMove(move)) {
-                        return true;
-                    }
-
-                }
-            }
-        }
-        return false;
-    }
+    
 }
