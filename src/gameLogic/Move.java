@@ -1,5 +1,6 @@
-package main;
+package gameLogic;
 
+import gui.Board;
 import pieces.Piece;
 
 public class Move {

@@ -1,6 +1,6 @@
 package pieces;
 
-import main.Board;
+import gui.Board;
 
 import java.awt.image.BufferedImage;
 

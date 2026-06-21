@@ -1,5 +1,6 @@
-package main;
+package gameLogic;
 
+import gui.Board;
 import pieces.Piece;
 
 import java.awt.event.MouseAdapter;
@@ -8,9 +9,11 @@ import java.awt.event.MouseEvent;
 public class Input extends MouseAdapter {
 
     private final Board b;
+    private final GameController gc;
 
-    public Input(Board b) {
+    public Input(Board b, GameController gc) {
         this.b = b;
+        this.gc = gc;
     }
 
     @Override
@@ -45,8 +48,8 @@ public class Input extends MouseAdapter {
         if (b.getSelectedPiece() != null) {
             Move m = new Move(b, b.getSelectedPiece(), col, row);
 
-            if (b.isValidMove(m)) {
-                b.makeMove(m);
+            if (gc.isValidMove(m)) {
+                gc.makeMove(m);
             } else {
                 b.getSelectedPiece().setxPos(b.getSelectedPiece().getCol() * b.getTileSize());
                 b.getSelectedPiece().setyPos(b.getSelectedPiece().getRow() * b.getTileSize());

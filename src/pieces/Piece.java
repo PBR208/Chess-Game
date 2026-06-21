@@ -6,9 +6,8 @@ import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Objects;
 
-import main.Board;
+import gui.Board;
 
 public class Piece {
 
