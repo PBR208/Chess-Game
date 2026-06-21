@@ -1,7 +1,6 @@
 package pieces;
 
 import gui.Board;
-import gameLogic.Move;
 
 import java.awt.image.BufferedImage;
 
