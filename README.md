@@ -4,7 +4,7 @@
 
 **A fully self-built chess application from scratch, built to learn.**
 
-[![Release](https://img.shields.io/badge/Release-v1.0.0-brightgreen?style=for-the-badge&logo=github)](https://github.com/PBR208/Chess-Game/releases/tag/v1.0.0)
+[![Release](https://img.shields.io/badge/Release-v1.1.0-brightgreen?style=for-the-badge&logo=github)](https://github.com/PBR208/Chess-Game/releases/tag/v1.0.0)
 [![Java](https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://www.java.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Active-blue?style=for-the-badge)]()
@@ -171,6 +171,7 @@ current player's king square. If the king is in check **and** no legal moves exi
 - [x] En passant
 - [x] Pawn promotion
 - [x] Stalemate and draw detection
+- [x] 50-Move rule / 75-Move forced draw
 - [ ] Move history / notation log
 - [ ] Simple AI opponent
 
