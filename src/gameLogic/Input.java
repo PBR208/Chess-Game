@@ -19,8 +19,8 @@ public class Input extends MouseAdapter {
     @Override
     public void mousePressed(MouseEvent e) {
 
-        int col = e.getX() / b.getTileSize();
-        int row = e.getY() / b.getTileSize();
+        int col = b.toLogicalCol(e.getX());
+        int row = b.toLogicalRow(e.getY());
 
         Piece pAtLocation = b.getPiece(col, row);
         if (pAtLocation != null) {
@@ -42,8 +42,8 @@ public class Input extends MouseAdapter {
     @Override
     public void mouseReleased(MouseEvent e) {
 
-        int col = e.getX() / b.getTileSize();
-        int row = e.getY() / b.getTileSize();
+        int col = b.toLogicalCol(e.getX());
+        int row = b.toLogicalRow(e.getY());
 
         if (b.getSelectedPiece() != null) {
             Move m = new Move(b, b.getSelectedPiece(), col, row);
