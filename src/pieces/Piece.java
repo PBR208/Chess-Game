@@ -49,9 +49,8 @@ public class Piece {
         return false;
     }
 
-    public void paint(Graphics2D g2d) {
-
-        g2d.drawImage(front, xPos, yPos, null);
+    public void paint(Graphics2D g2d, int x, int y) {
+        g2d.drawImage(front, x, y, null);
     }
 
     // GETTER
@@ -74,6 +73,14 @@ public class Piece {
 
     public boolean isFirstMove() {
         return isFirstMove;
+    }
+
+    public int getxPos() {
+        return xPos;
+    }
+
+    public int getyPos() {
+        return yPos;
     }
 
     // SETTER
