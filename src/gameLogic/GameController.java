@@ -1,6 +1,7 @@
 package gameLogic;
 
 import gui.Board;
+import gui.FiftyRuleDraw;
 import gui.PromoteGUI;
 import gui.EndScreen;
 import pieces.*;
@@ -12,12 +13,14 @@ public class GameController {
 
     Board b;
     CheckScanner cs;
+    int passedMoves;
 
     private boolean turnOfWhite = true;
 
     public GameController(Board b) {
         this.b = b;
         this.cs = new CheckScanner(b);
+        passedMoves = 0;
     }
 
     public void restartGame() {
@@ -42,6 +45,26 @@ public class GameController {
         } else if (isStalemate(nextPlayer)) {
             EndScreen screen = new EndScreen(parent, "Stalemate - Draw");
             screen.setVisible(true);
+
+            restartGame();
+        }
+
+        // 50 moves by black AND white = 100 - possible draw
+        if (passedMoves >= 100) {
+            FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, false);
+            fiftyRuleDraw.setVisible(true);
+
+            if (fiftyRuleDraw.getResult() == FiftyRuleDraw.DrawResult.ACCEPTED) {
+                EndScreen screen = new EndScreen(parent, "Draw accepted");
+                screen.setVisible(true);
+                restartGame();
+                return;
+            }
+
+            // after 75 moves its declared a draw no matter what
+        } else if (passedMoves >= 150) {
+            FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, true);
+            fiftyRuleDraw.setVisible(true);
 
             restartGame();
         }
@@ -84,6 +107,7 @@ public class GameController {
 
         if (m.getPiece() instanceof Pawn) {
             movePawn(m);
+            passedMoves = -1;
         } else {
             m.getPiece().setCol(m.getNewCol());
             m.getPiece().setRow(m.getNewRow());
@@ -93,8 +117,10 @@ public class GameController {
             m.getPiece().setFirstMove(false);
 
             b.capture(m);
+            passedMoves = -1;
         }
 
+        passedMoves++;
         turnOfWhite = !turnOfWhite;
         checkGameEnd(m);
         b.flip();
