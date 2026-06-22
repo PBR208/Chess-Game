@@ -123,7 +123,7 @@ public class GameController {
         passedMoves++;
         turnOfWhite = !turnOfWhite;
         checkGameEnd(m);
-        b.flip();
+        flip();
     }
 
     public void movePawn(Move m) {
@@ -230,6 +230,10 @@ public class GameController {
         return !hasLegalMoves(teamColorWhite);
     }
 
+    private void flip() {
+        b.repaint();
+    }
+
     private boolean hasLegalMoves(boolean teamColorWhite) {
 
         for (Piece p : new ArrayList<Piece>(b.getPieces())) {
@@ -254,5 +258,11 @@ public class GameController {
             }
         }
         return false;
+    }
+
+    // GETTER
+
+    public boolean isTurnOfWhite() {
+        return turnOfWhite;
     }
 }

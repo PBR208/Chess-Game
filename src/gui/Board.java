@@ -100,31 +100,25 @@ public class Board extends JPanel {
         }
     }
 
-    private boolean flipped = false;
-
-    public void flip() {
-        flipped = !flipped;
-        repaint();
-    }
 
     // logical col/row -> pixel X/Y for drawing
     public int toVisualX(int col) {
-        return (flipped ? 7 - col : col) * tileSize;
+        return (gc.isTurnOfWhite() ? col : 7 - col) * tileSize;
     }
 
     public int toVisualY(int row) {
-        return (flipped ? 7 - row : row) * tileSize;
+        return (gc.isTurnOfWhite() ? row : 7 - row) * tileSize;
     }
 
     // pixel X/Y from a mouse click -> logical col/row
     public int toLogicalCol(int x) {
         int c = x / tileSize;
-        return flipped ? 7 - c : c;
+        return gc.isTurnOfWhite() ? c : 7 - c;
     }
 
     public int toLogicalRow(int y) {
         int r = y / tileSize;
-        return flipped ? 7 - r : r;
+        return gc.isTurnOfWhite() ? r : 7 - r;
     }
 
 
