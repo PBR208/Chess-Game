@@ -26,6 +26,7 @@ public class GameController {
     public void restartGame() {
         b.setPieces(b.addPieces());
         turnOfWhite = true;
+        passedMoves = 0;
         b.setEnPassantTile(-1);
     }
 
