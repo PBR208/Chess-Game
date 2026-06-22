@@ -97,6 +97,7 @@ public class GameController {
 
         turnOfWhite = !turnOfWhite;
         checkGameEnd(m);
+        b.flip();
     }
 
     public void movePawn(Move m) {
