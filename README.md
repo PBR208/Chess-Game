@@ -4,10 +4,10 @@
 
 **A fully self-built chess application from scratch, built to learn.**
 
-[![Release](https://img.shields.io/badge/Release-coming%20soon-lightgrey?style=for-the-badge&logo=github)](https://github.com/PBR208/Chess-Game/releases)
+[![Release](https://img.shields.io/badge/Release-v1.0.0-brightgreen?style=for-the-badge&logo=github)](https://github.com/PBR208/Chess-Game/releases/tag/v1.0.0)
 [![Java](https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://www.java.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![Status](https://img.shields.io/badge/Status-In%20Development-blue?style=for-the-badge)]()
+[![Status](https://img.shields.io/badge/Status-Active-blue?style=for-the-badge)]()
 [![Made with ♥](https://img.shields.io/badge/Made%20with-%E2%99%A5-red?style=for-the-badge)]()
 
 </div>
