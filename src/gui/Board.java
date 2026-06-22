@@ -23,6 +23,8 @@ public class Board extends JPanel {
 
     private final GameController gc = new GameController(this);
 
+    private boolean isFlipped = false;
+
     public Board() {
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize));
 
@@ -74,28 +76,57 @@ public class Board extends JPanel {
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 g2d.setColor((c + r) % 2 == 0 ? new Color(232, 235, 239) : new Color(125, 135, 150));
-                g2d.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
+                g2d.fillRect(toVisualX(c), toVisualY(r), tileSize, tileSize);
             }
-
         }
 
         if (selectedPiece != null) {
             for (int r = 0; r < rows; r++) {
                 for (int c = 0; c < cols; c++) {
-
                     if (gc.isValidMove(new Move(this, selectedPiece, c, r))) {
-
                         g2d.setColor(new Color(81, 168, 0, 200));
-                        g2d.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
+                        g2d.fillRect(toVisualX(c), toVisualY(r), tileSize, tileSize);
                     }
-
                 }
             }
         }
+
         for (Piece p : pieces) {
-            p.paint(g2d);
+            if (p == selectedPiece) {
+                p.paint(g2d, p.getxPos(), p.getyPos());
+            } else {
+                p.paint(g2d, toVisualX(p.getCol()), toVisualY(p.getRow()));
+            }
         }
     }
+
+    private boolean flipped = false;
+
+    public void flip() {
+        flipped = !flipped;
+        repaint();
+    }
+
+    // logical col/row -> pixel X/Y for drawing
+    public int toVisualX(int col) {
+        return (flipped ? 7 - col : col) * tileSize;
+    }
+
+    public int toVisualY(int row) {
+        return (flipped ? 7 - row : row) * tileSize;
+    }
+
+    // pixel X/Y from a mouse click -> logical col/row
+    public int toLogicalCol(int x) {
+        int c = x / tileSize;
+        return flipped ? 7 - c : c;
+    }
+
+    public int toLogicalRow(int y) {
+        int r = y / tileSize;
+        return flipped ? 7 - r : r;
+    }
+
 
     // GETTER
 
@@ -125,7 +156,6 @@ public class Board extends JPanel {
     }
 
     public List<Piece> getPieces() {
-
         return pieces;
     }
 
