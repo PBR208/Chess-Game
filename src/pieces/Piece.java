@@ -24,14 +24,11 @@ public class Piece {
 
     {
         try {
-            Path path = Paths.get(System.getProperty("user.dir"),
-                    "src", "resources", "pieces.png");
-
-            img = ImageIO.read(path.toFile());
-
+            img = ImageIO.read(Piece.class.getResourceAsStream("/pieces.png"));
+            if (img == null) throw new IOException("Resource not found");
         } catch (IOException e) {
             e.printStackTrace();
-            System.out.println("Failed to load image from filesystem path.");
+            System.out.println("Failed to load image from classpath.");
         }
     }
 

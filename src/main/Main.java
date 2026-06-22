@@ -7,7 +7,7 @@ import java.awt.*;
 
 public class Main {
 
-    static void main(String[] args) {
+    public static void main(String[] args) {
         JFrame frame = new JFrame("Chess");
 
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
