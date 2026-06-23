@@ -50,6 +50,14 @@ public class GameController {
             restartGame();
         }
 
+        // after 75 moves its declared a draw no matter what
+        if (passedMoves >= 150) {
+            FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, true);
+            fiftyRuleDraw.setVisible(true);
+
+            restartGame();
+        }
+
         // 50 moves by black AND white = 100 - possible draw
         if (passedMoves >= 100) {
             FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, false);
@@ -61,13 +69,6 @@ public class GameController {
                 restartGame();
                 return;
             }
-
-            // after 75 moves its declared a draw no matter what
-        } else if (passedMoves >= 150) {
-            FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, true);
-            fiftyRuleDraw.setVisible(true);
-
-            restartGame();
         }
     }
 
