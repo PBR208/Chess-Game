@@ -34,7 +34,7 @@ public class GameController {
 
         boolean nextPlayer = !m.getPiece().isWhite();
         JFrame parent = (JFrame) SwingUtilities.getWindowAncestor(b);
-
+        
         if (isCheckmate(nextPlayer)) {
             String winner = m.getPiece().isWhite() ? "White wins!" : "Black wins!";
 
@@ -52,7 +52,7 @@ public class GameController {
 
         // after 75 moves its declared a draw no matter what
         if (passedMoves >= 150) {
-            FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, true);
+            FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, b.getTileSize(), true);
             fiftyRuleDraw.setVisible(true);
 
             restartGame();
@@ -60,7 +60,7 @@ public class GameController {
 
         // 50 moves by black AND white = 100 - possible draw
         if (passedMoves >= 100) {
-            FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, false);
+            FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, b.getTileSize(), false);
             fiftyRuleDraw.setVisible(true);
 
             if (fiftyRuleDraw.getResult() == FiftyRuleDraw.DrawResult.ACCEPTED) {
