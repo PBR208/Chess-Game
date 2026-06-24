@@ -164,7 +164,7 @@ public class GameController {
 
         JFrame frame = (JFrame) SwingUtilities.getWindowAncestor(b);
 
-        PromoteGUI dialog = new PromoteGUI(frame);
+        PromoteGUI dialog = new PromoteGUI(frame, b.getTileSize());
         PromoteGUI.Choice choice = dialog.showDialog();
 
         Piece newPiece;
