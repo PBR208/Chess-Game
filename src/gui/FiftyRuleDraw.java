@@ -13,28 +13,29 @@ public class FiftyRuleDraw extends JDialog {
 
     private DrawResult result = DrawResult.NONE;
 
-    JFrame parent;
-
-    public FiftyRuleDraw(JFrame parent, boolean isForced) {
+    public FiftyRuleDraw(JFrame parent, int tileSize, boolean isForced) {
         super(parent, true);
+
+        int gap = tileSize / 8;
+        int rows = isForced ? 2 : 3;
+        setLayout(new GridLayout(rows, 1, gap, gap));
+        setUndecorated(true);
 
         String msg;
         JButton button1;
         JButton button2 = null;
 
-        setUndecorated(true);
-        setLayout(new GridLayout(3, 1, 10, 10));
+        Font labelFont = new Font("Arial", Font.BOLD, tileSize / 6);
+        Font buttonFont = new Font("Arial", Font.PLAIN, tileSize / 6);
 
         if (isForced) {
-            msg = "The game has ended in a draw under the 75-move rule. No captures or pawn moves occurred in the last 75 moves";
+            msg = "<html><center>The game has ended in a draw under the 75-move rule.<br>"
+                    + "No captures or pawn moves occurred in the last 75 moves.</center></html>";
             button1 = new JButton("Restart");
-
-            button1.addActionListener(e -> {
-                dispose();
-            });
-
+            button1.addActionListener(e -> dispose());
         } else {
-            msg = "A draw may be claimed because 50 moves have been played without a capture or pawn move.";
+            msg = "<html><center>A draw may be claimed — 50 moves have been played"
+                    + " without a capture or pawn move.</center></html>";
             button1 = new JButton("Claim Draw");
             button2 = new JButton("Decline");
 
@@ -42,7 +43,6 @@ public class FiftyRuleDraw extends JDialog {
                 result = DrawResult.ACCEPTED;
                 dispose();
             });
-
             button2.addActionListener(e -> {
                 result = DrawResult.DECLINED;
                 dispose();
@@ -50,14 +50,17 @@ public class FiftyRuleDraw extends JDialog {
         }
 
         JLabel txt = new JLabel(msg, SwingConstants.CENTER);
-        txt.setFont(new Font("Ariel", Font.BOLD, 15));
-
+        txt.setFont(labelFont);
+        button1.setFont(buttonFont);
 
         add(txt);
         add(button1);
-        add(button2);
+        if (button2 != null) {
+            button2.setFont(buttonFont);
+            add(button2);
+        }
 
-        setSize(300, 200);
+        setSize(tileSize * 4, (int) (tileSize * 2.5));
         setLocationRelativeTo(parent);
     }
 

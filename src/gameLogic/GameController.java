@@ -38,36 +38,37 @@ public class GameController {
         if (isCheckmate(nextPlayer)) {
             String winner = m.getPiece().isWhite() ? "White wins!" : "Black wins!";
 
-            EndScreen screen = new EndScreen(parent, winner);
+            EndScreen screen = new EndScreen(parent, winner, b.getTileSize());
             screen.setVisible(true);
 
             restartGame();
 
         } else if (isStalemate(nextPlayer)) {
-            EndScreen screen = new EndScreen(parent, "Stalemate - Draw");
+            EndScreen screen = new EndScreen(parent, "Stalemate - Draw", b.getTileSize());
             screen.setVisible(true);
+
+            restartGame();
+        }
+
+        // after 75 moves its declared a draw no matter what
+        if (passedMoves >= 150) {
+            FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, b.getTileSize(), true);
+            fiftyRuleDraw.setVisible(true);
 
             restartGame();
         }
 
         // 50 moves by black AND white = 100 - possible draw
         if (passedMoves >= 100) {
-            FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, false);
+            FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, b.getTileSize(), false);
             fiftyRuleDraw.setVisible(true);
 
             if (fiftyRuleDraw.getResult() == FiftyRuleDraw.DrawResult.ACCEPTED) {
-                EndScreen screen = new EndScreen(parent, "Draw accepted");
+                EndScreen screen = new EndScreen(parent, "Draw accepted", b.getTileSize());
                 screen.setVisible(true);
                 restartGame();
                 return;
             }
-
-            // after 75 moves its declared a draw no matter what
-        } else if (passedMoves >= 150) {
-            FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, true);
-            fiftyRuleDraw.setVisible(true);
-
-            restartGame();
         }
     }
 
@@ -163,7 +164,7 @@ public class GameController {
 
         JFrame frame = (JFrame) SwingUtilities.getWindowAncestor(b);
 
-        PromoteGUI dialog = new PromoteGUI(frame);
+        PromoteGUI dialog = new PromoteGUI(frame, b.getTileSize());
         PromoteGUI.Choice choice = dialog.showDialog();
 
         Piece newPiece;

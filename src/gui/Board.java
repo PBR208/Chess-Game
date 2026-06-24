@@ -23,8 +23,6 @@ public class Board extends JPanel {
 
     private final GameController gc = new GameController(this);
 
-    private boolean isFlipped = false;
-
     public Board() {
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize));
 

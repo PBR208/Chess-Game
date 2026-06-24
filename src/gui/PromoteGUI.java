@@ -11,16 +11,23 @@ public class PromoteGUI extends JDialog {
 
     private Choice choice;
 
-    public PromoteGUI(JFrame parent) {
+    public PromoteGUI(JFrame parent, int tileSize) {
         super(parent, true);
 
-        setLayout(new GridLayout(1, 4));
+        int gap = tileSize / 8;
+        setLayout(new GridLayout(1, 4, gap, gap));
         setUndecorated(true);
+
+        Font buttonFont = new Font("Arial", Font.BOLD, tileSize / 5);
 
         JButton queen = new JButton("Queen");
         JButton rook = new JButton("Rook");
         JButton bishop = new JButton("Bishop");
         JButton knight = new JButton("Knight");
+
+        for (JButton btn : new JButton[]{queen, rook, bishop, knight}) {
+            btn.setFont(buttonFont);
+        }
 
         queen.addActionListener(e -> {
             choice = Choice.QUEEN;
@@ -46,7 +53,7 @@ public class PromoteGUI extends JDialog {
         add(bishop);
         add(knight);
 
-        pack();
+        setSize(tileSize * 4, tileSize);
         setLocationRelativeTo(parent);
     }
 
