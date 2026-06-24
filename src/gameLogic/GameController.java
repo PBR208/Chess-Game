@@ -34,17 +34,17 @@ public class GameController {
 
         boolean nextPlayer = !m.getPiece().isWhite();
         JFrame parent = (JFrame) SwingUtilities.getWindowAncestor(b);
-        
+
         if (isCheckmate(nextPlayer)) {
             String winner = m.getPiece().isWhite() ? "White wins!" : "Black wins!";
 
-            EndScreen screen = new EndScreen(parent, winner);
+            EndScreen screen = new EndScreen(parent, winner, b.getTileSize());
             screen.setVisible(true);
 
             restartGame();
 
         } else if (isStalemate(nextPlayer)) {
-            EndScreen screen = new EndScreen(parent, "Stalemate - Draw");
+            EndScreen screen = new EndScreen(parent, "Stalemate - Draw", b.getTileSize());
             screen.setVisible(true);
 
             restartGame();
@@ -64,7 +64,7 @@ public class GameController {
             fiftyRuleDraw.setVisible(true);
 
             if (fiftyRuleDraw.getResult() == FiftyRuleDraw.DrawResult.ACCEPTED) {
-                EndScreen screen = new EndScreen(parent, "Draw accepted");
+                EndScreen screen = new EndScreen(parent, "Draw accepted", b.getTileSize());
                 screen.setVisible(true);
                 restartGame();
                 return;
