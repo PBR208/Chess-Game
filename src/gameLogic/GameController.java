@@ -185,6 +185,13 @@ public class GameController {
 
         b.removePiece(m.getPiece());
         b.addPiece(newPiece);
+
+        m.setPromotionChoice(switch (choice) {
+            case ROOK -> "R";
+            case BISHOP -> "B";
+            case KNIGHT -> "N";
+            default -> "Q";
+        });
     }
 
     private void castle(King king, int newCol) {
