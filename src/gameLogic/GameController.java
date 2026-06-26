@@ -28,6 +28,7 @@ public class GameController {
         turnOfWhite = true;
         passedMoves = 0;
         b.setEnPassantTile(-1);
+        b.resetClocks(); // reset both clocks and start white's
     }
 
     private void checkGameEnd(Move m) {
@@ -38,12 +39,14 @@ public class GameController {
         if (isCheckmate(nextPlayer)) {
             String winner = m.getPiece().isWhite() ? "White wins!" : "Black wins!";
 
+            b.stopClocks();
             EndScreen screen = new EndScreen(parent, winner, b.getTileSize());
             screen.setVisible(true);
 
             restartGame();
 
         } else if (isStalemate(nextPlayer)) {
+            b.stopClocks();
             EndScreen screen = new EndScreen(parent, "Stalemate - Draw", b.getTileSize());
             screen.setVisible(true);
 
@@ -52,6 +55,7 @@ public class GameController {
 
         // after 75 moves its declared a draw no matter what
         if (passedMoves >= 150) {
+            b.stopClocks();
             FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, b.getTileSize(), true);
             fiftyRuleDraw.setVisible(true);
 
@@ -60,6 +64,7 @@ public class GameController {
 
         // 50 moves by black AND white = 100 - possible draw
         if (passedMoves >= 100) {
+            b.stopClocks();
             FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, b.getTileSize(), false);
             fiftyRuleDraw.setVisible(true);
 
@@ -233,6 +238,7 @@ public class GameController {
     }
 
     private void flip() {
+        b.switchClocks();
         b.repaint();
     }
 
