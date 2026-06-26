@@ -2,9 +2,9 @@
 
 # ♟ Chess Game — Java Edition
 
-**A fully self-built chess application from scratch, built to learn.**
+**A fully hand-built chess application — written from scratch to learn.**
 
-[![Release](https://img.shields.io/badge/Release-v1.1.1-brightgreen?style=for-the-badge&logo=github)](https://github.com/PBR208/Chess-Game/releases/tag/v1.0.0)
+[![Release](https://img.shields.io/github/v/release/PBR208/Chess-Game?style=for-the-badge&logo=github&label=Release&color=brightgreen)](https://github.com/PBR208/Chess-Game/releases/latest)
 [![Java](https://img.shields.io/badge/Java-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://www.java.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 [![Status](https://img.shields.io/badge/Status-Active-blue?style=for-the-badge)]()
@@ -18,48 +18,114 @@
 
 ---
 
-## 🧠 Skills Applied
+## 🧠 What I Learned
 
-> This project was built from scratch as a deliberate learning exercise. The following areas of knowledge were actively
-> developed and applied:
+This project was built from scratch as a deliberate learning exercise — no chess libraries, no tutorials, no engine
+borrowed from elsewhere. Every line of logic was written by hand. These are the concrete skills I developed through it:
 
-| Skill                          | Description                                                 |
-|--------------------------------|-------------------------------------------------------------|
-| **Object-Oriented Design**     | Modelling pieces, board, and game state as cohesive classes |
-| **Inheritance & Polymorphism** | Shared `Piece` base class extended by each piece type       |
-| **Game State Management**      | Tracking turns, captures, and board positions across moves  |
-| **Algorithm Design**           | Legal move generation, check detection, and path validation |
-| **Java Swing / GUI**           | Building an interactive board interface with click handling |
-| **Event-Driven Programming**   | Responding to user input to select and move pieces          |
-| **Debugging & Testing**        | Isolating logic bugs in move rules and edge cases           |
+| Area                         | What I practised                                                                                                                                                         |
+|------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **OOP & Inheritance**        | Designed a `Piece` base class extended by six concrete types; `GameController` and `CheckScanner` operate on the abstract type through polymorphism                      |
+| **Game State Management**    | Tracking turn ownership, en passant eligibility, first-move flags, the 50/75-move counter, and clock state — all kept consistent across moves and game resets            |
+| **Algorithm Design**         | Legal move generation with path-blocking (`isValidCollide`), simulation-based check detection (move → scan → undo), checkmate/stalemate via exhaustive move search       |
+| **Coordinate Systems**       | Separating logical grid coordinates from pixel positions, then adding a perspective flip so the current player is always at the bottom                                   |
+| **Java Swing & Graphics2D**  | Custom `paintComponent` rendering with anti-aliasing, a live `ChessClock` drawn with `Graphics2D`, sprite sheet slicing with `getSubimage`, and modal `JDialog` overlays |
+| **Event-Driven Programming** | `MouseListener` and `MouseMotionListener` wired to game logic; `javax.swing.Timer` driving a 100 ms clock tick via a functional callback interface                       |
+| **Refactoring**              | Split an early "god class" `Board` into `Board`, `GameController`, `CheckScanner`, and `Input`; introduced enums (`DrawResult`, `Choice`) to replace magic strings       |
+| **Testing**                  | Built a minimal test runner from scratch — named tests, assertion helpers, auto-dismissing modal dialogs via `Timer`-scheduled `doClick()`                               |
+| **Git Workflow**             | Feature branching, PRs per feature (`enPassantFix`, `clock`, `50MoveRule`, `boardFlip`, …), tagged releases                                                              |
 
 ---
 
 ## 📖 About
 
-This is a **fully hand-coded chess game built in Java** — no libraries, no tutorials, no shortcuts. The goal of this
-project was to understand how a non-trivial application is designed from the ground up: from the data model, through
-game logic, all the way to a playable graphical interface.
+A playable two-player chess game written entirely in Java. The goal was to understand how a non-trivial application gets
+built from the ground up — from the board model through to a working graphical interface — without relying on any
+external chess logic.
 
-Every component — the engine, the board representation, the move validator, and the GUI — was written by hand as part of
-a personal learning journey.
+Both players share the same screen. The board flips after each move so the active player always faces their own pieces
+from the bottom, mimicking a physical board rotation.
 
 ---
 
 ## ✨ Features
 
-- **Full piece movement** — all six piece types with correct movement rules
-- **Legal move generation** — only valid moves are permitted per turn
-- **Check & Checkmate detection** — the game recognises when a king is in danger or the game is over
-- **Turn management** — alternating play between White and Black
-- **Interactive board** — click to select a piece and click to move it
-- **Game state tracking** — the board correctly reflects captures and position history
+| ✅ Implemented                                         | ❌ Not Yet Implemented                                   |
+|-------------------------------------------------------|---------------------------------------------------------|
+| All six piece types with correct movement rules       | Move history / notation log (PGN)                       |
+| Legal move generation — self-check moves filtered out | Threefold repetition draw                               |
+| Check & checkmate detection                           | Insufficient material draw (K vs K, etc.)               |
+| Stalemate detection                                   | AI opponent                                             |
+| Castling — kingside & queenside with full validation  | Sound effects                                           |
+| En passant                                            | Configurable time controls (increment, custom duration) |
+| Pawn promotion with piece-selector dialog             | Online / network play                                   |
+| 50-move draw claim / 75-move forced draw              |                                                         |
+| Chess clock — 10 min per player, turns red under 30 s |                                                         |
+| Board perspective flip after each move                |                                                         |
+| Move highlighting on piece selection                  |                                                         |
+| End screen on checkmate, stalemate, or time loss      |                                                         |
+| Piece sprites loaded from a sprite sheet              |                                                         |
 
 ---
 
 ## 🏗️ Project Structure
 
-> Coming soon — will be documented once the codebase stabilises.
+```
+src/
+├── main/
+│   └── Main.java               # Entry point — creates JFrame and adds Board
+├── gameLogic/
+│   ├── GameController.java     # Turn management, move execution, game-end checks
+│   ├── CheckScanner.java       # Simulate-and-undo check detection
+│   ├── Input.java              # Mouse event → game action
+│   └── Move.java               # Value object: piece + target square + captured piece
+├── gui/
+│   ├── Board.java              # JPanel: renders board, clocks, pieces; owns piece list
+│   ├── ChessClock.java         # Timer-driven clock with Graphics2D rendering
+│   ├── EndScreen.java          # Result dialog (checkmate / stalemate / time)
+│   ├── FiftyRuleDraw.java      # 50/75-move draw dialog
+│   └── PromoteGUI.java         # Promotion piece selector dialog
+├── pieces/
+│   ├── Piece.java              # Abstract base: position, colour, sprite, move hooks
+│   ├── King.java               # ±1 in any direction + castling
+│   ├── Queen.java              # Rook + Bishop combined
+│   ├── Rook.java               # Horizontal / vertical sliding
+│   ├── Bishop.java             # Diagonal sliding
+│   ├── Knight.java             # L-shape jump (no collision check)
+│   └── Pawn.java               # Forward push, diagonal capture, en passant, promotion
+└── test/
+    └── GameTest.java           # Standalone GUI test runner (no external framework)
+```
+
+---
+
+## 🔬 How Check Detection Works
+
+Before any move is committed, the engine temporarily applies it, scans every opponent piece to see if it can now reach
+the friendly king, then restores the board. Only moves that leave the king safe are legal:
+
+```java
+// CheckScanner.java
+public boolean isKingLeftInCheck(Move move) {
+    // 1. Apply the move tentatively
+    piece.setCol(move.getNewCol());
+    piece.setRow(move.getNewRow());
+    if (captured != null) b.removePiece(captured);
+
+    // 2. Scan all opponent pieces
+    boolean inCheck = isKingInCheckRN(piece.isWhite());
+
+    // 3. Undo — restore original state
+    piece.setCol(oldCol);
+    piece.setRow(oldRow);
+    if (captured != null) b.getPieces().add(captured);
+
+    return inCheck;
+}
+```
+
+Checkmate is declared when the king is in check **and** this simulation returns `true` for every possible move of every
+friendly piece.
 
 ---
 
@@ -88,92 +154,47 @@ javac -d out src/**/*.java
 **Run:**
 
 ```bash
-java -cp out Main
+java -cp out main.Main
 ```
 
-**Or open in an IDE:**
-Simply import the project folder and run `Main.java` directly.
+**Or open in an IDE:** import the project folder and run `Main.java` directly.
+
+> Alternatively, download the pre-built `.jar` from
+> the [latest release](https://github.com/PBR208/Chess-Game/releases/latest) and run it with `java -jar Chess-Game.jar`.
 
 ---
 
 ## 🎮 How to Play
 
 1. Launch the application — the board appears with pieces in starting position
-2. Click on any of your pieces to select it
-3. Valid destination squares will be highlighted
-4. Click a highlighted square to make your move
-5. The turn passes to the opponent
-6. The game ends when checkmate or stalemate is detected
+2. Click one of your pieces to select it — valid moves are highlighted in green
+3. Click a highlighted square to move
+4. The board flips so the other player faces their own pieces from the bottom
+5. The clocks switch automatically; a player who runs out of time loses
+6. The game ends on checkmate, stalemate, time loss, or a 50/75-move draw
 
 White always moves first.
-
----
-
-## 📚 Documentation
-
-### Core Concepts
-
-#### Board Representation
-
-The board is modelled as an 8×8 grid. Each `Square` holds either a `Piece` or is empty (`null`). Squares are addressed
-by rank (row 1–8) and file (column a–h), mirroring standard chess notation.
-
-```
-  a   b   c   d   e   f   g   h
-8 [♜] [♞] [♝] [♛] [♚] [♝] [♞] [♜]
-7 [♟] [♟] [♟] [♟] [♟] [♟] [♟] [♟]
-6 [ ] [ ] [ ] [ ] [ ] [ ] [ ] [ ]
-5 [ ] [ ] [ ] [ ] [ ] [ ] [ ] [ ]
-4 [ ] [ ] [ ] [ ] [ ] [ ] [ ] [ ]
-3 [ ] [ ] [ ] [ ] [ ] [ ] [ ] [ ]
-2 [♙] [♙] [♙] [♙] [♙] [♙] [♙] [♙]
-1 [♖] [♘] [♗] [♕] [♔] [♗] [♘] [♖]
-```
-
-#### Piece Hierarchy
-
-Each piece type extends the abstract `Piece` class and overrides the move generation logic:
-
-```java
-abstract class Piece {
-    Color color;
-
-    abstract List<Square> getLegalMoves(Board board);
-}
-```
-
-This allows the `MoveGenerator` to iterate over all pieces polymorphically without needing to know each piece's specific
-type.
-
-#### Move Validation
-
-Before a move is executed, the engine:
-
-1. Generates all candidate moves for the selected piece
-2. Filters out moves that would leave the player's own king in check
-3. Presents only the remaining legal moves to the player
-
-#### Check & Checkmate Detection
-
-After every move, the engine scans all opponent pieces to determine whether their combined legal moves can reach the
-current player's king square. If the king is in check **and** no legal moves exist to escape it, checkmate is declared.
 
 ---
 
 ## 🗺️ Roadmap
 
 - [x] Board initialisation and piece placement
-- [x] Basic piece movement logic
+- [x] All six piece types with correct movement rules
 - [x] Legal move filtering (no self-check)
 - [x] Check and checkmate detection
-- [x] Interactive GUI with click-to-move
+- [x] Stalemate detection
+- [x] Interactive GUI with click-to-move and move highlighting
 - [x] Castling (kingside and queenside)
 - [x] En passant
-- [x] Pawn promotion
-- [x] Stalemate and draw detection
-- [x] 50-Move rule / 75-Move forced draw
+- [x] Pawn promotion with piece-selector dialog
+- [x] 50-move draw claim / 75-move forced draw
+- [x] Chess clock (10 min per player)
+- [x] Board perspective flip
 - [ ] Move history / notation log
-- [ ] Simple AI opponent
+- [ ] Threefold repetition and insufficient material draws
+- [ ] AI opponent
+- [ ] Configurable time controls
 
 ---
 
