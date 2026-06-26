@@ -15,22 +15,26 @@ public class Board extends JPanel {
     private final int tileSize = 85;
     private final int rows = 8;
     private final int cols = 8;
+    private final int clockHeight = tileSize; // each clock panel is one tile tall
 
     private ArrayList<Piece> pieces = new ArrayList<>();
-
     private Piece selectedPiece;
     private int enPassantTile = -1;
 
     private final GameController gc = new GameController(this);
 
+    private final ChessClock whiteClock = new ChessClock(true, this::repaint, this::onTimeExpired);
+    private final ChessClock blackClock = new ChessClock(false, this::repaint, this::onTimeExpired);
+
     public Board() {
-        this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize));
+        this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
 
         Input input = new Input(this, gc);
         this.addMouseListener(input);
         this.addMouseMotionListener(input);
 
         pieces = addPieces();
+        whiteClock.start();
     }
 
     public ArrayList<Piece> addPieces() {
@@ -70,10 +74,24 @@ public class Board extends JPanel {
 
     public void paintComponent(Graphics g) {
         Graphics2D g2d = (Graphics2D) g;
+        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
+                RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+        boolean whiteAtBottom = gc.isTurnOfWhite();
+        int boardWidth = cols * tileSize;
+        int bottomY = clockHeight + rows * tileSize;
+
+        if (whiteAtBottom) {
+            blackClock.draw(g2d, 0, boardWidth, clockHeight);
+        } else {
+            whiteClock.draw(g2d, 0, boardWidth, clockHeight);
+        }
 
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
-                g2d.setColor((c + r) % 2 == 0 ? new Color(232, 235, 239) : new Color(125, 135, 150));
+                g2d.setColor((c + r) % 2 == 0
+                        ? new Color(232, 235, 239)
+                        : new Color(125, 135, 150));
                 g2d.fillRect(toVisualX(c), toVisualY(r), tileSize, tileSize);
             }
         }
@@ -91,13 +109,39 @@ public class Board extends JPanel {
 
         for (Piece p : pieces) {
             if (p == selectedPiece) {
-                p.paint(g2d, p.getxPos(), p.getyPos());
+                p.paint(g2d, p.getxPos(), p.getyPos()); // follows the mouse cursor
             } else {
                 p.paint(g2d, toVisualX(p.getCol()), toVisualY(p.getRow()));
             }
         }
+
+        if (whiteAtBottom) {
+            whiteClock.draw(g2d, bottomY, boardWidth, clockHeight);
+        } else {
+            blackClock.draw(g2d, bottomY, boardWidth, clockHeight);
+        }
     }
 
+    public void switchClocks() {
+        if (gc.isTurnOfWhite()) {
+            blackClock.stop();
+            whiteClock.start();
+        } else {
+            whiteClock.stop();
+            blackClock.start();
+        }
+    }
+
+    public void stopClocks() {
+        whiteClock.stop();
+        blackClock.stop();
+    }
+
+    public void resetClocks() {
+        whiteClock.reset();
+        blackClock.reset();
+        whiteClock.start();
+    }
 
     // logical col/row -> pixel X/Y for drawing
     public int toVisualX(int col) {
@@ -105,7 +149,7 @@ public class Board extends JPanel {
     }
 
     public int toVisualY(int row) {
-        return (gc.isTurnOfWhite() ? row : 7 - row) * tileSize;
+        return clockHeight + (gc.isTurnOfWhite() ? row : 7 - row) * tileSize;
     }
 
     // pixel X/Y from a mouse click -> logical col/row
@@ -115,10 +159,18 @@ public class Board extends JPanel {
     }
 
     public int toLogicalRow(int y) {
-        int r = y / tileSize;
+        int r = (y - clockHeight) / tileSize;
         return gc.isTurnOfWhite() ? r : 7 - r;
     }
 
+    private void onTimeExpired(boolean isWhiteExpired) {
+        stopClocks();
+        String winner = isWhiteExpired ? "Black wins on time!" : "White wins on time!";
+        JFrame parent = (JFrame) SwingUtilities.getWindowAncestor(this);
+        EndScreen screen = new EndScreen(parent, winner, tileSize);
+        screen.setVisible(true);
+        gc.restartGame();
+    }
 
     // GETTER
 
