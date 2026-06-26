@@ -109,4 +109,13 @@ public class ChessClock {
         int timeY = yOffset + (height + fmTime.getAscent() - fmTime.getDescent()) / 2;
         g2d.drawString(timeText, timeX, timeY);
     }
+
+    //GETTER
+    public boolean isRunning() {
+        return running;
+    }
+
+    public long getTimeMs() {
+        return timeMs;
+    }
 }
