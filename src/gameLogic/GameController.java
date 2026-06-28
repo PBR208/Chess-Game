@@ -32,6 +32,7 @@ public class GameController {
         passedMoves = 0;
         b.setEnPassantTile(-1);
         b.resetClocks(); // reset both clocks and start white's
+        moveLog.clear();
     }
 
     private void checkGameEnd(Move m) {
