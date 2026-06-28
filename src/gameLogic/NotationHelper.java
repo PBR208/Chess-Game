@@ -14,7 +14,7 @@ public class NotationHelper {
 
         // Castling
         // A king moving two squares is always a castle.
-        if (p.getName().equals("King") && Math.abs(m.getNewCol() - fromCol) == 2) {
+        if (p.getType().getDisplayName().equals("King") && Math.abs(m.getNewCol() - fromCol) == 2) {
             return m.getNewCol() > fromCol ? "O-O" : "O-O-O";
         }
 
@@ -25,12 +25,12 @@ public class NotationHelper {
         boolean isCapture = m.getCapture() != null;
 
         String pieceChar;
-        if (p.getName().equals("Pawn")) {
+        if (p.getType().getDisplayName().equals("Pawn")) {
             pieceChar = isCapture ? file(fromCol) : "";
-        } else if (p.getName().equals("Knight")) {
+        } else if (p.getType().getDisplayName().equals("Knight")) {
             pieceChar = "N";
         } else {
-            pieceChar = p.getName().substring(0, 1); // K, Q, R, B
+            pieceChar = p.getType().getDisplayName().substring(0, 1); // K, Q, R, B
         }
 
         // Capture marker

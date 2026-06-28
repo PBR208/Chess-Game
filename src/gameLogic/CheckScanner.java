@@ -72,7 +72,7 @@ public class CheckScanner {
     private Piece findKing(boolean isWhite) {
         List<Piece> pieces = b.getPieces();
         for (Piece p : pieces) {
-            if (isWhite == p.isWhite() && p.getName().equals("King")) {
+            if (isWhite == p.isWhite() && p.getType().getDisplayName().equals("King")) {
                 return p;
             }
         }
@@ -80,5 +80,5 @@ public class CheckScanner {
         return null;
     }
 
-    
+
 }
