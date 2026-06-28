@@ -28,6 +28,10 @@ public class Board extends JPanel {
     private final ChessClock whiteClock = new ChessClock(true, this::repaint, this::onTimeExpired);
     private final ChessClock blackClock = new ChessClock(false, this::repaint, this::onTimeExpired);
 
+    private static final Color LIGHT_TILE = new Color(232, 235, 239);
+    private static final Color DARK_TILE = new Color(125, 135, 150);
+    private static final Color HINT_COLOR = new Color(81, 168, 0, 200);
+
     public Board() {
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
 
@@ -93,8 +97,8 @@ public class Board extends JPanel {
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 g2d.setColor((c + r) % 2 == 0
-                        ? new Color(232, 235, 239)
-                        : new Color(125, 135, 150));
+                        ? LIGHT_TILE
+                        : DARK_TILE);
                 g2d.fillRect(toVisualX(c), toVisualY(r), tileSize, tileSize);
             }
         }
@@ -103,7 +107,7 @@ public class Board extends JPanel {
             for (int r = 0; r < rows; r++) {
                 for (int c = 0; c < cols; c++) {
                     if (legalMoveTiles.contains(getTileNum(c, r))) {
-                        g2d.setColor(new Color(81, 168, 0, 200));
+                        g2d.setColor(HINT_COLOR);
                         g2d.fillRect(toVisualX(c), toVisualY(r), tileSize, tileSize);
                     }
                 }
