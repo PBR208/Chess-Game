@@ -15,7 +15,7 @@ public class Piece {
     protected int xPos, yPos;
 
     protected boolean isWhite;
-    protected String name;
+    protected PieceType type;
     protected int value;
 
     private boolean isFirstMove = true;
@@ -69,8 +69,8 @@ public class Piece {
         return isWhite;
     }
 
-    public String getName() {
-        return name;
+    public PieceType getType() {
+        return type;
     }
 
     public boolean isFirstMove() {
