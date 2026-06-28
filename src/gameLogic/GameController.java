@@ -1,9 +1,6 @@
 package gameLogic;
 
-import gui.Board;
-import gui.FiftyRuleDraw;
-import gui.PromoteGUI;
-import gui.EndScreen;
+import gui.*;
 import pieces.*;
 
 import javax.swing.*;
@@ -14,6 +11,7 @@ public class GameController {
     Board b;
     CheckScanner cs;
     NotationHelper nh = new NotationHelper();
+    MoveLogPanel moveLogPanel;
 
     int passedMoves;
 
@@ -33,6 +31,7 @@ public class GameController {
         b.setEnPassantTile(-1);
         b.resetClocks(); // reset both clocks and start white's
         moveLog.clear();
+        if (moveLogPanel != null) moveLogPanel.clear();
     }
 
     private void checkGameEnd(Move m) {
@@ -135,6 +134,10 @@ public class GameController {
         }
 
         moveLog.add(nh.toNotation(m, fromCol, fromRow));
+
+        if (moveLogPanel != null) {
+            moveLogPanel.update(moveLog);
+        }
 
         passedMoves++;
         turnOfWhite = !turnOfWhite;
@@ -292,5 +295,11 @@ public class GameController {
 
     public ArrayList<String> getMoveLog() {
         return moveLog;
+    }
+
+    // SETTER
+
+    public void setMoveLogPanel(MoveLogPanel panel) { // ← ADD
+        this.moveLogPanel = panel;
     }
 }
