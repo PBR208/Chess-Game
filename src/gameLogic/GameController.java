@@ -289,4 +289,8 @@ public class GameController {
     public boolean isTurnOfWhite() {
         return turnOfWhite;
     }
+
+    public ArrayList<String> getMoveLog() {
+        return moveLog;
+    }
 }
