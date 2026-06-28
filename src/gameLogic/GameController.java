@@ -13,9 +13,12 @@ public class GameController {
 
     Board b;
     CheckScanner cs;
+    NotationHelper nh = new NotationHelper();
+
     int passedMoves;
 
     private boolean turnOfWhite = true;
+    private final ArrayList<String> moveLog = new ArrayList<>();
 
     public GameController(Board b) {
         this.b = b;
@@ -108,6 +111,9 @@ public class GameController {
 
     public void makeMove(Move m) {
 
+        int fromCol = m.getPiece().getCol();
+        int fromRow = m.getPiece().getRow();
+
         if (m.getPiece() instanceof King && Math.abs(m.getNewCol() - m.getPiece().getCol()) == 2) {
             castle((King) m.getPiece(), m.getNewCol());
         }
@@ -126,6 +132,8 @@ public class GameController {
             b.capture(m);
             passedMoves = -1;
         }
+
+        moveLog.add(nh.toNotation(m, fromCol, fromRow));
 
         passedMoves++;
         turnOfWhite = !turnOfWhite;
