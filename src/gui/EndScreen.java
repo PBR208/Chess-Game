@@ -13,7 +13,7 @@ public class EndScreen extends JDialog {
         setUndecorated(true);
 
         JLabel txt = new JLabel(msg, SwingConstants.CENTER);
-        txt.setFont(new Font("Ariel", Font.BOLD, tileSize / 3));
+        txt.setFont(new Font("Arial", Font.BOLD, tileSize / 3));
 
         JButton restartButton = new JButton("Restart");
         restartButton.setFont(new Font("Arial", Font.PLAIN, tileSize / 6));
