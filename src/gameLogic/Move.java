@@ -10,6 +10,7 @@ public class Move {
 
     private final Piece piece;
     private Piece capture;
+    private String promotionChoice;
 
     public Move(Board b, Piece p, int newCol, int newRow) {
 
@@ -36,7 +37,15 @@ public class Move {
         return capture;
     }
 
+    public String getPromotionChoice() {
+        return promotionChoice;
+    }
+
     public void setCapture(Piece capture) {
         this.capture = capture;
+    }
+
+    public void setPromotionChoice(String promotionChoice) {
+        this.promotionChoice = promotionChoice;
     }
 }

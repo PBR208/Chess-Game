@@ -1,9 +1,6 @@
 package gameLogic;
 
-import gui.Board;
-import gui.FiftyRuleDraw;
-import gui.PromoteGUI;
-import gui.EndScreen;
+import gui.*;
 import pieces.*;
 
 import javax.swing.*;
@@ -13,9 +10,13 @@ public class GameController {
 
     Board b;
     CheckScanner cs;
+    NotationHelper nh = new NotationHelper();
+    MoveLogPanel moveLogPanel;
+
     int passedMoves;
 
     private boolean turnOfWhite = true;
+    private final ArrayList<String> moveLog = new ArrayList<>();
 
     public GameController(Board b) {
         this.b = b;
@@ -29,6 +30,8 @@ public class GameController {
         passedMoves = 0;
         b.setEnPassantTile(-1);
         b.resetClocks(); // reset both clocks and start white's
+        moveLog.clear();
+        if (moveLogPanel != null) moveLogPanel.clear();
     }
 
     private void checkGameEnd(Move m) {
@@ -108,6 +111,9 @@ public class GameController {
 
     public void makeMove(Move m) {
 
+        int fromCol = m.getPiece().getCol();
+        int fromRow = m.getPiece().getRow();
+
         if (m.getPiece() instanceof King && Math.abs(m.getNewCol() - m.getPiece().getCol()) == 2) {
             castle((King) m.getPiece(), m.getNewCol());
         }
@@ -125,6 +131,12 @@ public class GameController {
 
             b.capture(m);
             passedMoves = -1;
+        }
+
+        moveLog.add(nh.toNotation(m, fromCol, fromRow));
+
+        if (moveLogPanel != null) {
+            moveLogPanel.update(moveLog);
         }
 
         passedMoves++;
@@ -185,6 +197,13 @@ public class GameController {
 
         b.removePiece(m.getPiece());
         b.addPiece(newPiece);
+
+        m.setPromotionChoice(switch (choice) {
+            case ROOK -> "R";
+            case BISHOP -> "B";
+            case KNIGHT -> "N";
+            default -> "Q";
+        });
     }
 
     private void castle(King king, int newCol) {
@@ -272,5 +291,15 @@ public class GameController {
 
     public boolean isTurnOfWhite() {
         return turnOfWhite;
+    }
+
+    public ArrayList<String> getMoveLog() {
+        return moveLog;
+    }
+
+    // SETTER
+
+    public void setMoveLogPanel(MoveLogPanel panel) { // ← ADD
+        this.moveLogPanel = panel;
     }
 }

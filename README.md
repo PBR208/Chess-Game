@@ -52,7 +52,7 @@ from the bottom, mimicking a physical board rotation.
 
 | ✅ Implemented                                         | ❌ Not Yet Implemented                                   |
 |-------------------------------------------------------|---------------------------------------------------------|
-| All six piece types with correct movement rules       | Move history / notation log (PGN)                       |
+| All six piece types with correct movement rules       | Notation log (PGN)                                      |
 | Legal move generation — self-check moves filtered out | Threefold repetition draw                               |
 | Check & checkmate detection                           | Insufficient material draw (K vs K, etc.)               |
 | Stalemate detection                                   | AI opponent                                             |
@@ -65,6 +65,7 @@ from the bottom, mimicking a physical board rotation.
 | Move highlighting on piece selection                  |                                                         |
 | End screen on checkmate, stalemate, or time loss      |                                                         |
 | Piece sprites loaded from a sprite sheet              |                                                         |
+| Move history                                          |                                                         |
 
 ---
 
@@ -84,6 +85,7 @@ src/
 │   ├── ChessClock.java         # Timer-driven clock with Graphics2D rendering
 │   ├── EndScreen.java          # Result dialog (checkmate / stalemate / time)
 │   ├── FiftyRuleDraw.java      # 50/75-move draw dialog
+|   ├── MoveLogPanel.java       # Displays the moveLog of the current game
 │   └── PromoteGUI.java         # Promotion piece selector dialog
 ├── pieces/
 │   ├── Piece.java              # Abstract base: position, colour, sprite, move hooks

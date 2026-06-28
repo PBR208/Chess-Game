@@ -32,6 +32,11 @@ public class GameTest {
     private static final int TILE_SIZE = 85;
 
     /**
+     * A realistic board height (8 tiles) used when constructing MoveLogPanel.
+     */
+    private static final int BOARD_HEIGHT = TILE_SIZE * 8;
+
+    /**
      * ms to wait before auto-clicking a modal button.
      */
     private static final int CLICK_DELAY = 200;
@@ -124,6 +129,21 @@ public class GameTest {
             if (comp instanceof JLabel lbl) return lbl;
             if (comp instanceof Container sub) {
                 JLabel found = findLabel(sub);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Returns the first JTextArea found in a container (depth-first).
+     * Used to inspect MoveLogPanel's log content without exposing a getter.
+     */
+    private static JTextArea findTextArea(Container c) {
+        for (Component comp : c.getComponents()) {
+            if (comp instanceof JTextArea ta) return ta;
+            if (comp instanceof Container sub) {
+                JTextArea found = findTextArea(sub);
                 if (found != null) return found;
             }
         }
@@ -314,6 +334,94 @@ public class GameTest {
             });
             checkEqual(PromoteGUI.Choice.KNIGHT, choice[0], "choice");
         });
+
+        System.out.println("\n── MoveLogPanel ────────────────────────────────────────────────");
+
+        // Panel preferred size: 200px wide, height matches the value passed in
+        test("MoveLogPanel · preferred size matches board height", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
+                    checkEqual(200, p.getPreferredSize().width, "preferred width");
+                    checkEqual(BOARD_HEIGHT, p.getPreferredSize().height, "preferred height");
+                }));
+
+        // Header label must contain "Move History"
+        test("MoveLogPanel · header label contains 'Move History'", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
+                    JLabel lbl = findLabel(p);
+                    checkNotNull(lbl, "MoveLogPanel must contain a JLabel header");
+                    check(lbl.getText().contains("Move History"),
+                            "Header label must contain 'Move History', got: " + lbl.getText());
+                }));
+
+        // A JTextArea must exist inside the panel for the log content
+        test("MoveLogPanel · contains a JTextArea", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
+                    checkNotNull(findTextArea(p), "MoveLogPanel must contain a JTextArea");
+                }));
+
+        // update() with an empty log → text area should be blank
+        test("MoveLogPanel · update with empty log clears text", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
+                    p.update(List.of());
+                    JTextArea ta = findTextArea(p);
+                    checkNotNull(ta, "Must contain a JTextArea");
+                    checkEqual("", ta.getText(), "text area should be empty after update with []");
+                }));
+
+        // update() with an even number of moves → pairs formatted with move numbers
+        test("MoveLogPanel · update renders full move pairs", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
+                    p.update(List.of("e4", "e5", "Nf3", "Nc6"));
+                    String text = findTextArea(p).getText();
+                    check(text.contains("1."), "Must contain move number '1.'");
+                    check(text.contains("e4"), "Must contain white's first move 'e4'");
+                    check(text.contains("e5"), "Must contain black's first move 'e5'");
+                    check(text.contains("2."), "Must contain move number '2.'");
+                    check(text.contains("Nf3"), "Must contain white's second move 'Nf3'");
+                    check(text.contains("Nc6"), "Must contain black's second move 'Nc6'");
+                }));
+
+        // update() with an odd number of moves → last line shows "..." for black
+        test("MoveLogPanel · update shows '...' when black has not moved yet", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
+                    p.update(List.of("e4", "e5", "Nf3"));
+                    String text = findTextArea(p).getText();
+                    check(text.contains("Nf3"), "Must contain white's pending move 'Nf3'");
+                    check(text.contains("..."), "Must show '...' for black's pending reply");
+                }));
+
+        // update() called multiple times → only the latest content is shown (no duplication)
+        test("MoveLogPanel · repeated update replaces content, no duplication", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
+                    p.update(List.of("e4"));
+                    p.update(List.of("e4", "e5"));
+                    String text = findTextArea(p).getText();
+                    // "1." should appear exactly once
+                    int count = 0;
+                    int idx = 0;
+                    while ((idx = text.indexOf("1.", idx)) != -1) {
+                        count++;
+                        idx++;
+                    }
+                    checkEqual(1, count, "Move number '1.' must appear exactly once after two updates");
+                }));
+
+        // clear() must empty the text area regardless of prior content
+        test("MoveLogPanel · clear empties the text area", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
+                    p.update(List.of("e4", "e5", "Nf3", "Nc6"));
+                    p.clear();
+                    JTextArea ta = findTextArea(p);
+                    checkEqual("", ta.getText(), "text area must be empty after clear()");
+                }));
 
         // ── Summary ───────────────────────────────────────────────────────────
         SwingUtilities.invokeAndWait(() -> frame.dispose());
