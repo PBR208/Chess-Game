@@ -24,6 +24,9 @@ public class Input extends MouseAdapter {
 
         Piece pAtLocation = b.getPiece(col, row);
         if (pAtLocation != null) {
+            pAtLocation.setxPos(e.getX() - b.getTileSize() / 2);
+            pAtLocation.setyPos(e.getY() - b.getTileSize() / 2);
+
             b.setSelectedPiece(pAtLocation);
         }
     }
