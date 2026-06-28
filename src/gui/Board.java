@@ -28,9 +28,9 @@ public class Board extends JPanel {
     private final ChessClock whiteClock = new ChessClock(true, this::repaint, this::onTimeExpired);
     private final ChessClock blackClock = new ChessClock(false, this::repaint, this::onTimeExpired);
 
-    private static final Color LIGHT_TILE = new Color(232, 235, 239);
-    private static final Color DARK_TILE = new Color(125, 135, 150);
-    private static final Color HINT_COLOR = new Color(81, 168, 0, 200);
+    private final Color LIGHT_TILE = new Color(232, 235, 239);
+    private final Color DARK_TILE = new Color(125, 135, 150);
+    private final Color HINT_COLOR = new Color(81, 168, 0, 200);
 
     public Board() {
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
