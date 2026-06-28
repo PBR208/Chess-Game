@@ -130,7 +130,9 @@ public class GameController {
             m.getPiece().setFirstMove(false);
 
             b.capture(m);
-            passedMoves = -1;
+            if (m.getCapture() != null) {
+                passedMoves = -1;
+            }
         }
 
         moveLog.add(nh.toNotation(m, fromCol, fromRow));
