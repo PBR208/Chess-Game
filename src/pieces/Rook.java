@@ -13,7 +13,7 @@ public class Rook extends Piece {
         this.yPos = row * b.getTileSize();
 
         this.isWhite = isWhite;
-        this.name = "Rook";
+        this.type = PieceType.ROOK;
 
         this.front = img.getSubimage(4 * imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }

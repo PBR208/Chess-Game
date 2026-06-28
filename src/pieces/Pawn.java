@@ -13,7 +13,7 @@ public class Pawn extends Piece {
         this.yPos = row * b.getTileSize();
 
         this.isWhite = isWhite;
-        this.name = "Pawn";
+        this.type = PieceType.PAWN;
 
         this.front = img.getSubimage(5 * imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }
@@ -53,7 +53,7 @@ public class Pawn extends Piece {
 
 
             return target != null
-                    && target.getName().equals("Pawn")
+                    && target.getType().getDisplayName().equals("Pawn")
                     && target.isWhite() != this.isWhite;
         }
 

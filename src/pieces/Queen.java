@@ -13,7 +13,7 @@ public class Queen extends Piece {
         this.yPos = row * b.getTileSize();
 
         this.isWhite = isWhite;
-        this.name = "Queen";
+        this.type = PieceType.QUEEN;
 
         this.front = img.getSubimage(imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }

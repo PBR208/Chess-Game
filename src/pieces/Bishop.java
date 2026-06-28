@@ -13,7 +13,7 @@ public class Bishop extends Piece {
         this.yPos = row * b.getTileSize();
 
         this.isWhite = isWhite;
-        this.name = "Bishop";
+        this.type = PieceType.BISHOP;
 
         this.front = img.getSubimage(2 * imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }
