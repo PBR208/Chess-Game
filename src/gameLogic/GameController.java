@@ -63,10 +63,7 @@ public class GameController {
             fiftyRuleDraw.setVisible(true);
 
             restartGame();
-        }
-
-        // 50 moves by black AND white = 100 - possible draw
-        if (passedMoves >= 100) {
+        } else if (passedMoves >= 100) { // 50 moves by black AND white = 100 - possible draw
             b.stopClocks();
             FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, b.getTileSize(), false);
             fiftyRuleDraw.setVisible(true);
