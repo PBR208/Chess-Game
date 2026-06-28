@@ -8,6 +8,7 @@ import pieces.*;
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 
 public class Board extends JPanel {
@@ -20,6 +21,7 @@ public class Board extends JPanel {
     private ArrayList<Piece> pieces = new ArrayList<>();
     private Piece selectedPiece;
     private int enPassantTile = -1;
+    private HashSet<Integer> legalMoveTiles = new HashSet<>();
 
     private final GameController gc = new GameController(this);
 
@@ -100,7 +102,7 @@ public class Board extends JPanel {
         if (selectedPiece != null) {
             for (int r = 0; r < rows; r++) {
                 for (int c = 0; c < cols; c++) {
-                    if (gc.isValidMove(new Move(this, selectedPiece, c, r))) {
+                    if (legalMoveTiles.contains(getTileNum(c, r))) {
                         g2d.setColor(new Color(81, 168, 0, 200));
                         g2d.fillRect(toVisualX(c), toVisualY(r), tileSize, tileSize);
                     }
@@ -212,6 +214,17 @@ public class Board extends JPanel {
 
     public void setSelectedPiece(Piece selectedPiece) {
         this.selectedPiece = selectedPiece;
+        legalMoveTiles.clear();
+
+        if (selectedPiece != null) {
+            for (int r = 0; r < 8; r++) {
+                for (int c = 0; c < 8; c++) {
+                    if (gc.isValidMove(new Move(this, selectedPiece, c, r))) {
+                        legalMoveTiles.add(getTileNum(c, r));
+                    }
+                }
+            }
+        }
     }
 
     public void removePiece(Piece p) {
