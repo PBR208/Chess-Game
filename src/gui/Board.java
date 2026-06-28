@@ -203,6 +203,10 @@ public class Board extends JPanel {
         return pieces;
     }
 
+    public GameController getGameController() {
+        return gc;
+    }
+
     // SETTER
 
     public void setSelectedPiece(Piece selectedPiece) {
