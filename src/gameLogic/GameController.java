@@ -144,7 +144,7 @@ public class GameController {
         flip();
     }
 
-    public void movePawn(Move m) {
+    private void movePawn(Move m) {
 
         // en passent
         int colorIndex = m.getPiece().isWhite() ? 1 : -1;
