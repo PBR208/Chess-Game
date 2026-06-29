@@ -191,7 +191,7 @@ public class GameController {
             case ROOK -> new Rook(b, m.getNewCol(), m.getNewRow(), white);
             case BISHOP -> new Bishop(b, m.getNewCol(), m.getNewRow(), white);
             case KNIGHT -> new Knight(b, m.getNewCol(), m.getNewRow(), white);
-            default -> new Queen(b, m.getNewCol(), m.getNewRow(), white);
+            case QUEEN -> new Queen(b, m.getNewCol(), m.getNewRow(), white);
         };
 
         b.removePiece(m.getPiece());
