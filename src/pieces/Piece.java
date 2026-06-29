@@ -36,7 +36,7 @@ public class Piece {
         imgScale = (img != null) ? img.getWidth() / 6 : 0;
     }
 
-    private Image front;
+    protected Image front;
     protected Board b;
 
     public Piece(Board b) {
