@@ -16,6 +16,14 @@ public class ChessClock {
     private final TimeExpiredCallback onExpired;
     private final Timer timer;
 
+    private final Color ACTIVE_BANNER_COLOR = new Color(81, 168, 0, 200);
+    private final Color SEPERATOR_COLOR = new Color(60, 60, 60);
+    private final Color PLAYER_WHITE_COLOR = new Color(232, 235, 239);
+    private final Color PLAYER_BLACK_COLOR = new Color(40, 40, 42);
+    private final Color ALARM_COLOR = new Color(210, 55, 55);
+    private final Color CLOCK_COLOR = new Color(90, 90, 90);
+    private final Color PLAYER_NAME_COLOR = new Color(90, 90, 90);
+
 
     public interface TimeExpiredCallback {
         void onExpired(boolean isWhiteExpired);
@@ -64,12 +72,12 @@ public class ChessClock {
 
         //Green left border on the active clock
         if (running) {
-            g2d.setColor(new Color(81, 168, 0));
+            g2d.setColor(ACTIVE_BANNER_COLOR);
             g2d.fillRect(0, yOffset, 4, height);
         }
 
         //Thin separator between clock and board edge
-        g2d.setColor(new Color(60, 60, 60));
+        g2d.setColor(SEPERATOR_COLOR);
         g2d.fillRect(0, running ? yOffset + height - 1 : yOffset, width, 1);
 
         //Player colour swatch (small filled square)
@@ -77,14 +85,14 @@ public class ChessClock {
         int swatchX = pad + 4; // clear of the green active border
         int swatchY = yOffset + (height - swatchSize) / 2;
 
-        g2d.setColor(isWhite ? new Color(232, 235, 239) : new Color(40, 40, 42));
+        g2d.setColor(isWhite ? PLAYER_WHITE_COLOR : PLAYER_BLACK_COLOR);
         g2d.fillRect(swatchX, swatchY, swatchSize, swatchSize);
-        g2d.setColor(new Color(90, 90, 90));
+        g2d.setColor(CLOCK_COLOR);
         g2d.drawRect(swatchX, swatchY, swatchSize, swatchSize);
 
         //Player label
         g2d.setFont(new Font("Arial", Font.BOLD, height / 5));
-        g2d.setColor(running ? Color.WHITE : new Color(110, 110, 110));
+        g2d.setColor(running ? Color.WHITE : PLAYER_NAME_COLOR);
 
         FontMetrics fmLabel = g2d.getFontMetrics();
         String label = isWhite ? "WHITE" : "BLACK";
@@ -97,8 +105,8 @@ public class ChessClock {
         String timeText = String.format("%02d:%02d", totalSec / 60, totalSec % 60);
 
         Color timeColor;
-        if (!running) timeColor = new Color(90, 90, 90);
-        else if (timeMs < LOW_TIME_MS) timeColor = new Color(210, 55, 55); // red under 30 s
+        if (!running) timeColor = CLOCK_COLOR;
+        else if (timeMs < LOW_TIME_MS) timeColor = ALARM_COLOR; // red under 30 s
         else timeColor = Color.WHITE;
 
         g2d.setFont(new Font("Arial", Font.BOLD, height / 2));

@@ -15,27 +15,29 @@ public class Piece {
     protected int xPos, yPos;
 
     protected boolean isWhite;
-    protected String name;
+    protected PieceType type;
     protected int value;
 
     private boolean isFirstMove = true;
 
-    BufferedImage img = null;
+    protected static final BufferedImage img;
+    protected static final int imgScale;
 
-    {
+    static {
+        BufferedImage tmp = null;
         try {
-            img = ImageIO.read(Piece.class.getResourceAsStream("/pieces.png"));
-            if (img == null) throw new IOException("Resource not found");
+            tmp = ImageIO.read(Piece.class.getResourceAsStream("/pieces.png"));
+            if (tmp == null) throw new IOException("Resource not found");
         } catch (IOException e) {
             e.printStackTrace();
             System.out.println("Failed to load image from classpath.");
         }
+        img = tmp;
+        imgScale = (img != null) ? img.getWidth() / 6 : 0;
     }
 
-    protected final int imgScale = img.getWidth() / 6;
-
-    public Image front;
-    public Board b;
+    private Image front;
+    protected Board b;
 
     public Piece(Board b) {
         this.b = b;
@@ -67,8 +69,8 @@ public class Piece {
         return isWhite;
     }
 
-    public String getName() {
-        return name;
+    public PieceType getType() {
+        return type;
     }
 
     public boolean isFirstMove() {

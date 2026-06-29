@@ -63,10 +63,7 @@ public class GameController {
             fiftyRuleDraw.setVisible(true);
 
             restartGame();
-        }
-
-        // 50 moves by black AND white = 100 - possible draw
-        if (passedMoves >= 100) {
+        } else if (passedMoves >= 100) { // 50 moves by black AND white = 100 - possible draw
             b.stopClocks();
             FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, b.getTileSize(), false);
             fiftyRuleDraw.setVisible(true);
@@ -130,7 +127,9 @@ public class GameController {
             m.getPiece().setFirstMove(false);
 
             b.capture(m);
-            passedMoves = -1;
+            if (m.getCapture() != null) {
+                passedMoves = -1;
+            }
         }
 
         moveLog.add(nh.toNotation(m, fromCol, fromRow));
@@ -145,7 +144,7 @@ public class GameController {
         flip();
     }
 
-    public void movePawn(Move m) {
+    private void movePawn(Move m) {
 
         // en passent
         int colorIndex = m.getPiece().isWhite() ? 1 : -1;
@@ -192,7 +191,7 @@ public class GameController {
             case ROOK -> new Rook(b, m.getNewCol(), m.getNewRow(), white);
             case BISHOP -> new Bishop(b, m.getNewCol(), m.getNewRow(), white);
             case KNIGHT -> new Knight(b, m.getNewCol(), m.getNewRow(), white);
-            default -> new Queen(b, m.getNewCol(), m.getNewRow(), white);
+            case QUEEN -> new Queen(b, m.getNewCol(), m.getNewRow(), white);
         };
 
         b.removePiece(m.getPiece());

@@ -13,7 +13,7 @@ public class Knight extends Piece {
         this.yPos = row * b.getTileSize();
 
         this.isWhite = isWhite;
-        this.name = "Knight";
+        this.type = PieceType.KNIGHT;
 
         this.front = img.getSubimage(3 * imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }

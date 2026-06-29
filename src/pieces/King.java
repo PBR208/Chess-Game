@@ -13,7 +13,7 @@ public class King extends Piece {
         this.yPos = row * b.getTileSize();
 
         this.isWhite = isWhite;
-        this.name = "King";
+        this.type = PieceType.KING;
 
         this.front = img.getSubimage(0, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }

@@ -8,6 +8,8 @@ import pieces.*;
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 
 public class Board extends JPanel {
@@ -20,11 +22,16 @@ public class Board extends JPanel {
     private ArrayList<Piece> pieces = new ArrayList<>();
     private Piece selectedPiece;
     private int enPassantTile = -1;
+    private HashSet<Integer> legalMoveTiles = new HashSet<>();
 
     private final GameController gc = new GameController(this);
 
     private final ChessClock whiteClock = new ChessClock(true, this::repaint, this::onTimeExpired);
     private final ChessClock blackClock = new ChessClock(false, this::repaint, this::onTimeExpired);
+
+    private final Color LIGHT_TILE = new Color(232, 235, 239);
+    private final Color DARK_TILE = new Color(125, 135, 150);
+    private final Color HINT_COLOR = new Color(81, 168, 0, 200);
 
     public Board() {
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
@@ -73,6 +80,7 @@ public class Board extends JPanel {
     }
 
     public void paintComponent(Graphics g) {
+        super.paintComponent(g);
         Graphics2D g2d = (Graphics2D) g;
         g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
                 RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -90,8 +98,8 @@ public class Board extends JPanel {
         for (int r = 0; r < rows; r++) {
             for (int c = 0; c < cols; c++) {
                 g2d.setColor((c + r) % 2 == 0
-                        ? new Color(232, 235, 239)
-                        : new Color(125, 135, 150));
+                        ? LIGHT_TILE
+                        : DARK_TILE);
                 g2d.fillRect(toVisualX(c), toVisualY(r), tileSize, tileSize);
             }
         }
@@ -99,8 +107,8 @@ public class Board extends JPanel {
         if (selectedPiece != null) {
             for (int r = 0; r < rows; r++) {
                 for (int c = 0; c < cols; c++) {
-                    if (gc.isValidMove(new Move(this, selectedPiece, c, r))) {
-                        g2d.setColor(new Color(81, 168, 0, 200));
+                    if (legalMoveTiles.contains(getTileNum(c, r))) {
+                        g2d.setColor(HINT_COLOR);
                         g2d.fillRect(toVisualX(c), toVisualY(r), tileSize, tileSize);
                     }
                 }
@@ -200,7 +208,7 @@ public class Board extends JPanel {
     }
 
     public List<Piece> getPieces() {
-        return pieces;
+        return Collections.unmodifiableList(pieces);
     }
 
     public GameController getGameController() {
@@ -211,6 +219,17 @@ public class Board extends JPanel {
 
     public void setSelectedPiece(Piece selectedPiece) {
         this.selectedPiece = selectedPiece;
+        legalMoveTiles.clear();
+
+        if (selectedPiece != null) {
+            for (int r = 0; r < 8; r++) {
+                for (int c = 0; c < 8; c++) {
+                    if (gc.isValidMove(new Move(this, selectedPiece, c, r))) {
+                        legalMoveTiles.add(getTileNum(c, r));
+                    }
+                }
+            }
+        }
     }
 
     public void removePiece(Piece p) {
