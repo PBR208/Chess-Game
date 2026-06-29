@@ -179,27 +179,6 @@ White always moves first.
 
 ---
 
-## 🗺️ Roadmap
-
-- [x] Board initialisation and piece placement
-- [x] All six piece types with correct movement rules
-- [x] Legal move filtering (no self-check)
-- [x] Check and checkmate detection
-- [x] Stalemate detection
-- [x] Interactive GUI with click-to-move and move highlighting
-- [x] Castling (kingside and queenside)
-- [x] En passant
-- [x] Pawn promotion with piece-selector dialog
-- [x] 50-move draw claim / 75-move forced draw
-- [x] Chess clock (10 min per player)
-- [x] Board perspective flip
-- [ ] Move history / notation log
-- [ ] Threefold repetition and insufficient material draws
-- [ ] AI opponent
-- [ ] Configurable time controls
-
----
-
 ## 🤝 Contributing
 
 This is a personal learning project — issues, ideas, and suggestions are always welcome. Feel free
