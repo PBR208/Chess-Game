@@ -8,6 +8,7 @@ import pieces.*;
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 
@@ -207,7 +208,7 @@ public class Board extends JPanel {
     }
 
     public List<Piece> getPieces() {
-        return pieces;
+        return Collections.unmodifiableList(pieces);
     }
 
     public GameController getGameController() {

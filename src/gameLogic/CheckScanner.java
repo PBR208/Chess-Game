@@ -36,7 +36,7 @@ public class CheckScanner {
         piece.setRow(oldRow);
 
         if (captured != null) {
-            b.getPieces().add(captured);
+            b.addPiece(captured);
         }
 
         return kingInCheck;
