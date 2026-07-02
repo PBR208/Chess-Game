@@ -23,6 +23,7 @@ public class Board extends JPanel {
     private Piece selectedPiece;
     private int enPassantTile = -1;
     private HashSet<Integer> legalMoveTiles = new HashSet<>();
+    private final Piece[][] grid = new Piece[8][8];
 
     private final GameController gc = new GameController(this);
 
@@ -41,6 +42,10 @@ public class Board extends JPanel {
         this.addMouseMotionListener(input);
 
         pieces = addPieces();
+        for (Piece p : pieces) {
+            grid[p.getRow()][p.getCol()] = p;
+        }
+
         whiteClock.start();
     }
 
@@ -183,12 +188,7 @@ public class Board extends JPanel {
     // GETTER
 
     public Piece getPiece(int col, int row) {
-        for (Piece p : pieces) {
-            if (p.getCol() == col && p.getRow() == row) {
-                return p;
-            }
-        }
-        return null;
+        return grid[row][col];  // O(1), no loop
     }
 
     public int getTileSize() {
@@ -234,10 +234,16 @@ public class Board extends JPanel {
 
     public void removePiece(Piece p) {
         pieces.remove(p);
+        grid[p.getRow()][p.getCol()] = null;
     }
 
     public void setPieces(ArrayList<Piece> pieces) {
         this.pieces = pieces;
+
+        for (Piece[] row : grid) java.util.Arrays.fill(row, null);
+        for (Piece p : pieces) {
+            grid[p.getRow()][p.getCol()] = p;
+        }
     }
 
     public void setEnPassantTile(int enPassantTile) {
@@ -246,11 +252,22 @@ public class Board extends JPanel {
 
     public void addPiece(Piece p) {
         pieces.add(p);
+        grid[p.getRow()][p.getCol()] = p;
     }
 
     // HELPER
 
     public void capture(Move m) {
-        pieces.remove(m.getCapture());
+        Piece cap = m.getCapture();
+        if (cap != null) {
+            pieces.remove(cap);
+            grid[cap.getRow()][cap.getCol()] = null;  // clear the grid cell
+        }
+    }
+
+
+    public void moveOnGrid(Piece p, int fromCol, int fromRow) {
+        grid[fromRow][fromCol] = null;           // vacate old cell
+        grid[p.getRow()][p.getCol()] = p;        // occupy new cell
     }
 }
