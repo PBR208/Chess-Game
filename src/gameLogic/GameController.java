@@ -127,6 +127,7 @@ public class GameController {
             m.getPiece().setFirstMove(false);
 
             b.capture(m);
+            b.moveOnGrid(m.getPiece(), fromCol, fromRow);
             if (m.getCapture() != null) {
                 passedMoves = -1;
             }
@@ -145,6 +146,9 @@ public class GameController {
     }
 
     private void movePawn(Move m) {
+
+        int fromCol = m.getPiece().getCol();
+        int fromRow = m.getPiece().getRow();
 
         // en passent
         int colorIndex = m.getPiece().isWhite() ? 1 : -1;
@@ -174,6 +178,7 @@ public class GameController {
         m.getPiece().setFirstMove(false);
 
         b.capture(m);
+        b.moveOnGrid(m.getPiece(), fromCol, fromRow);
     }
 
     private void promotePawn(Move m) {
@@ -214,6 +219,7 @@ public class GameController {
             rook.setCol(5);
             rook.setxPos(5 * b.getTileSize());
             rook.setFirstMove(false);
+            b.moveOnGrid(rook, 7, row);
         }
 
         if (newCol == 2) { // queenside
@@ -221,6 +227,7 @@ public class GameController {
             rook.setCol(3);
             rook.setxPos(3 * b.getTileSize());
             rook.setFirstMove(false);
+            b.moveOnGrid(rook, 0, row);
         }
     }
 
