@@ -2,10 +2,7 @@ package main;
 
 import gameLogic.GameConfig;
 import gameLogic.PgnManager;
-import gui.Board;
-import gui.EndScreen;
-import gui.MoveLogPanel;
-import gui.PastGamesPanel;
+import gui.*;
 
 import javax.swing.*;
 import java.awt.*;
