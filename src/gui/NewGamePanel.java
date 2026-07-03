@@ -156,4 +156,16 @@ public class NewGamePanel extends JPanel {
 
         add(card, new GridBagConstraints());
     }
+
+    private void applyCustomTime() {
+        try {
+            long mins = Long.parseLong(customMin.getText().trim());
+            long secs = Long.parseLong(customSec.getText().trim());
+            selectedWhiteMs = (mins * 60 + secs) * 1000L;
+            selectedBlackMs = selectedWhiteMs;
+            selectedLabel = "Custom " + mins + "+" + secs;
+        } catch (NumberFormatException ex) {
+            // ignore invalid input, keep previous selection
+        }
+    }
 }
