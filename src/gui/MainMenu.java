@@ -54,4 +54,41 @@ public class MainMenu extends JPanel {
 
         return card;
     }
+
+    private void showNewGamePanel() {
+        JFrame frame = (JFrame) SwingUtilities.getWindowAncestor(this);
+        if (frame == null) return;
+        frame.setContentPane(new NewGamePanel());
+        frame.revalidate();
+        frame.repaint();
+    }
+
+    private JButton menuButton(String text, boolean primary,
+                               java.awt.event.ActionListener action) {
+        JButton b = new JButton(text);
+        b.setFont(new Font("Arial", Font.BOLD, 15));
+        b.setForeground(FG);
+        b.setBackground(primary ? ACCENT : new Color(55, 55, 60));
+        b.setBorderPainted(false);
+        b.setFocusPainted(false);
+        b.setAlignmentX(CENTER_ALIGNMENT);
+        b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
+        b.setPreferredSize(new Dimension(240, 48));
+        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        b.addActionListener(action);
+
+        Color normal = b.getBackground();
+        Color hover = normal.brighter();
+        b.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                b.setBackground(hover);
+            }
+
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                b.setBackground(normal);
+            }
+        });
+
+        return b;
+    }
 }
