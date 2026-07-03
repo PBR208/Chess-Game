@@ -5,6 +5,7 @@ import gameLogic.PgnManager;
 import gui.Board;
 import gui.EndScreen;
 import gui.MoveLogPanel;
+import gui.PastGamesPanel;
 
 import javax.swing.*;
 import java.awt.*;
@@ -13,7 +14,7 @@ public class Main {
 
     private static JFrame frame;
 
-    public static void main(String[] args) {
+    static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             frame = new JFrame("Chess");
             frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -64,6 +65,14 @@ public class Main {
             wrapper.add(gameContainer, new GridBagConstraints());
 
             frame.setContentPane(wrapper);
+            frame.revalidate();
+            frame.repaint();
+        });
+    }
+
+    public static void showPastGames() {
+        SwingUtilities.invokeLater(() -> {
+            frame.setContentPane(new PastGamesPanel());
             frame.revalidate();
             frame.repaint();
         });
