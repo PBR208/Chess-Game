@@ -118,4 +118,34 @@ public class PastGamesPanel extends JPanel {
 
         add(centerWrapper, BorderLayout.CENTER);
     }
+
+    private void showRecord(GameRecord record, JPanel replayHolder) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(record.whiteName).append(" vs ").append(record.blackName)
+                .append("   ").append(record.result)
+                .append("   ").append(record.date)
+                .append("   ").append(record.timeControl)
+                .append("\n\n");
+
+        List<String> moves = record.moves;
+        for (int i = 0; i < moves.size(); i++) {
+            if (i % 2 == 0) sb.append(i / 2 + 1).append(". ");
+            sb.append(moves.get(i)).append("  ");
+            if (i % 2 != 0) sb.append("\n");
+        }
+        moveLogArea.setText(sb.toString());
+        moveLogArea.setCaretPosition(0);
+
+        replayHolder.removeAll();
+        if (!record.fenHistory.isEmpty()) {
+            replayHolder.add(new ReplayPanel(record.fenHistory), BorderLayout.CENTER);
+        } else {
+            JLabel noReplay = new JLabel("No position data for this game", SwingConstants.CENTER);
+            noReplay.setForeground(new Color(120, 120, 120));
+            replayHolder.add(noReplay, BorderLayout.CENTER);
+        }
+        replayHolder.revalidate();
+        replayHolder.repaint();
+    }
+
 }
