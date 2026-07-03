@@ -47,6 +47,12 @@ public class GameController {
         if (moveLogPanel != null) moveLogPanel.clear();
     }
 
+    public void flagFall(boolean isWhiteExpired) {
+        String result = isWhiteExpired ? "0-1" : "1-0";
+        String winner = isWhiteExpired ? config.blackName : config.whiteName;
+        endGame(result, winner + " wins on time!");
+    }
+
     private void checkGameEnd(Move m) {
         boolean nextPlayer = !m.getPiece().isWhite();
         JFrame parent = (JFrame) SwingUtilities.getWindowAncestor(b);
