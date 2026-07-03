@@ -182,12 +182,7 @@ public class Board extends JPanel {
     }
 
     private void onTimeExpired(boolean isWhiteExpired) {
-        stopClocks();
-        String winner = isWhiteExpired ? "Black wins on time!" : "White wins on time!";
-        JFrame parent = (JFrame) SwingUtilities.getWindowAncestor(this);
-        EndScreen screen = new EndScreen(parent, winner, tileSize);
-        screen.setVisible(true);
-        gc.restartGame();
+        gc.flagFall(isWhiteExpired);
     }
 
     // GETTER
