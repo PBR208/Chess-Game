@@ -168,4 +168,29 @@ public class NewGamePanel extends JPanel {
             // ignore invalid input, keep previous selection
         }
     }
+
+    private JLabel sectionLabel(String text) {
+        JLabel l = new JLabel(text);
+        l.setForeground(new Color(160, 160, 170));
+        l.setFont(new Font("Arial", Font.BOLD, 12));
+        l.setAlignmentX(LEFT_ALIGNMENT);
+        return l;
+    }
+
+    private JLabel fieldLabel(String text) {
+        JLabel l = new JLabel(text);
+        l.setForeground(new Color(160, 160, 170));
+        l.setFont(new Font("Arial", Font.PLAIN, 12));
+        return l;
+    }
+
+    private void styleField(JTextField f) {
+        f.setBackground(new Color(50, 50, 55));
+        f.setForeground(FG);
+        f.setCaretColor(FG);
+        f.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(70, 70, 75)),
+                new EmptyBorder(4, 8, 4, 8)));
+        f.setFont(new Font("Arial", Font.PLAIN, 13));
+    }
 }
