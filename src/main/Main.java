@@ -17,7 +17,15 @@ public class Main {
             frame.setLocationRelativeTo(null);
             frame.setVisible(true);
 
-            //showMenu();
+            showMenu();
+        });
+    }
+
+    public static void showMenu() {
+        SwingUtilities.invokeLater(() -> {
+            frame.setContentPane(new MainMenu());
+            frame.revalidate();
+            frame.repaint();
         });
     }
 }
