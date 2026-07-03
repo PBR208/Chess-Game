@@ -8,20 +8,33 @@ import java.util.ArrayList;
 
 public class GameController {
 
+    public interface GameEndListener {
+        void onGameEnd(GameRecord record, String message);
+    }
+
     Board b;
     CheckScanner cs;
     NotationHelper nh = new NotationHelper();
     MoveLogPanel moveLogPanel;
 
-    int passedMoves;
+    private final GameConfig config;
+    private final FenGenerator fg;
+    private GameEndListener gameEndListener;
 
     private boolean turnOfWhite = true;
-    private final ArrayList<String> moveLog = new ArrayList<>();
+    private boolean gameOver = false;
 
-    public GameController(Board b) {
+    private int passedMoves = 0;
+    private final int fullMove = 1;
+
+    private final ArrayList<String> moveLog = new ArrayList<>();
+    private final ArrayList<String> fenHistory = new ArrayList<>();
+
+    public GameController(Board b, GameConfig config) {
         this.b = b;
         this.cs = new CheckScanner(b);
-        passedMoves = 0;
+        this.config = config;
+        this.fg = new FenGenerator(b);
     }
 
     public void restartGame() {
@@ -34,46 +47,39 @@ public class GameController {
         if (moveLogPanel != null) moveLogPanel.clear();
     }
 
-    private void checkGameEnd(Move m) {
+    public void flagFall(boolean isWhiteExpired) {
+        String result = isWhiteExpired ? "0-1" : "1-0";
+        String winner = isWhiteExpired ? config.blackName() : config.whiteName();
+        endGame(result, winner + " wins on time!");
+    }
 
+    private void checkGameEnd(Move m) {
         boolean nextPlayer = !m.getPiece().isWhite();
         JFrame parent = (JFrame) SwingUtilities.getWindowAncestor(b);
 
         if (isCheckmate(nextPlayer)) {
-            String winner = m.getPiece().isWhite() ? "White wins!" : "Black wins!";
-
-            b.stopClocks();
-            EndScreen screen = new EndScreen(parent, winner, b.getTileSize());
-            screen.setVisible(true);
-
-            restartGame();
-
-        } else if (isStalemate(nextPlayer)) {
-            b.stopClocks();
-            EndScreen screen = new EndScreen(parent, "Stalemate - Draw", b.getTileSize());
-            screen.setVisible(true);
-
-            restartGame();
+            String winner = m.getPiece().isWhite() ? config.whiteName() : config.blackName();
+            endGame(m.getPiece().isWhite() ? "1-0" : "0-1", winner + " wins by checkmate!");
+            return;
         }
 
-        // after 75 moves its declared a draw no matter what
+        if (isStalemate(nextPlayer)) {
+            endGame("1/2-1/2", "Stalemate — Draw");
+            return;
+        }
+
         if (passedMoves >= 150) {
-            b.stopClocks();
-            FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, b.getTileSize(), true);
-            fiftyRuleDraw.setVisible(true);
+            FiftyRuleDraw dialog = new FiftyRuleDraw(parent, b.getTileSize(), true);
+            dialog.setVisible(true);
+            endGame("1/2-1/2", "75-move rule — Draw");
 
-            restartGame();
-        } else if (passedMoves >= 100) { // 50 moves by black AND white = 100 - possible draw
-            b.stopClocks();
-            FiftyRuleDraw fiftyRuleDraw = new FiftyRuleDraw(parent, b.getTileSize(), false);
-            fiftyRuleDraw.setVisible(true);
-
-            if (fiftyRuleDraw.getResult() == FiftyRuleDraw.DrawResult.ACCEPTED) {
-                EndScreen screen = new EndScreen(parent, "Draw accepted", b.getTileSize());
-                screen.setVisible(true);
-                restartGame();
-                return;
+        } else if (passedMoves >= 100) {
+            FiftyRuleDraw dialog = new FiftyRuleDraw(parent, b.getTileSize(), false);
+            dialog.setVisible(true);
+            if (dialog.getResult() == FiftyRuleDraw.DrawResult.ACCEPTED) {
+                endGame("1/2-1/2", "Draw agreed");
             }
+            // declined: game continues
         }
     }
 
@@ -127,6 +133,7 @@ public class GameController {
             m.getPiece().setFirstMove(false);
 
             b.capture(m);
+            b.moveOnGrid(m.getPiece(), fromCol, fromRow);
             if (m.getCapture() != null) {
                 passedMoves = -1;
             }
@@ -140,11 +147,17 @@ public class GameController {
 
         passedMoves++;
         turnOfWhite = !turnOfWhite;
+
+        fenHistory.add(fg.generate(turnOfWhite, passedMoves, fullMove));
+
         checkGameEnd(m);
         flip();
     }
 
     private void movePawn(Move m) {
+
+        int fromCol = m.getPiece().getCol();
+        int fromRow = m.getPiece().getRow();
 
         // en passent
         int colorIndex = m.getPiece().isWhite() ? 1 : -1;
@@ -164,6 +177,7 @@ public class GameController {
         colorIndex = m.getPiece().isWhite() ? 0 : 7;
         if (m.getNewRow() == colorIndex) {
             promotePawn(m);
+            return;
         }
 
         m.getPiece().setCol(m.getNewCol());
@@ -174,24 +188,23 @@ public class GameController {
         m.getPiece().setFirstMove(false);
 
         b.capture(m);
+        b.moveOnGrid(m.getPiece(), fromCol, fromRow);
     }
 
     private void promotePawn(Move m) {
 
         JFrame frame = (JFrame) SwingUtilities.getWindowAncestor(b);
-
         PromoteGUI dialog = new PromoteGUI(frame, b.getTileSize());
         PromoteGUI.Choice choice = dialog.showDialog();
-
-        Piece newPiece;
-
         boolean white = m.getPiece().isWhite();
 
-        newPiece = switch (choice) {
+        b.capture(m);
+
+        Piece newPiece = switch (choice) {
+            case QUEEN -> new Queen(b, m.getNewCol(), m.getNewRow(), white);
             case ROOK -> new Rook(b, m.getNewCol(), m.getNewRow(), white);
             case BISHOP -> new Bishop(b, m.getNewCol(), m.getNewRow(), white);
             case KNIGHT -> new Knight(b, m.getNewCol(), m.getNewRow(), white);
-            case QUEEN -> new Queen(b, m.getNewCol(), m.getNewRow(), white);
         };
 
         b.removePiece(m.getPiece());
@@ -214,6 +227,7 @@ public class GameController {
             rook.setCol(5);
             rook.setxPos(5 * b.getTileSize());
             rook.setFirstMove(false);
+            b.moveOnGrid(rook, 7, row);
         }
 
         if (newCol == 2) { // queenside
@@ -221,6 +235,7 @@ public class GameController {
             rook.setCol(3);
             rook.setxPos(3 * b.getTileSize());
             rook.setFirstMove(false);
+            b.moveOnGrid(rook, 0, row);
         }
     }
 
@@ -237,22 +252,12 @@ public class GameController {
     }
 
     public boolean isCheckmate(boolean teamColorWhite) {
-
-        if (!cs.isKingInCheckRN(teamColorWhite)) {
-            return false;
-        }
-
-        return !hasLegalMoves(teamColorWhite);
+        return cs.isKingInCheckRN(teamColorWhite) && !hasLegalMoves(teamColorWhite);
     }
 
 
     public boolean isStalemate(boolean teamColorWhite) {
-
-        if (cs.isKingInCheckRN(teamColorWhite)) {
-            return false;
-        }
-
-        return !hasLegalMoves(teamColorWhite);
+        return !cs.isKingInCheckRN(teamColorWhite) && !hasLegalMoves(teamColorWhite);
     }
 
     private void flip() {
@@ -261,29 +266,23 @@ public class GameController {
     }
 
     private boolean hasLegalMoves(boolean teamColorWhite) {
-
-        for (Piece p : new ArrayList<Piece>(b.getPieces())) {
-
-            // only check players A or B pieces
-            if (p.isWhite() != teamColorWhite) {
-                continue;
-            }
-
-            // try every square on board
-            for (int row = 0; row < 8; row++) {
-
-                for (int col = 0; col < 8; col++) {
-
-                    Move move = new Move(b, p, col, row);
-
-                    if (isValidMove(move)) {
-                        return true;
-                    }
-
-                }
-            }
+        for (Piece p : new ArrayList<>(b.getPieces())) {
+            if (p.isWhite() != teamColorWhite) continue;
+            for (int row = 0; row < 8; row++)
+                for (int col = 0; col < 8; col++)
+                    if (isValidMove(new Move(b, p, col, row))) return true;
         }
         return false;
+    }
+
+    private void endGame(String result, String displayMessage) {
+        gameOver = true;
+        b.stopClocks();
+        GameRecord record = new GameRecord(config, result,
+                new ArrayList<>(moveLog), new ArrayList<>(fenHistory));
+        if (gameEndListener != null) {
+            gameEndListener.onGameEnd(record, displayMessage);
+        }
     }
 
     // GETTER
@@ -298,7 +297,11 @@ public class GameController {
 
     // SETTER
 
-    public void setMoveLogPanel(MoveLogPanel panel) { // ← ADD
+    public void setGameEndListener(GameEndListener l) {
+        this.gameEndListener = l;
+    }
+
+    public void setMoveLogPanel(MoveLogPanel panel) {
         this.moveLogPanel = panel;
     }
 }

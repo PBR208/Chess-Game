@@ -5,11 +5,11 @@ import java.awt.*;
 
 public class ChessClock {
 
-    private static final long START_TIME_MS = 10 * 60 * 1000L; // 10 minutes
+    private final long START_TIME_MS;
     private static final long LOW_TIME_MS = 30 * 1000L;       // red at < 30 s
 
     private final boolean isWhite;
-    private long timeMs = START_TIME_MS;
+    private long timeMs;
     private boolean running = false;
 
     private final Runnable onRepaint;
@@ -29,8 +29,10 @@ public class ChessClock {
         void onExpired(boolean isWhiteExpired);
     }
 
-    public ChessClock(boolean isWhite, Runnable onRepaint, TimeExpiredCallback onExpired) {
+    public ChessClock(boolean isWhite, long startTimeMs, Runnable onRepaint, TimeExpiredCallback onExpired) {
         this.isWhite = isWhite;
+        this.START_TIME_MS = startTimeMs;
+        this.timeMs = startTimeMs;
         this.onRepaint = onRepaint;
         this.onExpired = onExpired;
 
@@ -53,6 +55,12 @@ public class ChessClock {
 
     private void tick() {
         if (!running) return;
+
+        //if 0 = unlimmited time
+        if (START_TIME_MS == 0){
+            onRepaint.run();
+            return;
+        }
 
         timeMs = Math.max(0, timeMs - 100);
         onRepaint.run();

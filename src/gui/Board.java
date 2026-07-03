@@ -1,5 +1,6 @@
 package gui;
 
+import gameLogic.GameConfig;
 import gameLogic.GameController;
 import gameLogic.Input;
 import gameLogic.Move;
@@ -22,18 +23,23 @@ public class Board extends JPanel {
     private ArrayList<Piece> pieces = new ArrayList<>();
     private Piece selectedPiece;
     private int enPassantTile = -1;
-    private HashSet<Integer> legalMoveTiles = new HashSet<>();
+    private final HashSet<Integer> legalMoveTiles = new HashSet<>();
+    private final Piece[][] grid = new Piece[8][8];
 
-    private final GameController gc = new GameController(this);
+    private final GameController gc;
 
-    private final ChessClock whiteClock = new ChessClock(true, this::repaint, this::onTimeExpired);
-    private final ChessClock blackClock = new ChessClock(false, this::repaint, this::onTimeExpired);
+    private final ChessClock whiteClock;
+    private final ChessClock blackClock;
 
     private final Color LIGHT_TILE = new Color(232, 235, 239);
     private final Color DARK_TILE = new Color(125, 135, 150);
     private final Color HINT_COLOR = new Color(81, 168, 0, 200);
 
-    public Board() {
+    public Board(GameConfig config) {
+        this.gc = new GameController(this, config);
+        this.whiteClock = new ChessClock(true, config.whiteTimeMs(), this::repaint, this::onTimeExpired);
+        this.blackClock = new ChessClock(false, config.blackTimeMs(), this::repaint, this::onTimeExpired);
+
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
 
         Input input = new Input(this, gc);
@@ -41,6 +47,10 @@ public class Board extends JPanel {
         this.addMouseMotionListener(input);
 
         pieces = addPieces();
+        for (Piece p : pieces) {
+            grid[p.getRow()][p.getCol()] = p;
+        }
+
         whiteClock.start();
     }
 
@@ -172,23 +182,13 @@ public class Board extends JPanel {
     }
 
     private void onTimeExpired(boolean isWhiteExpired) {
-        stopClocks();
-        String winner = isWhiteExpired ? "Black wins on time!" : "White wins on time!";
-        JFrame parent = (JFrame) SwingUtilities.getWindowAncestor(this);
-        EndScreen screen = new EndScreen(parent, winner, tileSize);
-        screen.setVisible(true);
-        gc.restartGame();
+        gc.flagFall(isWhiteExpired);
     }
 
     // GETTER
 
     public Piece getPiece(int col, int row) {
-        for (Piece p : pieces) {
-            if (p.getCol() == col && p.getRow() == row) {
-                return p;
-            }
-        }
-        return null;
+        return grid[row][col];  // O(1), no loop
     }
 
     public int getTileSize() {
@@ -234,10 +234,16 @@ public class Board extends JPanel {
 
     public void removePiece(Piece p) {
         pieces.remove(p);
+        grid[p.getRow()][p.getCol()] = null;
     }
 
     public void setPieces(ArrayList<Piece> pieces) {
         this.pieces = pieces;
+
+        for (Piece[] row : grid) java.util.Arrays.fill(row, null);
+        for (Piece p : pieces) {
+            grid[p.getRow()][p.getCol()] = p;
+        }
     }
 
     public void setEnPassantTile(int enPassantTile) {
@@ -246,11 +252,22 @@ public class Board extends JPanel {
 
     public void addPiece(Piece p) {
         pieces.add(p);
+        grid[p.getRow()][p.getCol()] = p;
     }
 
     // HELPER
 
     public void capture(Move m) {
-        pieces.remove(m.getCapture());
+        Piece cap = m.getCapture();
+        if (cap != null) {
+            pieces.remove(cap);
+            grid[cap.getRow()][cap.getCol()] = null;  // clear the grid cell
+        }
+    }
+
+
+    public void moveOnGrid(Piece p, int fromCol, int fromRow) {
+        grid[fromRow][fromCol] = null;           // vacate old cell
+        grid[p.getRow()][p.getCol()] = p;        // occupy new cell
     }
 }
