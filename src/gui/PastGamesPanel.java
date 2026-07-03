@@ -148,4 +148,14 @@ public class PastGamesPanel extends JPanel {
         replayHolder.repaint();
     }
 
+    private JButton styledButton(String text) {
+        JButton b = new JButton(text);
+        b.setFont(new Font("Arial", Font.PLAIN, 13));
+        b.setForeground(FG);
+        b.setBackground(new Color(60, 60, 65));
+        b.setBorderPainted(false);
+        b.setFocusPainted(false);
+        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        return b;
+    }
 }
