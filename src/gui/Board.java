@@ -1,5 +1,6 @@
 package gui;
 
+import gameLogic.GameConfig;
 import gameLogic.GameController;
 import gameLogic.Input;
 import gameLogic.Move;
@@ -25,16 +26,20 @@ public class Board extends JPanel {
     private HashSet<Integer> legalMoveTiles = new HashSet<>();
     private final Piece[][] grid = new Piece[8][8];
 
-    private final GameController gc = new GameController(this);
+    private final GameController gc;
 
-    private final ChessClock whiteClock = new ChessClock(true, this::repaint, this::onTimeExpired);
-    private final ChessClock blackClock = new ChessClock(false, this::repaint, this::onTimeExpired);
+    private final ChessClock whiteClock;
+    private final ChessClock blackClock;
 
     private final Color LIGHT_TILE = new Color(232, 235, 239);
     private final Color DARK_TILE = new Color(125, 135, 150);
     private final Color HINT_COLOR = new Color(81, 168, 0, 200);
 
-    public Board() {
+    public Board(GameConfig config) {
+        this.gc = new GameController(this);
+        this.whiteClock = new ChessClock(true, config.whiteTimeMs, this::repaint, this::onTimeExpired);
+        this.blackClock = new ChessClock(false, config.blackTimeMs, this::repaint, this::onTimeExpired);
+
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
 
         Input input = new Input(this, gc);
