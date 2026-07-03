@@ -36,7 +36,7 @@ public class Board extends JPanel {
     private final Color HINT_COLOR = new Color(81, 168, 0, 200);
 
     public Board(GameConfig config) {
-        this.gc = new GameController(this);
+        this.gc = new GameController(this, config);
         this.whiteClock = new ChessClock(true, config.whiteTimeMs, this::repaint, this::onTimeExpired);
         this.blackClock = new ChessClock(false, config.blackTimeMs, this::repaint, this::onTimeExpired);
 
