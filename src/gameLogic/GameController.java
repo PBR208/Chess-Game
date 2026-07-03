@@ -49,7 +49,7 @@ public class GameController {
 
     public void flagFall(boolean isWhiteExpired) {
         String result = isWhiteExpired ? "0-1" : "1-0";
-        String winner = isWhiteExpired ? config.blackName : config.whiteName;
+        String winner = isWhiteExpired ? config.blackName() : config.whiteName();
         endGame(result, winner + " wins on time!");
     }
 
@@ -58,7 +58,7 @@ public class GameController {
         JFrame parent = (JFrame) SwingUtilities.getWindowAncestor(b);
 
         if (isCheckmate(nextPlayer)) {
-            String winner = m.getPiece().isWhite() ? config.whiteName : config.blackName;
+            String winner = m.getPiece().isWhite() ? config.whiteName() : config.blackName();
             endGame(m.getPiece().isWhite() ? "1-0" : "0-1", winner + " wins by checkmate!");
             return;
         }

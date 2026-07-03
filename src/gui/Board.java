@@ -23,7 +23,7 @@ public class Board extends JPanel {
     private ArrayList<Piece> pieces = new ArrayList<>();
     private Piece selectedPiece;
     private int enPassantTile = -1;
-    private HashSet<Integer> legalMoveTiles = new HashSet<>();
+    private final HashSet<Integer> legalMoveTiles = new HashSet<>();
     private final Piece[][] grid = new Piece[8][8];
 
     private final GameController gc;
@@ -37,8 +37,8 @@ public class Board extends JPanel {
 
     public Board(GameConfig config) {
         this.gc = new GameController(this, config);
-        this.whiteClock = new ChessClock(true, config.whiteTimeMs, this::repaint, this::onTimeExpired);
-        this.blackClock = new ChessClock(false, config.blackTimeMs, this::repaint, this::onTimeExpired);
+        this.whiteClock = new ChessClock(true, config.whiteTimeMs(), this::repaint, this::onTimeExpired);
+        this.blackClock = new ChessClock(false, config.blackTimeMs(), this::repaint, this::onTimeExpired);
 
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
 

@@ -1,12 +1,10 @@
 package gameLogic;
 
-public class GameConfig {
-
-    public final String whiteName;
-    public final String blackName;
-    public final long whiteTimeMs;   // 0 = unlimited
-    public final long blackTimeMs;
-    public final String timeLabel;   // e.g. "Blitz 5+0" — shown in saved PGN
+/**
+ * @param whiteTimeMs 0 = unlimited
+ * @param timeLabel   e.g. "Blitz 5+0" — shown in saved PGN
+ */
+public record GameConfig(String whiteName, String blackName, long whiteTimeMs, long blackTimeMs, String timeLabel) {
 
     public GameConfig(String whiteName, String blackName,
                       long whiteTimeMs, long blackTimeMs, String timeLabel) {

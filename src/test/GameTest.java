@@ -242,7 +242,7 @@ public class GameTest {
 
     // ── Entry point ───────────────────────────────────────────────────────
 
-    public static void main(String[] args) throws Exception {
+    static void main(String[] args) throws Exception {
         if (GraphicsEnvironment.isHeadless()) {
             System.out.println("No display available — skipping all GUI tests.");
             return;
@@ -261,30 +261,30 @@ public class GameTest {
 
         test("GameConfig · stores all fields as given", () -> {
             GameConfig cfg = new GameConfig("Alice", "Bob", 300_000, 300_000, "Blitz 5+0");
-            checkEqual("Alice", cfg.whiteName, "whiteName");
-            checkEqual("Bob", cfg.blackName, "blackName");
-            checkEqual(300_000L, cfg.whiteTimeMs, "whiteTimeMs");
-            checkEqual(300_000L, cfg.blackTimeMs, "blackTimeMs");
-            checkEqual("Blitz 5+0", cfg.timeLabel, "timeLabel");
+            checkEqual("Alice", cfg.whiteName(), "whiteName");
+            checkEqual("Bob", cfg.blackName(), "blackName");
+            checkEqual(300_000L, cfg.whiteTimeMs(), "whiteTimeMs");
+            checkEqual(300_000L, cfg.blackTimeMs(), "blackTimeMs");
+            checkEqual("Blitz 5+0", cfg.timeLabel(), "timeLabel");
         });
 
         test("GameConfig · blank names default to White/Black", () -> {
             GameConfig cfg = new GameConfig("  ", "", 0, 0, "Unlimited");
-            checkEqual("White", cfg.whiteName, "whiteName default");
-            checkEqual("Black", cfg.blackName, "blackName default");
+            checkEqual("White", cfg.whiteName(), "whiteName default");
+            checkEqual("Black", cfg.blackName(), "blackName default");
         });
 
         test("GameConfig · names are trimmed", () -> {
             GameConfig cfg = new GameConfig("  Alice  ", " Bob ", 0, 0, "Unlimited");
-            checkEqual("Alice", cfg.whiteName, "trimmed whiteName");
-            checkEqual("Bob", cfg.blackName, "trimmed blackName");
+            checkEqual("Alice", cfg.whiteName(), "trimmed whiteName");
+            checkEqual("Bob", cfg.blackName(), "trimmed blackName");
         });
 
         test("GameConfig · unlimited() factory has zero time", () -> {
             GameConfig cfg = GameConfig.unlimited();
-            checkEqual(0L, cfg.whiteTimeMs, "whiteTimeMs");
-            checkEqual(0L, cfg.blackTimeMs, "blackTimeMs");
-            checkEqual("Unlimited", cfg.timeLabel, "timeLabel");
+            checkEqual(0L, cfg.whiteTimeMs(), "whiteTimeMs");
+            checkEqual(0L, cfg.blackTimeMs(), "blackTimeMs");
+            checkEqual("Unlimited", cfg.timeLabel(), "timeLabel");
         });
 
         // ═════════════════════════════════════════════════════════════════

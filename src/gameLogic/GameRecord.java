@@ -16,11 +16,11 @@ public class GameRecord {
     // Used when game ends
     public GameRecord(GameConfig config, String result,
                       List<String> moves, List<String> fenHistory) {
-        this.whiteName = config.whiteName;
-        this.blackName = config.blackName;
+        this.whiteName = config.whiteName();
+        this.blackName = config.blackName();
         this.result = result;
         this.date = LocalDate.now().toString().replace("-", ".");
-        this.timeControl = config.timeLabel;
+        this.timeControl = config.timeLabel();
         this.moves = List.copyOf(moves);
         this.fenHistory = List.copyOf(fenHistory);
     }
