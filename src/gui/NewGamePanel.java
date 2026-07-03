@@ -193,4 +193,16 @@ public class NewGamePanel extends JPanel {
                 new EmptyBorder(4, 8, 4, 8)));
         f.setFont(new Font("Arial", Font.PLAIN, 13));
     }
+
+    private JButton actionButton(String text, boolean primary) {
+        JButton b = new JButton(text);
+        b.setFont(new Font("Arial", Font.BOLD, 14));
+        b.setForeground(FG);
+        b.setBackground(primary ? ACCENT : new Color(60, 60, 65));
+        b.setBorderPainted(false);
+        b.setFocusPainted(false);
+        b.setPreferredSize(new Dimension(0, 44));
+        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        return b;
+    }
 }
