@@ -85,6 +85,14 @@ public class Piece {
         return yPos;
     }
 
+    public static BufferedImage getSpritesheet() {
+        return img;
+    }
+
+    public static int getSpritesheetScale() {
+        return imgScale;
+    }
+
     // SETTER
 
     public void setCol(int col) {
