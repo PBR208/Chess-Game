@@ -6,16 +6,7 @@ import java.awt.image.BufferedImage;
 
 public class Queen extends Piece {
     public Queen(Board b, int col, int row, boolean isWhite) {
-        super(b);
-        this.col = col;
-        this.row = row;
-        this.xPos = col * b.getTileSize();
-        this.yPos = row * b.getTileSize();
-
-        this.isWhite = isWhite;
-        this.type = PieceType.QUEEN;
-
-        this.front = img.getSubimage(imgScale, isWhite ? 0 : imgScale, imgScale, imgScale).getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
+        super(b, col, row, isWhite, PieceType.QUEEN, 1);
     }
 
     public boolean isValidMovement(int col, int row) {

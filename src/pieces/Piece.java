@@ -39,8 +39,16 @@ public class Piece {
     protected Image front;
     protected Board b;
 
-    public Piece(Board b) {
+    protected Piece(Board b, int col, int row, boolean isWhite, PieceType type, int spriteCol) {
         this.b = b;
+        this.col = col;
+        this.row = row;
+        this.xPos = col * b.getTileSize();
+        this.yPos = row * b.getTileSize();
+        this.isWhite = isWhite;
+        this.type = type;
+        this.front = img.getSubimage(spriteCol * imgScale, isWhite ? 0 : imgScale, imgScale, imgScale)
+                .getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }
 
     public boolean isValidMovement(int col, int row) {
