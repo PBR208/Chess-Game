@@ -1,6 +1,7 @@
 package gameLogic;
 
 import pieces.Piece;
+import pieces.PieceType;
 
 public class NotationHelper {
 
@@ -14,7 +15,7 @@ public class NotationHelper {
 
         // Castling
         // A king moving two squares is always a castle.
-        if (p.getType().getDisplayName().equals("King") && Math.abs(m.getNewCol() - fromCol) == 2) {
+        if (p.getType() == PieceType.KING && Math.abs(m.getNewCol() - fromCol) == 2) {
             return m.getNewCol() > fromCol ? "O-O" : "O-O-O";
         }
 
@@ -25,9 +26,9 @@ public class NotationHelper {
         boolean isCapture = m.getCapture() != null;
 
         String pieceChar;
-        if (p.getType().getDisplayName().equals("Pawn")) {
+        if (p.getType() == PieceType.PAWN) {
             pieceChar = isCapture ? file(fromCol) : "";
-        } else if (p.getType().getDisplayName().equals("Knight")) {
+        } else if (p.getType() == PieceType.KNIGHT) {
             pieceChar = "N";
         } else {
             pieceChar = p.getType().getDisplayName().substring(0, 1); // K, Q, R, B
