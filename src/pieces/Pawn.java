@@ -2,8 +2,6 @@ package pieces;
 
 import gui.Board;
 
-import java.awt.image.BufferedImage;
-
 public class Pawn extends Piece {
     public Pawn(Board b, int col, int row, boolean isWhite) {
         super(b, col, row, isWhite, PieceType.PAWN, 5);
@@ -44,7 +42,7 @@ public class Pawn extends Piece {
 
 
             return target != null
-                    && target.getType().getDisplayName().equals("Pawn")
+                    && target.getType() == PieceType.PAWN
                     && target.isWhite() != this.isWhite;
         }
 
