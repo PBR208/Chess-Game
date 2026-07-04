@@ -51,18 +51,6 @@ public class Piece {
                 .getScaledInstance(b.getTileSize(), b.getTileSize(), BufferedImage.SCALE_SMOOTH);
     }
 
-    public boolean isValidMovement(int col, int row) {
-        return true;
-    }
-
-    public boolean isValidCollide(int col, int row) {
-        return false;
-    }
-
-    public void paint(Graphics2D g2d, int x, int y) {
-        g2d.drawImage(front, x, y, null);
-    }
-
     // GETTER
 
     public int getCol() {
@@ -121,5 +109,27 @@ public class Piece {
 
     public void setFirstMove(boolean firstMove) {
         isFirstMove = firstMove;
+    }
+
+    // HELPER
+
+    public void moveTo(int col, int row) {
+        this.col = col;
+        this.row = row;
+        this.xPos = col * b.getTileSize();
+        this.yPos = row * b.getTileSize();
+        this.isFirstMove = false;
+    }
+
+    public boolean isValidMovement(int col, int row) {
+        return true;
+    }
+
+    public boolean isValidCollide(int col, int row) {
+        return false;
+    }
+
+    public void paint(Graphics2D g2d, int x, int y) {
+        g2d.drawImage(front, x, y, null);
     }
 }
