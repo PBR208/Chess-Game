@@ -125,12 +125,7 @@ public class GameController {
             movePawn(m);
             passedMoves = -1;
         } else {
-            m.getPiece().setCol(m.getNewCol());
-            m.getPiece().setRow(m.getNewRow());
-            m.getPiece().setxPos(m.getNewCol() * b.getTileSize());
-            m.getPiece().setyPos(m.getNewRow() * b.getTileSize());
-
-            m.getPiece().setFirstMove(false);
+            m.getPiece().moveTo(m.getNewCol(), m.getNewRow());
 
             b.capture(m);
             b.moveOnGrid(m.getPiece(), fromCol, fromRow);
@@ -180,12 +175,7 @@ public class GameController {
             return;
         }
 
-        m.getPiece().setCol(m.getNewCol());
-        m.getPiece().setRow(m.getNewRow());
-        m.getPiece().setxPos(m.getNewCol() * b.getTileSize());
-        m.getPiece().setyPos(m.getNewRow() * b.getTileSize());
-
-        m.getPiece().setFirstMove(false);
+        m.getPiece().moveTo(m.getNewCol(), m.getNewRow());
 
         b.capture(m);
         b.moveOnGrid(m.getPiece(), fromCol, fromRow);
@@ -224,17 +214,13 @@ public class GameController {
 
         if (newCol == 6) { // kingside
             Piece rook = b.getPiece(7, row);
-            rook.setCol(5);
-            rook.setxPos(5 * b.getTileSize());
-            rook.setFirstMove(false);
+            rook.moveTo(5, row);
             b.moveOnGrid(rook, 7, row);
         }
 
         if (newCol == 2) { // queenside
             Piece rook = b.getPiece(0, row);
-            rook.setCol(3);
-            rook.setxPos(3 * b.getTileSize());
-            rook.setFirstMove(false);
+            rook.moveTo(3, row);
             b.moveOnGrid(rook, 0, row);
         }
     }
