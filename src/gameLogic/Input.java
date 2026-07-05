@@ -49,7 +49,7 @@ public class Input extends MouseAdapter {
         int row = b.toLogicalRow(e.getY());
 
         if (b.getSelectedPiece() != null) {
-            Move m = new Move(b, b.getSelectedPiece(), col, row);
+            Move m = new Move(b.getState(), b.getSelectedPiece(), col, row);
 
             if (gc.isValidMove(m)) {
                 gc.makeMove(m);
