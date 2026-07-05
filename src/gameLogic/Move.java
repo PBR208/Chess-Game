@@ -1,7 +1,5 @@
 package gameLogic;
 
-import gui.Board;
-import pieces.Pawn;
 import pieces.Piece;
 
 public class Move {
@@ -10,14 +8,16 @@ public class Move {
     private final int newRow;
 
     private final Piece piece;
-    private final Piece capture;
+    private Piece capture;
     private String promotionChoice;
 
-    public Move(Board b, Piece p, int newCol, int newRow) {
+    public Move(BoardState state, Piece p, int newCol, int newRow) {
+
         this.newCol = newCol;
         this.newRow = newRow;
+
         this.piece = p;
-        this.capture = resolveCapture(b, p, newCol, newRow);
+        this.capture = state.getPiece(newCol, newRow);
     }
 
     public int getNewCol() {
@@ -40,20 +40,11 @@ public class Move {
         return promotionChoice;
     }
 
-    public void setPromotionChoice(String promotionChoice) {
-        this.promotionChoice = promotionChoice;
+    public void setCapture(Piece capture) {
+        this.capture = capture;
     }
 
-    // HELPER
-
-    private static Piece resolveCapture(Board b, Piece p, int newCol, int newRow) {
-        Piece direct = b.getPiece(newCol, newRow);
-        if (direct != null) return direct;
-
-        if (p instanceof Pawn && b.getTileNum(newCol, newRow) == b.getEnPassantTile()) {
-            int colorIndex = p.isWhite() ? 1 : -1;
-            return b.getPiece(newCol, newRow + colorIndex);
-        }
-        return null;
+    public void setPromotionChoice(String promotionChoice) {
+        this.promotionChoice = promotionChoice;
     }
 }
