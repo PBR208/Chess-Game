@@ -1,17 +1,15 @@
 package gameLogic;
 
-import gui.Board;
-import pieces.King;
 import pieces.Piece;
 
 import java.util.List;
 
 public class CheckScanner {
 
-    private final Board b;
+    private final BoardState state;
 
-    public CheckScanner(Board b) {
-        this.b = b;
+    public CheckScanner(BoardState state) {
+        this.state = state;
     }
 
     public boolean isKingLeftInCheck(Move move) {
@@ -27,17 +25,16 @@ public class CheckScanner {
         piece.setRow(move.getNewRow());
 
         if (captured != null) {
-            b.removePiece(captured);
+            state.removePiece(captured);
         }
 
         boolean kingInCheck = isKingInCheckRN(piece.isWhite());
 
-        // undo move
         piece.setCol(oldCol);
         piece.setRow(oldRow);
 
         if (captured != null) {
-            b.addPiece(captured);
+            state.addPiece(captured);
         }
 
         return kingInCheck;
@@ -52,7 +49,7 @@ public class CheckScanner {
         int kingCol = king.getCol();
         int kingRow = king.getRow();
 
-        for (Piece p : b.getPieces()) {
+        for (Piece p : state.getPieces()) {
 
             if (p.isWhite() == isWhite) continue;
 
@@ -65,21 +62,17 @@ public class CheckScanner {
     }
 
     private boolean canPieceAttackSquare(Piece p, int col, int row) {
-
         return p.isValidMovement(col, row) && !p.isValidCollide(col, row);
-
     }
 
     private Piece findKing(boolean isWhite) {
-        List<Piece> pieces = b.getPieces();
+        List<Piece> pieces = state.getPieces();
         for (Piece p : pieces) {
-            if (isWhite == p.isWhite() && p instanceof King) {
+            if (isWhite == p.isWhite() && p.getType().getDisplayName().equals("King")) {
                 return p;
             }
         }
 
         return null;
     }
-
-
 }
