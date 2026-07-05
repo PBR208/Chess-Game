@@ -13,6 +13,7 @@ public class GameController {
     }
 
     Board b;
+    BoardState state;
     CheckScanner cs;
     NotationHelper nh = new NotationHelper();
     MoveLogPanel moveLogPanel;
@@ -32,16 +33,17 @@ public class GameController {
 
     public GameController(Board b, GameConfig config) {
         this.b = b;
-        this.cs = new CheckScanner(b);
+        this.state = b.getState();
+        this.cs = new CheckScanner(state);
         this.config = config;
-        this.fg = new FenGenerator(b);
+        this.fg = new FenGenerator(state);
     }
 
     public void restartGame() {
         b.setPieces(b.addPieces());
         turnOfWhite = true;
         passedMoves = 0;
-        b.setEnPassantTile(-1);
+        state.setEnPassantTile(-1);
         b.resetClocks(); // reset both clocks and start white's
         moveLog.clear();
         if (moveLogPanel != null) moveLogPanel.clear();
@@ -79,7 +81,6 @@ public class GameController {
             if (dialog.getResult() == FiftyRuleDraw.DrawResult.ACCEPTED) {
                 endGame("1/2-1/2", "Draw agreed");
             }
-            // declined: game continues
         }
     }
 
@@ -125,10 +126,15 @@ public class GameController {
             movePawn(m);
             passedMoves = -1;
         } else {
-            m.getPiece().moveTo(m.getNewCol(), m.getNewRow());
+            m.getPiece().setCol(m.getNewCol());
+            m.getPiece().setRow(m.getNewRow());
+            m.getPiece().setxPos(m.getNewCol() * b.getTileSize());
+            m.getPiece().setyPos(m.getNewRow() * b.getTileSize());
 
-            b.capture(m);
-            b.moveOnGrid(m.getPiece(), fromCol, fromRow);
+            m.getPiece().setFirstMove(false);
+
+            state.capture(m);
+            state.moveOnGrid(m.getPiece(), fromCol, fromRow);
             if (m.getCapture() != null) {
                 passedMoves = -1;
             }
@@ -154,16 +160,17 @@ public class GameController {
         int fromCol = m.getPiece().getCol();
         int fromRow = m.getPiece().getRow();
 
-        // en passent
         int colorIndex = m.getPiece().isWhite() ? 1 : -1;
 
-        if (Math.abs(m.getPiece().getRow() - m.getNewRow()) == 2) {
-            b.setEnPassantTile(b.getTileNum(m.getNewCol(), m.getNewRow() + colorIndex));
-        } else {
-            b.setEnPassantTile(-1);
+        if (state.getTileNum(m.getNewCol(), m.getNewRow()) == state.getEnPassantTile()) {
+            m.setCapture(state.getPiece(m.getNewCol(), m.getNewRow() + colorIndex));
         }
 
-        //promotion
+        if (Math.abs(m.getPiece().getRow() - m.getNewRow()) == 2) {
+            state.setEnPassantTile(state.getTileNum(m.getNewCol(), m.getNewRow() + colorIndex));
+        } else {
+            state.setEnPassantTile(-1);
+        }
 
         colorIndex = m.getPiece().isWhite() ? 0 : 7;
         if (m.getNewRow() == colorIndex) {
@@ -171,10 +178,15 @@ public class GameController {
             return;
         }
 
-        m.getPiece().moveTo(m.getNewCol(), m.getNewRow());
+        m.getPiece().setCol(m.getNewCol());
+        m.getPiece().setRow(m.getNewRow());
+        m.getPiece().setxPos(m.getNewCol() * b.getTileSize());
+        m.getPiece().setyPos(m.getNewRow() * b.getTileSize());
 
-        b.capture(m);
-        b.moveOnGrid(m.getPiece(), fromCol, fromRow);
+        m.getPiece().setFirstMove(false);
+
+        state.capture(m);
+        state.moveOnGrid(m.getPiece(), fromCol, fromRow);
     }
 
     private void promotePawn(Move m) {
@@ -184,7 +196,7 @@ public class GameController {
         PromoteGUI.Choice choice = dialog.showDialog();
         boolean white = m.getPiece().isWhite();
 
-        b.capture(m);
+        state.capture(m);
 
         Piece newPiece = switch (choice) {
             case QUEEN -> new Queen(b, m.getNewCol(), m.getNewRow(), white);
@@ -193,8 +205,8 @@ public class GameController {
             case KNIGHT -> new Knight(b, m.getNewCol(), m.getNewRow(), white);
         };
 
-        b.removePiece(m.getPiece());
-        b.addPiece(newPiece);
+        state.removePiece(m.getPiece());
+        state.addPiece(newPiece);
 
         m.setPromotionChoice(switch (choice) {
             case ROOK -> "R";
@@ -208,16 +220,20 @@ public class GameController {
 
         int row = king.getRow();
 
-        if (newCol == 6) { // kingside
-            Piece rook = b.getPiece(7, row);
-            rook.moveTo(5, row);
-            b.moveOnGrid(rook, 7, row);
+        if (newCol == 6) {
+            Piece rook = state.getPiece(7, row);
+            rook.setCol(5);
+            rook.setxPos(5 * b.getTileSize());
+            rook.setFirstMove(false);
+            state.moveOnGrid(rook, 7, row);
         }
 
-        if (newCol == 2) { // queenside
-            Piece rook = b.getPiece(0, row);
-            rook.moveTo(3, row);
-            b.moveOnGrid(rook, 0, row);
+        if (newCol == 2) {
+            Piece rook = state.getPiece(0, row);
+            rook.setCol(3);
+            rook.setxPos(3 * b.getTileSize());
+            rook.setFirstMove(false);
+            state.moveOnGrid(rook, 0, row);
         }
     }
 
@@ -227,7 +243,7 @@ public class GameController {
 
         if (cs.isKingInCheckRN(king.isWhite())) return false;
 
-        Move middle = new Move(b, king, king.getCol() + step, king.getRow());
+        Move middle = new Move(state, king, king.getCol() + step, king.getRow());
         if (cs.isKingLeftInCheck(middle)) return false;
 
         return !cs.isKingLeftInCheck(m);
@@ -236,7 +252,6 @@ public class GameController {
     public boolean isCheckmate(boolean teamColorWhite) {
         return cs.isKingInCheckRN(teamColorWhite) && !hasLegalMoves(teamColorWhite);
     }
-
 
     public boolean isStalemate(boolean teamColorWhite) {
         return !cs.isKingInCheckRN(teamColorWhite) && !hasLegalMoves(teamColorWhite);
@@ -248,11 +263,11 @@ public class GameController {
     }
 
     private boolean hasLegalMoves(boolean teamColorWhite) {
-        for (Piece p : new ArrayList<>(b.getPieces())) {
+        for (Piece p : new ArrayList<>(state.getPieces())) {
             if (p.isWhite() != teamColorWhite) continue;
             for (int row = 0; row < 8; row++)
                 for (int col = 0; col < 8; col++)
-                    if (isValidMove(new Move(b, p, col, row))) return true;
+                    if (isValidMove(new Move(state, p, col, row))) return true;
         }
         return false;
     }
