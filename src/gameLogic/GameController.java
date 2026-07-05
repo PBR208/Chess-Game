@@ -92,7 +92,7 @@ public class GameController {
         if (!isSameTeam(m.getPiece(), m.getCapture())) {
             if (m.getPiece().isValidMovement(m.getNewCol(), m.getNewRow())) {
                 if (!m.getPiece().isValidCollide(m.getNewCol(), m.getNewRow())) {
-                    if (m.getPiece().getType() == PieceType.KING
+                    if (m.getPiece() instanceof King
                             && Math.abs(m.getNewCol() - m.getPiece().getCol()) == 2) {
                         return isValidCastle(m);
                     }
@@ -117,11 +117,11 @@ public class GameController {
         int fromCol = m.getPiece().getCol();
         int fromRow = m.getPiece().getRow();
 
-        if (m.getPiece().getType() == PieceType.KING && Math.abs(m.getNewCol() - m.getPiece().getCol()) == 2) {
+        if (m.getPiece() instanceof King && Math.abs(m.getNewCol() - m.getPiece().getCol()) == 2) {
             castle((King) m.getPiece(), m.getNewCol());
         }
 
-        if (m.getPiece().getType() == PieceType.PAWN) {
+        if (m.getPiece() instanceof Pawn) {
             movePawn(m);
             passedMoves = -1;
         } else {

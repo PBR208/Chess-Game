@@ -41,9 +41,7 @@ public class Pawn extends Piece {
             Piece target = b.getPiece(col, row + colorIndex);
 
 
-            return target != null
-                    && target.getType() == PieceType.PAWN
-                    && target.isWhite() != this.isWhite;
+            return target instanceof Pawn && target.isWhite() != this.isWhite;
         }
 
         return false;

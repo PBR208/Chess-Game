@@ -1,6 +1,7 @@
 package gameLogic;
 
 import gui.Board;
+import pieces.King;
 import pieces.Piece;
 
 import java.util.List;
@@ -72,7 +73,7 @@ public class CheckScanner {
     private Piece findKing(boolean isWhite) {
         List<Piece> pieces = b.getPieces();
         for (Piece p : pieces) {
-            if (isWhite == p.isWhite() && p.getType().getDisplayName().equals("King")) {
+            if (isWhite == p.isWhite() && p instanceof King) {
                 return p;
             }
         }

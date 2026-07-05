@@ -55,7 +55,7 @@ public class King extends Piece {
 
         Piece rook = b.getPiece(rookCol, row);
 
-        if (!(rook.getType() == PieceType.ROOK)) return false;
+        if (!(rook instanceof Rook)) return false;
 
         if (!rook.isFirstMove()) return false;
 
