@@ -10,7 +10,7 @@ public class Move {
     private final int newRow;
 
     private final Piece piece;
-    private Piece capture;
+    private final Piece capture;
     private String promotionChoice;
 
     public Move(Board b, Piece p, int newCol, int newRow) {
