@@ -1,5 +1,6 @@
 package gui;
 
+import gameLogic.BoardState;
 import gameLogic.GameConfig;
 import gameLogic.GameController;
 import gameLogic.Input;
@@ -9,7 +10,6 @@ import pieces.*;
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 
@@ -18,13 +18,11 @@ public class Board extends JPanel {
     private final int tileSize = 85;
     private final int rows = 8;
     private final int cols = 8;
-    private final int clockHeight = tileSize; // each clock panel is one tile tall
+    private final int clockHeight = tileSize;
 
-    private ArrayList<Piece> pieces = new ArrayList<>();
+    private final BoardState state = new BoardState();
     private Piece selectedPiece;
-    private int enPassantTile = -1;
     private final HashSet<Integer> legalMoveTiles = new HashSet<>();
-    private final Piece[][] grid = new Piece[8][8];
 
     private final GameController gc;
 
@@ -46,10 +44,7 @@ public class Board extends JPanel {
         this.addMouseListener(input);
         this.addMouseMotionListener(input);
 
-        pieces = addPieces();
-        for (Piece p : pieces) {
-            grid[p.getRow()][p.getCol()] = p;
-        }
+        state.setPieces(addPieces());
 
         whiteClock.start();
     }
@@ -57,8 +52,6 @@ public class Board extends JPanel {
     public ArrayList<Piece> addPieces() {
 
         ArrayList<Piece> newGame = new ArrayList<>();
-
-        // Black Pieces
 
         newGame.add(new Rook(this, 0, 0, false));
         newGame.add(new Rook(this, 7, 0, false));
@@ -69,8 +62,6 @@ public class Board extends JPanel {
         newGame.add(new Queen(this, 3, 0, false));
         newGame.add(new King(this, 4, 0, false));
 
-        // White Pieces
-
         newGame.add(new Rook(this, 0, 7, true));
         newGame.add(new Rook(this, 7, 7, true));
         newGame.add(new Knight(this, 1, 7, true));
@@ -79,8 +70,6 @@ public class Board extends JPanel {
         newGame.add(new Bishop(this, 5, 7, true));
         newGame.add(new Queen(this, 3, 7, true));
         newGame.add(new King(this, 4, 7, true));
-
-        // Pawns
 
         for (int i = 0; i <= 7; i++) {
             newGame.add(new Pawn(this, i, 1, false));
@@ -125,9 +114,9 @@ public class Board extends JPanel {
             }
         }
 
-        for (Piece p : pieces) {
+        for (Piece p : state.getPieces()) {
             if (p == selectedPiece) {
-                p.paint(g2d, p.getxPos(), p.getyPos()); // follows the mouse cursor
+                p.paint(g2d, p.getxPos(), p.getyPos());
             } else {
                 p.paint(g2d, toVisualX(p.getCol()), toVisualY(p.getRow()));
             }
@@ -161,7 +150,6 @@ public class Board extends JPanel {
         whiteClock.start();
     }
 
-    // logical col/row -> pixel X/Y for drawing
     public int toVisualX(int col) {
         return (gc.isTurnOfWhite() ? col : 7 - col) * tileSize;
     }
@@ -170,7 +158,6 @@ public class Board extends JPanel {
         return clockHeight + (gc.isTurnOfWhite() ? row : 7 - row) * tileSize;
     }
 
-    // pixel X/Y from a mouse click -> logical col/row
     public int toLogicalCol(int x) {
         int c = x / tileSize;
         return gc.isTurnOfWhite() ? c : 7 - c;
@@ -188,7 +175,7 @@ public class Board extends JPanel {
     // GETTER
 
     public Piece getPiece(int col, int row) {
-        return grid[row][col];  // O(1), no loop
+        return state.getPiece(col, row);
     }
 
     public int getTileSize() {
@@ -200,19 +187,23 @@ public class Board extends JPanel {
     }
 
     public int getTileNum(int col, int row) {
-        return row * cols + col;
+        return state.getTileNum(col, row);
     }
 
     public int getEnPassantTile() {
-        return enPassantTile;
+        return state.getEnPassantTile();
     }
 
     public List<Piece> getPieces() {
-        return Collections.unmodifiableList(pieces);
+        return state.getPieces();
     }
 
     public GameController getGameController() {
         return gc;
+    }
+
+    public BoardState getState() {
+        return state;
     }
 
     // SETTER
@@ -224,7 +215,7 @@ public class Board extends JPanel {
         if (selectedPiece != null) {
             for (int r = 0; r < 8; r++) {
                 for (int c = 0; c < 8; c++) {
-                    if (gc.isValidMove(new Move(this, selectedPiece, c, r))) {
+                    if (gc.isValidMove(new Move(state, selectedPiece, c, r))) {
                         legalMoveTiles.add(getTileNum(c, r));
                     }
                 }
@@ -233,41 +224,28 @@ public class Board extends JPanel {
     }
 
     public void removePiece(Piece p) {
-        pieces.remove(p);
-        grid[p.getRow()][p.getCol()] = null;
+        state.removePiece(p);
     }
 
     public void setPieces(ArrayList<Piece> pieces) {
-        this.pieces = pieces;
-
-        for (Piece[] row : grid) java.util.Arrays.fill(row, null);
-        for (Piece p : pieces) {
-            grid[p.getRow()][p.getCol()] = p;
-        }
+        state.setPieces(pieces);
     }
 
     public void setEnPassantTile(int enPassantTile) {
-        this.enPassantTile = enPassantTile;
+        state.setEnPassantTile(enPassantTile);
     }
 
     public void addPiece(Piece p) {
-        pieces.add(p);
-        grid[p.getRow()][p.getCol()] = p;
+        state.addPiece(p);
     }
 
     // HELPER
 
     public void capture(Move m) {
-        Piece cap = m.getCapture();
-        if (cap != null) {
-            pieces.remove(cap);
-            grid[cap.getRow()][cap.getCol()] = null;  // clear the grid cell
-        }
+        state.capture(m);
     }
 
-
     public void moveOnGrid(Piece p, int fromCol, int fromRow) {
-        grid[fromRow][fromCol] = null;           // vacate old cell
-        grid[p.getRow()][p.getCol()] = p;        // occupy new cell
+        state.moveOnGrid(p, fromCol, fromRow);
     }
 }
