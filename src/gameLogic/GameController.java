@@ -157,10 +157,6 @@ public class GameController {
         // en passent
         int colorIndex = m.getPiece().isWhite() ? 1 : -1;
 
-        if (b.getTileNum(m.getNewCol(), m.getNewRow()) == b.getEnPassantTile()) {
-            m.setCapture(b.getPiece(m.getNewCol(), m.getNewRow() + colorIndex));
-        }
-
         if (Math.abs(m.getPiece().getRow() - m.getNewRow()) == 2) {
             b.setEnPassantTile(b.getTileNum(m.getNewCol(), m.getNewRow() + colorIndex));
         } else {
