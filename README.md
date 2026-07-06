@@ -45,7 +45,8 @@ A playable two-player chess game written entirely in Java. The goal was to under
 built from the ground up — from the board model through to a working graphical interface — without relying on any
 external chess logic.
 
-Both players share the same screen. The board flips after each move so the active player always faces their own pieces
+Both players share the same screen. The board flips after each move so the active player always faces their own
+engine.pieces
 from the bottom, mimicking a physical board rotation.
 
 The app now has a proper front end: a main menu leads into a **New Game** setup screen (player names, time-control
@@ -99,7 +100,7 @@ src/
 │   ├── FenLoader.java           # FEN string → piece grid, used by the replay viewer
 │   └── PgnManager.java          # Saves finished games as .pgn files and reloads them
 ├── gui/
-│   ├── Board.java               # JPanel: renders board, clocks, pieces; owns piece list
+│   ├── Board.java               # JPanel: renders board, clocks, engine.pieces; owns piece list
 │   ├── ChessClock.java          # Timer-driven clock with Graphics2D rendering
 │   ├── EndScreen.java           # Result dialog (checkmate / stalemate / time)
 │   ├── FiftyRuleDraw.java       # 50/75-move draw dialog
@@ -109,7 +110,7 @@ src/
 │   ├── NewGamePanel.java        # Player names + time-control presets/custom clock, then starts a game
 │   ├── PastGamesPanel.java      # Split-pane library of saved games (list + move log / replay toggle)
 │   └── ReplayPanel.java         # Mini board that scrubs through a saved game's FEN history
-├── pieces/
+├── engine.pieces/
 │   ├── Piece.java               # Abstract base: position, colour, sprite, move hooks
 │   ├── King.java                # ±1 in any direction + castling
 │   ├── Queen.java               # Rook + Bishop combined
@@ -136,7 +137,7 @@ public boolean isKingLeftInCheck(Move move) {
     piece.setRow(move.getNewRow());
     if (captured != null) b.removePiece(captured);
 
-    // 2. Scan all opponent pieces
+    // 2. Scan all opponent engine.pieces
     boolean inCheck = isKingInCheckRN(piece.isWhite());
 
     // 3. Undo — restore original state
@@ -193,9 +194,9 @@ java -cp out app.Main
 1. Launch the application — you land on the main menu
 2. Choose **New Game**, enter each player's name, and pick a time control (a preset like Blitz 5+0, or a custom
    minutes/seconds duration) — then **Start**
-3. Click one of your pieces to select it — valid moves are highlighted in green
+3. Click one of your engine.pieces to select it — valid moves are highlighted in green
 4. Click a highlighted square to move
-5. The board flips so the other player faces their own pieces from the bottom
+5. The board flips so the other player faces their own engine.pieces from the bottom
 6. The clocks switch automatically; a player who runs out of time loses
 7. The game ends on checkmate, stalemate, time loss, or a 50/75-move draw — the result is saved automatically as a
    PGN file in a `games/` folder next to where you ran the app

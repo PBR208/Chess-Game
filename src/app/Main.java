@@ -1,8 +1,12 @@
 package app;
 
-import gameLogic.GameConfig;
-import gameLogic.PgnManager;
-import gui.*;
+import engine.model.GameConfig;
+import engine.persistence.PgnManager;
+import ui.board.Board;
+import ui.board.EndScreen;
+import ui.board.MoveLogPanel;
+import ui.menu.MainMenu;
+import ui.menu.PastGamesPanel;
 
 import javax.swing.*;
 import java.awt.*;

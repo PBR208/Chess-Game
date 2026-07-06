@@ -1,7 +1,14 @@
 package test;
 
-import gameLogic.*;
-import gui.*;
+import engine.model.GameConfig;
+import engine.model.GameRecord;
+import engine.persistence.FenLoader;
+import engine.persistence.PgnManager;
+import ui.board.*;
+import ui.menu.MainMenu;
+import ui.menu.NewGamePanel;
+import ui.menu.PastGamesPanel;
+import ui.menu.ReplayPanel;
 
 import javax.swing.*;
 import java.awt.*;
