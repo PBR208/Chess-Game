@@ -1,10 +1,11 @@
 package gameLogic;
 
-import gui.*;
+import gui.Board;
+import gui.MoveLogPanel;
 import pieces.*;
 
-import javax.swing.*;
 import java.util.ArrayList;
+import java.util.List;
 
 public class GameController {
 
@@ -15,11 +16,11 @@ public class GameController {
     Board b;
     BoardState state;
     CheckScanner cs;
-    NotationHelper nh = new NotationHelper();
-    MoveLogPanel moveLogPanel;
+    MoveHistory history;
 
     private final GameConfig config;
-    private final FenGenerator fg;
+    private final PromotionChooser promotionChooser;
+    private final DrawOfferResolver drawOfferResolver;
     private GameEndListener gameEndListener;
 
     private boolean turnOfWhite = true;
@@ -28,15 +29,15 @@ public class GameController {
     private int passedMoves = 0;
     private final int fullMove = 1;
 
-    private final ArrayList<String> moveLog = new ArrayList<>();
-    private final ArrayList<String> fenHistory = new ArrayList<>();
-
-    public GameController(Board b, GameConfig config) {
+    public GameController(Board b, GameConfig config,
+                          PromotionChooser promotionChooser, DrawOfferResolver drawOfferResolver) {
         this.b = b;
         this.state = b.getState();
         this.cs = new CheckScanner(state);
         this.config = config;
-        this.fg = new FenGenerator(state);
+        this.promotionChooser = promotionChooser;
+        this.drawOfferResolver = drawOfferResolver;
+        this.history = new MoveHistory(state);
     }
 
     public void restartGame() {
@@ -44,9 +45,8 @@ public class GameController {
         turnOfWhite = true;
         passedMoves = 0;
         state.setEnPassantTile(-1);
-        b.resetClocks(); // reset both clocks and start white's
-        moveLog.clear();
-        if (moveLogPanel != null) moveLogPanel.clear();
+        b.resetClocks();
+        history.clear();
     }
 
     public void flagFall(boolean isWhiteExpired) {
@@ -57,7 +57,6 @@ public class GameController {
 
     private void checkGameEnd(Move m) {
         boolean nextPlayer = !m.getPiece().isWhite();
-        JFrame parent = (JFrame) SwingUtilities.getWindowAncestor(b);
 
         if (isCheckmate(nextPlayer)) {
             String winner = m.getPiece().isWhite() ? config.whiteName() : config.blackName();
@@ -71,14 +70,11 @@ public class GameController {
         }
 
         if (passedMoves >= 150) {
-            FiftyRuleDraw dialog = new FiftyRuleDraw(parent, b.getTileSize(), true);
-            dialog.setVisible(true);
+            drawOfferResolver.notifyForcedDraw();
             endGame("1/2-1/2", "75-move rule — Draw");
 
         } else if (passedMoves >= 100) {
-            FiftyRuleDraw dialog = new FiftyRuleDraw(parent, b.getTileSize(), false);
-            dialog.setVisible(true);
-            if (dialog.getResult() == FiftyRuleDraw.DrawResult.ACCEPTED) {
+            if (drawOfferResolver.offerDraw()) {
                 endGame("1/2-1/2", "Draw agreed");
             }
         }
@@ -140,16 +136,10 @@ public class GameController {
             }
         }
 
-        moveLog.add(nh.toNotation(m, fromCol, fromRow));
-
-        if (moveLogPanel != null) {
-            moveLogPanel.update(moveLog);
-        }
-
         passedMoves++;
         turnOfWhite = !turnOfWhite;
 
-        fenHistory.add(fg.generate(turnOfWhite, passedMoves, fullMove));
+        history.record(m, fromCol, fromRow, turnOfWhite, passedMoves, fullMove);
 
         checkGameEnd(m);
         flip();
@@ -191,10 +181,8 @@ public class GameController {
 
     private void promotePawn(Move m) {
 
-        JFrame frame = (JFrame) SwingUtilities.getWindowAncestor(b);
-        PromoteGUI dialog = new PromoteGUI(frame, b.getTileSize());
-        PromoteGUI.Choice choice = dialog.showDialog();
         boolean white = m.getPiece().isWhite();
+        PieceType choice = promotionChooser.choose(white);
 
         state.capture(m);
 
@@ -203,6 +191,7 @@ public class GameController {
             case ROOK -> new Rook(b, m.getNewCol(), m.getNewRow(), white);
             case BISHOP -> new Bishop(b, m.getNewCol(), m.getNewRow(), white);
             case KNIGHT -> new Knight(b, m.getNewCol(), m.getNewRow(), white);
+            default -> throw new IllegalStateException("Cannot promote to " + choice);
         };
 
         state.removePiece(m.getPiece());
@@ -276,7 +265,7 @@ public class GameController {
         gameOver = true;
         b.stopClocks();
         GameRecord record = new GameRecord(config, result,
-                new ArrayList<>(moveLog), new ArrayList<>(fenHistory));
+                history.getMoveLog(), history.getFenHistory());
         if (gameEndListener != null) {
             gameEndListener.onGameEnd(record, displayMessage);
         }
@@ -288,8 +277,8 @@ public class GameController {
         return turnOfWhite;
     }
 
-    public ArrayList<String> getMoveLog() {
-        return moveLog;
+    public List<String> getMoveLog() {
+        return history.getMoveLog();
     }
 
     // SETTER
@@ -299,6 +288,16 @@ public class GameController {
     }
 
     public void setMoveLogPanel(MoveLogPanel panel) {
-        this.moveLogPanel = panel;
+        history.setListener(panel == null ? null : new MoveHistory.Listener() {
+            @Override
+            public void onUpdate(List<String> moveLog) {
+                panel.update(moveLog);
+            }
+
+            @Override
+            public void onClear() {
+                panel.clear();
+            }
+        });
     }
 }
