@@ -9,11 +9,6 @@ import java.awt.*;
 
 public class NewGamePanel extends JPanel {
 
-    private static final Color BG = new Color(28, 28, 30);
-    private static final Color PANEL_BG = new Color(38, 38, 42);
-    private static final Color FG = Color.WHITE;
-    private static final Color ACCENT = new Color(81, 168, 0);
-
     private static final Object[][] PRESETS = {
             {"Unlimited", "Unlimited", 0L, 0L},
             {"Bullet 1+0", "Bullet 1+0", 60_000L, 60_000L},
@@ -35,17 +30,17 @@ public class NewGamePanel extends JPanel {
     private String selectedLabel = "Rapid 10+0";
 
     public NewGamePanel() {
-        setBackground(BG);
+        setBackground(Theme.BG);
         setLayout(new GridBagLayout());
 
         JPanel card = new JPanel();
-        card.setBackground(PANEL_BG);
+        card.setBackground(Theme.PANEL_BG);
         card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
         card.setBorder(new EmptyBorder(32, 40, 32, 40));
         card.setMaximumSize(new Dimension(520, Integer.MAX_VALUE));
 
         JLabel title = new JLabel("New Game");
-        title.setForeground(FG);
+        title.setForeground(Theme.FG);
         title.setFont(new Font("Arial", Font.BOLD, 26));
         title.setAlignmentX(CENTER_ALIGNMENT);
         card.add(title);
@@ -55,7 +50,7 @@ public class NewGamePanel extends JPanel {
         card.add(Box.createVerticalStrut(10));
 
         JPanel names = new JPanel(new GridLayout(2, 2, 8, 8));
-        names.setBackground(PANEL_BG);
+        names.setBackground(Theme.PANEL_BG);
         names.add(fieldLabel("White"));
         names.add(fieldLabel("Black"));
         styleField(whiteField);
@@ -69,17 +64,12 @@ public class NewGamePanel extends JPanel {
         card.add(Box.createVerticalStrut(10));
 
         JPanel presets = new JPanel(new GridLayout(0, 4, 6, 6));
-        presets.setBackground(PANEL_BG);
+        presets.setBackground(Theme.PANEL_BG);
         ButtonGroup group = new ButtonGroup();
 
         for (Object[] p : PRESETS) {
             JToggleButton btn = new JToggleButton((String) p[0]);
-            btn.setFont(new Font("Arial", Font.PLAIN, 12));
-            btn.setForeground(FG);
-            btn.setBackground(new Color(55, 55, 60));
-            btn.setBorderPainted(false);
-            btn.setFocusPainted(false);
-            btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+            UiComponents.style(btn, new Font("Arial", Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
 
             long wMs = (long) p[2];
             long bMs = (long) p[3];
@@ -89,12 +79,12 @@ public class NewGamePanel extends JPanel {
                 selectedWhiteMs = wMs;
                 selectedBlackMs = bMs;
                 selectedLabel = label;
-                btn.setBackground(ACCENT);
+                btn.setBackground(Theme.ACCENT);
             });
 
             if (label.equals("Rapid 10+0")) {
                 btn.setSelected(true);
-                btn.setBackground(ACCENT);
+                btn.setBackground(Theme.ACCENT);
             }
 
             group.add(btn);
@@ -104,22 +94,17 @@ public class NewGamePanel extends JPanel {
         card.add(Box.createVerticalStrut(10));
 
         JPanel customRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
-        customRow.setBackground(PANEL_BG);
+        customRow.setBackground(Theme.PANEL_BG);
 
         JToggleButton customBtn = new JToggleButton("Custom:");
-        customBtn.setFont(new Font("Arial", Font.PLAIN, 12));
-        customBtn.setForeground(FG);
-        customBtn.setBackground(new Color(55, 55, 60));
-        customBtn.setBorderPainted(false);
-        customBtn.setFocusPainted(false);
-        customBtn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        UiComponents.style(customBtn, new Font("Arial", Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
         group.add(customBtn);
 
         styleField(customMin);
         styleField(customSec);
 
         customBtn.addActionListener(e -> {
-            customBtn.setBackground(ACCENT);
+            customBtn.setBackground(Theme.ACCENT);
             applyCustomTime();
         });
         customMin.addActionListener(e -> applyCustomTime());
@@ -134,7 +119,7 @@ public class NewGamePanel extends JPanel {
         card.add(Box.createVerticalStrut(32));
 
         JPanel buttons = new JPanel(new GridLayout(1, 2, 12, 0));
-        buttons.setBackground(PANEL_BG);
+        buttons.setBackground(Theme.PANEL_BG);
 
         JButton backBtn = actionButton("← Back", false);
         JButton startBtn = actionButton("Start ▶", true);
@@ -186,8 +171,8 @@ public class NewGamePanel extends JPanel {
 
     private void styleField(JTextField f) {
         f.setBackground(new Color(50, 50, 55));
-        f.setForeground(FG);
-        f.setCaretColor(FG);
+        f.setForeground(Theme.FG);
+        f.setCaretColor(Theme.FG);
         f.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(70, 70, 75)),
                 new EmptyBorder(4, 8, 4, 8)));
@@ -195,14 +180,9 @@ public class NewGamePanel extends JPanel {
     }
 
     private JButton actionButton(String text, boolean primary) {
-        JButton b = new JButton(text);
-        b.setFont(new Font("Arial", Font.BOLD, 14));
-        b.setForeground(FG);
-        b.setBackground(primary ? ACCENT : new Color(60, 60, 65));
-        b.setBorderPainted(false);
-        b.setFocusPainted(false);
+        JButton b = UiComponents.button(text, new Font("Arial", Font.BOLD, 14),
+                primary ? Theme.ACCENT : Theme.BUTTON_SECONDARY);
         b.setPreferredSize(new Dimension(0, 44));
-        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         return b;
     }
 }
