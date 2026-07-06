@@ -1,4 +1,4 @@
-package main;
+package app;
 
 import gameLogic.GameConfig;
 import gameLogic.PgnManager;

@@ -178,7 +178,7 @@ javac -d out src/**/*.java
 **Run:**
 
 ```bash
-java -cp out main.Main
+java -cp out app.Main
 ```
 
 **Or open in an IDE:** import the project folder and run `Main.java` directly.

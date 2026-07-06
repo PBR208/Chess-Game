@@ -1,6 +1,6 @@
 package gui;
 
-import main.Main;
+import app.Main;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;

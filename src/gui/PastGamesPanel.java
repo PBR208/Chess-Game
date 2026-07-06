@@ -2,7 +2,7 @@ package gui;
 
 import gameLogic.GameRecord;
 import gameLogic.PgnManager;
-import main.Main;
+import app.Main;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
