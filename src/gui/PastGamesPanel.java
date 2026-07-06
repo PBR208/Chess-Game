@@ -11,10 +11,6 @@ import java.util.List;
 
 public class PastGamesPanel extends JPanel {
 
-    private static final Color BG = new Color(28, 28, 30);
-    private static final Color PANEL_BG = new Color(38, 38, 42);
-    private static final Color FG = Color.WHITE;
-
     private final List<GameRecord> records;
     private final JPanel rightPanel;
     private final CardLayout rightCards;
@@ -24,14 +20,14 @@ public class PastGamesPanel extends JPanel {
         records = PgnManager.loadAll();
 
         setLayout(new BorderLayout());
-        setBackground(BG);
+        setBackground(Theme.BG);
 
         JPanel topBar = new JPanel(new BorderLayout());
-        topBar.setBackground(PANEL_BG);
+        topBar.setBackground(Theme.PANEL_BG);
         topBar.setBorder(new EmptyBorder(12, 16, 12, 16));
 
         JLabel title = new JLabel("Past Games");
-        title.setForeground(FG);
+        title.setForeground(Theme.FG);
         title.setFont(new Font("Arial", Font.BOLD, 20));
 
         JButton backBtn = styledButton("← Back to Menu");
@@ -49,11 +45,11 @@ public class PastGamesPanel extends JPanel {
         }
 
         JList<String> gameList = new JList<>(listModel);
-        gameList.setBackground(PANEL_BG);
-        gameList.setForeground(FG);
+        gameList.setBackground(Theme.PANEL_BG);
+        gameList.setForeground(Theme.FG);
         gameList.setFont(new Font("Arial", Font.PLAIN, 13));
         gameList.setSelectionBackground(new Color(60, 60, 70));
-        gameList.setSelectionForeground(FG);
+        gameList.setSelectionForeground(Theme.FG);
         gameList.setFixedCellHeight(36);
         gameList.setBorder(new EmptyBorder(4, 8, 4, 8));
 
@@ -63,7 +59,7 @@ public class PastGamesPanel extends JPanel {
 
         rightCards = new CardLayout();
         rightPanel = new JPanel(rightCards);
-        rightPanel.setBackground(BG);
+        rightPanel.setBackground(Theme.BG);
 
         JLabel placeholder = new JLabel("Select a game from the list", SwingConstants.CENTER);
         placeholder.setForeground(new Color(120, 120, 120));
@@ -73,22 +69,22 @@ public class PastGamesPanel extends JPanel {
         moveLogArea = new JTextArea();
         moveLogArea.setEditable(false);
         moveLogArea.setFont(new Font("Monospaced", Font.PLAIN, 13));
-        moveLogArea.setBackground(PANEL_BG);
-        moveLogArea.setForeground(FG);
+        moveLogArea.setBackground(Theme.PANEL_BG);
+        moveLogArea.setForeground(Theme.FG);
         moveLogArea.setLineWrap(true);
         moveLogArea.setWrapStyleWord(true);
         moveLogArea.setBorder(new EmptyBorder(12, 12, 12, 12));
         JScrollPane logScroll = new JScrollPane(moveLogArea);
 
         JPanel replayHolder = new JPanel(new BorderLayout());
-        replayHolder.setBackground(BG);
+        replayHolder.setBackground(Theme.BG);
         rightPanel.add(logScroll, "log");
         rightPanel.add(replayHolder, "replay");
 
         rightCards.show(rightPanel, "empty");
 
         JPanel toggleBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
-        toggleBar.setBackground(PANEL_BG);
+        toggleBar.setBackground(Theme.PANEL_BG);
         toggleBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(60, 60, 65)));
 
         JButton showLog = styledButton("Move Log");
@@ -112,7 +108,7 @@ public class PastGamesPanel extends JPanel {
         split.setBorder(null);
 
         JPanel centerWrapper = new JPanel(new BorderLayout());
-        centerWrapper.setBackground(BG);
+        centerWrapper.setBackground(Theme.BG);
         centerWrapper.add(split, BorderLayout.CENTER);
         centerWrapper.add(toggleBar, BorderLayout.SOUTH);
 
@@ -149,13 +145,6 @@ public class PastGamesPanel extends JPanel {
     }
 
     private JButton styledButton(String text) {
-        JButton b = new JButton(text);
-        b.setFont(new Font("Arial", Font.PLAIN, 13));
-        b.setForeground(FG);
-        b.setBackground(new Color(60, 60, 65));
-        b.setBorderPainted(false);
-        b.setFocusPainted(false);
-        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        return b;
+        return UiComponents.button(text, new Font("Arial", Font.PLAIN, 13), Theme.BUTTON_SECONDARY);
     }
 }
