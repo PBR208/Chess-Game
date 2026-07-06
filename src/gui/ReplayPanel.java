@@ -31,9 +31,10 @@ public class ReplayPanel extends JPanel {
         PIECE_COL.put('P', 5);
     }
 
+    // Board-tile colors mirror gui.Board's own palette; out of scope for this
+    // pass since Board isn't one of the four menu-style panels being unified.
     private static final Color LIGHT_TILE = new Color(232, 235, 239);
     private static final Color DARK_TILE = new Color(125, 135, 150);
-    private static final Color BG = new Color(28, 28, 30);
 
     private final int tileSize = 70;
     private final List<String> fens;
@@ -43,7 +44,7 @@ public class ReplayPanel extends JPanel {
 
     public ReplayPanel(List<String> fens) {
         this.fens = fens;
-        setBackground(BG);
+        setBackground(Theme.BG);
         setLayout(new BorderLayout(0, 8));
         setBorder(new EmptyBorder(8, 8, 8, 8));
 
@@ -59,14 +60,14 @@ public class ReplayPanel extends JPanel {
                 return new Dimension(tileSize * 8, tileSize * 8);
             }
         };
-        boardCanvas.setBackground(BG);
+        boardCanvas.setBackground(Theme.BG);
         add(boardCanvas, BorderLayout.CENTER);
 
         JPanel nav = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 4));
-        nav.setBackground(BG);
+        nav.setBackground(Theme.BG);
 
         moveLabel = new JLabel(moveText(), SwingConstants.CENTER);
-        moveLabel.setForeground(Color.WHITE);
+        moveLabel.setForeground(Theme.FG);
         moveLabel.setFont(new Font("Arial", Font.PLAIN, 13));
 
         JButton first = navButton("⏮");
@@ -158,13 +159,7 @@ public class ReplayPanel extends JPanel {
     }
 
     private JButton navButton(String text) {
-        JButton b = new JButton(text);
-        b.setFont(new Font("Arial", Font.BOLD, 16));
-        b.setForeground(Color.WHITE);
-        b.setBackground(new Color(60, 60, 65));
-        b.setBorderPainted(false);
-        b.setFocusPainted(false);
-        b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        JButton b = UiComponents.button(text, new Font("Arial", Font.BOLD, 16), Theme.BUTTON_SECONDARY);
         b.setPreferredSize(new Dimension(44, 32));
         return b;
     }
