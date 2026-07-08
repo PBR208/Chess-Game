@@ -1,14 +1,12 @@
 package test;
 
-import engine.model.GameConfig;
-import engine.model.GameRecord;
-import engine.persistence.FenLoader;
-import engine.persistence.PgnManager;
+import engine.imports.*;
+import engine.model.*;
+import engine.persistence.*;
+import engine.pieces.*;
 import ui.board.*;
-import ui.menu.MainMenu;
-import ui.menu.NewGamePanel;
-import ui.menu.PastGamesPanel;
-import ui.menu.ReplayPanel;
+import ui.menu.*;
+import ui.theme.*;
 
 import javax.swing.*;
 import java.awt.*;
@@ -403,6 +401,359 @@ public class GameTest {
         });
 
         // ═════════════════════════════════════════════════════════════════
+        System.out.println("\n── BoardState ───────────────────────────────────────────────────");
+        // ═════════════════════════════════════════════════════════════════
+        // BoardState holds the position data that used to live directly on
+        // Board (pieces list + grid + en passant tile). None of these tests
+        // need a visible window — only Piece construction needs a Board
+        // reference at all (for tile size / sprite slicing).
+
+        test("BoardState · getPiece reflects the starting position", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    checkNotNull(state.getPiece(4, 7), "white king must be at e1");
+                    check(state.getPiece(4, 7).isWhite(), "piece at e1 must be white");
+                    checkNotNull(state.getPiece(4, 0), "black king must be at e8");
+                    check(!state.getPiece(4, 0).isWhite(), "piece at e8 must be black");
+                    check(state.getPiece(4, 4) == null, "e4 must be empty at game start");
+                }));
+
+        test("BoardState · getPieces returns an unmodifiable view", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    List<Piece> pieces = board.getState().getPieces();
+                    boolean threw = false;
+                    try {
+                        pieces.clear();
+                    } catch (UnsupportedOperationException e) {
+                        threw = true;
+                    }
+                    check(threw, "BoardState.getPieces() must return an unmodifiable list");
+                }));
+
+        test("BoardState · removePiece clears both the list and the grid cell", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    Piece pawn = state.getPiece(0, 6);
+                    state.removePiece(pawn);
+                    check(state.getPiece(0, 6) == null, "grid cell must be cleared after removePiece");
+                    check(!state.getPieces().contains(pawn), "piece list must not contain the removed piece");
+                }));
+
+        test("BoardState · addPiece places a piece into both the list and the grid", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    Piece extraQueen = new Queen(board, 4, 4, true);
+                    state.addPiece(extraQueen);
+                    checkEqual(extraQueen, state.getPiece(4, 4), "grid must reflect the newly added piece");
+                    check(state.getPieces().contains(extraQueen), "piece list must contain the newly added piece");
+                }));
+
+        test("BoardState · moveOnGrid vacates the old square and occupies the new one", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    Piece pawn = state.getPiece(0, 6);
+                    pawn.setRow(4); // pretend it already moved logically to a4
+                    state.moveOnGrid(pawn, 0, 6);
+                    check(state.getPiece(0, 6) == null, "old square must be vacated");
+                    checkEqual(pawn, state.getPiece(0, 4), "new square must hold the piece");
+                }));
+
+        test("BoardState · getTileNum/getEnPassantTile round-trip", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    state.setEnPassantTile(state.getTileNum(3, 2));
+                    checkEqual(state.getTileNum(3, 2), state.getEnPassantTile(), "round trip through getTileNum");
+                }));
+
+        test("BoardState · setPieces replaces the entire position at once", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece loneKing = new King(board, 4, 4, true);
+                    custom.add(loneKing);
+                    state.setPieces(custom);
+
+                    checkEqual(1, state.getPieces().size(), "only the pieces passed to setPieces must remain");
+                    checkEqual(loneKing, state.getPiece(4, 4), "the lone king must be findable at its square");
+                    check(state.getPiece(4, 7) == null, "old positions must be cleared by setPieces");
+                }));
+
+        // ═════════════════════════════════════════════════════════════════
+        System.out.println("\n── Move & CheckScanner ──────────────────────────────────────────");
+        // ═════════════════════════════════════════════════════════════════
+
+        test("Move · capture resolves directly from BoardState when the destination is occupied", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    Piece whitePawn = state.getPiece(4, 6);
+                    Piece blackPawn = state.getPiece(3, 1);
+                    Move m = new Move(state, whitePawn, 3, 1); // hypothetical capture, legality not checked here
+                    checkEqual(blackPawn, m.getCapture(), "Move must resolve capture from BoardState at construction");
+                }));
+
+        test("Move · destination square with no piece has a null capture", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    Piece whitePawn = state.getPiece(4, 6);
+                    Move m = new Move(state, whitePawn, 4, 4);
+                    check(m.getCapture() == null, "empty destination square must mean no capture");
+                }));
+
+        test("CheckScanner · neither king is in check at game start", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    CheckScanner cs = new CheckScanner(board.getState());
+                    check(!cs.isKingInCheckRN(true), "White king must not be in check at game start");
+                    check(!cs.isKingInCheckRN(false), "Black king must not be in check at game start");
+                }));
+
+        test("CheckScanner · detects check from an unobstructed rook", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whiteKing = new King(board, 4, 7, true);
+                    Piece blackRook = new Rook(board, 4, 0, false);
+                    custom.add(whiteKing);
+                    custom.add(blackRook);
+                    state.setPieces(custom);
+
+                    CheckScanner cs = new CheckScanner(state);
+                    check(cs.isKingInCheckRN(true), "White king on an open file facing a rook must be in check");
+                }));
+
+        test("CheckScanner · isKingLeftInCheck rejects a king move into an attacked square", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whiteKing = new King(board, 0, 7, true);  // a1
+                    Piece blackRook = new Rook(board, 3, 7, false); // d1, attacks the whole 1st rank
+                    custom.add(whiteKing);
+                    custom.add(blackRook);
+                    state.setPieces(custom);
+
+                    CheckScanner cs = new CheckScanner(state);
+
+                    Move intoCheck = new Move(state, whiteKing, 1, 7); // Ka1-b1, still on rank 1
+                    check(cs.isKingLeftInCheck(intoCheck), "stepping onto the attacked rank must be flagged");
+
+                    Move awayFromCheck = new Move(state, whiteKing, 0, 6); // Ka1-a2, off the rank
+                    check(!cs.isKingLeftInCheck(awayFromCheck), "stepping off the attacked rank must be safe");
+
+                    // NOTE: isKingLeftInCheck only updates the *moving piece's* col/row
+                    // during its simulate/undo — it does not call moveOnGrid(). That's
+                    // fine for the king's own destination (checked directly above), but
+                    // it means a *third* piece's discovered attack — e.g. a rook sliding
+                    // away and exposing its own king to a pin — is not detected, because
+                    // other pieces' collision scans still see the old piece occupying its
+                    // old grid square. This is a pre-existing characteristic of
+                    // CheckScanner, unrelated to the BoardState extraction, so it isn't
+                    // asserted here as correct behavior — just documented.
+                }));
+
+        // ═════════════════════════════════════════════════════════════════
+        System.out.println("\n── NotationHelper ───────────────────────────────────────────────");
+        // ═════════════════════════════════════════════════════════════════
+
+        test("NotationHelper · simple pawn push has no piece letter or capture marker", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    Move m = new Move(state, state.getPiece(4, 6), 4, 4);
+                    checkEqual("e4", new NotationHelper().toNotation(m, 4, 6), "pawn push e2-e4 must be notated 'e4'");
+                }));
+
+        test("NotationHelper · pawn capture is notated with the origin file", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    Move m = new Move(state, state.getPiece(4, 6), 3, 1); // hypothetical capture on d7
+                    checkEqual("exd7", new NotationHelper().toNotation(m, 4, 6),
+                            "pawn capture must be notated with the origin file, e.g. 'exd7'");
+                }));
+
+        test("NotationHelper · knight move uses 'N' (K is reserved for King)", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    Move m = new Move(state, state.getPiece(1, 7), 2, 5); // Nc3
+                    checkEqual("Nc3", new NotationHelper().toNotation(m, 1, 7), "knight move must be notated with 'N'");
+                }));
+
+        test("NotationHelper · castling is notated O-O / O-O-O", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    Piece king = state.getPiece(4, 7);
+                    NotationHelper nh = new NotationHelper();
+
+                    Move kingside = new Move(state, king, 6, 7);
+                    checkEqual("O-O", nh.toNotation(kingside, 4, 7), "kingside castle notation");
+
+                    Move queenside = new Move(state, king, 2, 7);
+                    checkEqual("O-O-O", nh.toNotation(queenside, 4, 7), "queenside castle notation");
+                }));
+
+        // ═════════════════════════════════════════════════════════════════
+        System.out.println("\n── FenGenerator ─────────────────────────────────────────────────");
+        // ═════════════════════════════════════════════════════════════════
+
+        test("FenGenerator · starting position matches the standard FEN placement field", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    String fen = new FenGenerator(board.getState()).generate(true, 0, 1);
+                    check(fen.startsWith("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"),
+                            "placement field must match the standard starting position, got: " + fen);
+                }));
+
+        test("FenGenerator · active colour field reflects isWhiteTurn", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    FenGenerator fg = new FenGenerator(board.getState());
+                    check(fg.generate(true, 0, 1).contains(" w "), "white to move must produce ' w '");
+                    check(fg.generate(false, 0, 1).contains(" b "), "black to move must produce ' b '");
+                }));
+
+        test("FenGenerator · starting position has all four castling rights", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    String fen = new FenGenerator(board.getState()).generate(true, 0, 1);
+                    checkEqual("KQkq", fen.split(" ")[2], "all four castling rights must be present at game start");
+                }));
+
+        test("FenGenerator · a moved king removes both of that side's castling rights", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+
+                    state.removePiece(state.getPiece(5, 7)); // clear f1 so the king can step there
+                    Move kingStep = new Move(state, state.getPiece(4, 7), 5, 7);
+                    check(gc.isValidMove(kingStep), "Ke1-f1 must be a legal move on an otherwise-untouched board");
+                    gc.makeMove(kingStep);
+
+                    String castling = new FenGenerator(state).generate(false, 0, 1).split(" ")[2];
+                    check(!castling.contains("K") && !castling.contains("Q"),
+                            "White must lose both castling rights once the king has moved, got: " + castling);
+                    check(castling.contains("k") && castling.contains("q"),
+                            "Black's castling rights must be unaffected, got: " + castling);
+                }));
+
+        test("FenGenerator · en passant target square appears after a double pawn push", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+
+                    gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // e2-e4
+
+                    String epField = new FenGenerator(state).generate(false, 0, 1).split(" ")[3];
+                    checkEqual("e3", epField, "en passant target square after e2-e4 must be e3");
+                }));
+
+        // ═════════════════════════════════════════════════════════════════
+        System.out.println("\n── MoveHistory ──────────────────────────────────────────────────");
+        // ═════════════════════════════════════════════════════════════════
+
+        test("MoveHistory · record adds one entry to both moveLog and fenHistory", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    MoveHistory history = new MoveHistory(state);
+                    Move m = new Move(state, state.getPiece(4, 6), 4, 4);
+
+                    history.record(m, 4, 6, false, 1, 1);
+
+                    checkEqual(1, history.getMoveLog().size(), "moveLog must contain exactly one entry");
+                    checkEqual("e4", history.getMoveLog().get(0), "notation must be recorded correctly");
+                    checkEqual(1, history.getFenHistory().size(), "fenHistory must contain exactly one entry");
+                }));
+
+        test("MoveHistory · clear empties both lists", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    MoveHistory history = new MoveHistory(state);
+                    history.record(new Move(state, state.getPiece(4, 6), 4, 4), 4, 6, false, 1, 1);
+                    history.clear();
+                    checkEqual(0, history.getMoveLog().size(), "moveLog must be empty after clear()");
+                    checkEqual(0, history.getFenHistory().size(), "fenHistory must be empty after clear()");
+                }));
+
+        test("MoveHistory · getMoveLog/getFenHistory return unmodifiable views", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    MoveHistory history = new MoveHistory(board.getState());
+                    boolean threwOnMoveLog = false, threwOnFenHistory = false;
+                    try {
+                        history.getMoveLog().add("hack");
+                    } catch (UnsupportedOperationException e) {
+                        threwOnMoveLog = true;
+                    }
+                    try {
+                        history.getFenHistory().add("hack");
+                    } catch (UnsupportedOperationException e) {
+                        threwOnFenHistory = true;
+                    }
+                    check(threwOnMoveLog, "getMoveLog() must not allow external mutation");
+                    check(threwOnFenHistory, "getFenHistory() must not allow external mutation");
+                }));
+
+        test("MoveHistory · listener receives updates on record() and clear()", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    MoveHistory history = new MoveHistory(state);
+
+                    int[] updateCount = {0};
+                    boolean[] clearedFlag = {false};
+                    history.setListener(new MoveHistory.Listener() {
+                        public void onUpdate(List<String> moveLog) {
+                            updateCount[0]++;
+                        }
+
+                        public void onClear() {
+                            clearedFlag[0] = true;
+                        }
+                    });
+
+                    history.record(new Move(state, state.getPiece(4, 6), 4, 4), 4, 6, false, 1, 1);
+                    history.clear();
+
+                    checkEqual(1, updateCount[0], "listener must be notified exactly once per record()");
+                    check(clearedFlag[0], "listener must be notified on clear()");
+                }));
+
+        // ═════════════════════════════════════════════════════════════════
+        System.out.println("\n── PieceType ────────────────────────────────────────────────────");
+        // ═════════════════════════════════════════════════════════════════
+
+        test("PieceType · has exactly six values with correct display names", () -> {
+            checkEqual(6, PieceType.values().length, "there must be exactly six piece types");
+            checkEqual("King", PieceType.KING.getDisplayName(), "King display name");
+            checkEqual("Queen", PieceType.QUEEN.getDisplayName(), "Queen display name");
+            checkEqual("Rook", PieceType.ROOK.getDisplayName(), "Rook display name");
+            checkEqual("Bishop", PieceType.BISHOP.getDisplayName(), "Bishop display name");
+            checkEqual("Knight", PieceType.KNIGHT.getDisplayName(), "Knight display name");
+            checkEqual("Pawn", PieceType.PAWN.getDisplayName(), "Pawn display name");
+        });
+
+        // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── ChessClock ───────────────────────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
 
@@ -661,6 +1012,82 @@ public class GameTest {
         });
 
         // ═════════════════════════════════════════════════════════════════
+        System.out.println("\n── SwingPromotionChooser & SwingDrawOfferResolver ───────────────");
+        // ═════════════════════════════════════════════════════════════════
+        // These wrap PromoteGUI/FiftyRuleDraw and translate their results into
+        // the engine-side PromotionChooser/DrawOfferResolver contract. The
+        // dialog behavior itself is already covered above — these tests only
+        // check the translation.
+
+        test("SwingPromotionChooser · Queen selection maps to PieceType.QUEEN", () -> {
+            scheduleClick("Queen");
+            PieceType[] result = {null};
+            SwingUtilities.invokeAndWait(() -> {
+                JFrame testFrame = new JFrame();
+                Board board = new Board(GameConfig.unlimited());
+                testFrame.setContentPane(board);
+                testFrame.pack();
+                result[0] = new SwingPromotionChooser(board).choose(true);
+                testFrame.dispose();
+            });
+            checkEqual(PieceType.QUEEN, result[0], "clicking Queen must resolve to PieceType.QUEEN");
+        });
+
+        test("SwingPromotionChooser · Knight selection maps to PieceType.KNIGHT", () -> {
+            scheduleClick("Knight");
+            PieceType[] result = {null};
+            SwingUtilities.invokeAndWait(() -> {
+                JFrame testFrame = new JFrame();
+                Board board = new Board(GameConfig.unlimited());
+                testFrame.setContentPane(board);
+                testFrame.pack();
+                result[0] = new SwingPromotionChooser(board).choose(false);
+                testFrame.dispose();
+            });
+            checkEqual(PieceType.KNIGHT, result[0], "clicking Knight must resolve to PieceType.KNIGHT");
+        });
+
+        test("SwingDrawOfferResolver · Claim Draw resolves offerDraw() to true", () -> {
+            scheduleClick("Claim Draw");
+            boolean[] result = {false};
+            SwingUtilities.invokeAndWait(() -> {
+                JFrame testFrame = new JFrame();
+                Board board = new Board(GameConfig.unlimited());
+                testFrame.setContentPane(board);
+                testFrame.pack();
+                result[0] = new SwingDrawOfferResolver(board).offerDraw();
+                testFrame.dispose();
+            });
+            check(result[0], "clicking Claim Draw must resolve offerDraw() to true");
+        });
+
+        test("SwingDrawOfferResolver · Decline resolves offerDraw() to false", () -> {
+            scheduleClick("Decline");
+            boolean[] result = {true};
+            SwingUtilities.invokeAndWait(() -> {
+                JFrame testFrame = new JFrame();
+                Board board = new Board(GameConfig.unlimited());
+                testFrame.setContentPane(board);
+                testFrame.pack();
+                result[0] = new SwingDrawOfferResolver(board).offerDraw();
+                testFrame.dispose();
+            });
+            check(!result[0], "clicking Decline must resolve offerDraw() to false");
+        });
+
+        test("SwingDrawOfferResolver · notifyForcedDraw shows and dismisses the forced-draw dialog", () -> {
+            scheduleClick("Restart");
+            SwingUtilities.invokeAndWait(() -> {
+                JFrame testFrame = new JFrame();
+                Board board = new Board(GameConfig.unlimited());
+                testFrame.setContentPane(board);
+                testFrame.pack();
+                new SwingDrawOfferResolver(board).notifyForcedDraw(); // must not throw
+                testFrame.dispose();
+            });
+        });
+
+        // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── MoveLogPanel ─────────────────────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
 
@@ -816,6 +1243,58 @@ public class GameTest {
                     BufferedImage img = new BufferedImage(600, 600, BufferedImage.TYPE_INT_ARGB);
                     p.setSize(600, 600);
                     p.paint(img.createGraphics());
+                }));
+
+        // ═════════════════════════════════════════════════════════════════
+        System.out.println("\n── Theme & UiComponents ─────────────────────────────────────────");
+        // ═════════════════════════════════════════════════════════════════
+
+        test("Theme · palette constants are all defined and visually distinct", () -> {
+            checkNotNull(Theme.BG, "BG must be defined");
+            checkNotNull(Theme.PANEL_BG, "PANEL_BG must be defined");
+            checkNotNull(Theme.FG, "FG must be defined");
+            checkNotNull(Theme.ACCENT, "ACCENT must be defined");
+            checkNotNull(Theme.MUTED, "MUTED must be defined");
+            checkNotNull(Theme.BUTTON_SECONDARY, "BUTTON_SECONDARY must be defined");
+            check(!Theme.BG.equals(Theme.PANEL_BG), "BG and PANEL_BG must be visually distinct");
+            check(!Theme.ACCENT.equals(Theme.BUTTON_SECONDARY), "ACCENT and BUTTON_SECONDARY must be visually distinct");
+        });
+
+        test("UiComponents · button() applies the shared flat, dark-theme look", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    JButton b = UiComponents.button("Test", new Font("Arial", Font.BOLD, 14), Theme.ACCENT);
+                    checkEqual(Theme.ACCENT, b.getBackground(), "background must match the given color");
+                    checkEqual(Theme.FG, b.getForeground(), "foreground must always be Theme.FG");
+                    check(!b.isBorderPainted(), "border must not be painted");
+                    check(!b.isFocusPainted(), "focus ring must not be painted");
+                    checkEqual(Cursor.HAND_CURSOR, b.getCursor().getType(), "cursor must be the hand cursor");
+                }));
+
+        test("UiComponents · style() applies the same look to a JToggleButton", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    JToggleButton t = new JToggleButton("Preset");
+                    UiComponents.style(t, new Font("Arial", Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
+                    checkEqual(Theme.BUTTON_SECONDARY, t.getBackground(), "background must apply to toggle buttons too");
+                    check(!t.isBorderPainted(), "border must not be painted on a toggle button either");
+                }));
+
+        test("UiComponents · addHoverEffect brightens on enter and restores on exit", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    JButton b = UiComponents.button("Hover", new Font("Arial", Font.BOLD, 14), Theme.BUTTON_SECONDARY);
+                    UiComponents.addHoverEffect(b);
+                    Color original = b.getBackground();
+
+                    // A real MouseEvent is required here — JButton's own look-and-feel
+                    // listener is also registered and will NPE on a null event.
+                    java.awt.event.MouseEvent enter = new java.awt.event.MouseEvent(
+                            b, java.awt.event.MouseEvent.MOUSE_ENTERED, System.currentTimeMillis(), 0, 0, 0, 0, false);
+                    for (java.awt.event.MouseListener l : b.getMouseListeners()) l.mouseEntered(enter);
+                    check(!original.equals(b.getBackground()), "background must change on hover");
+
+                    java.awt.event.MouseEvent exit = new java.awt.event.MouseEvent(
+                            b, java.awt.event.MouseEvent.MOUSE_EXITED, System.currentTimeMillis(), 0, 0, 0, 0, false);
+                    for (java.awt.event.MouseListener l : b.getMouseListeners()) l.mouseExited(exit);
+                    checkEqual(original, b.getBackground(), "background must be restored after the mouse exits");
                 }));
 
         // ═════════════════════════════════════════════════════════════════
@@ -1051,6 +1530,297 @@ public class GameTest {
                     checkEqual(1, callCount[0], "listener must fire exactly once");
                 }));
 
+        // ═════════════════════════════════════════════════════════════════
+        System.out.println("\n── GameController · rules engine ────────────────────────────────");
+        // ═════════════════════════════════════════════════════════════════
+        // GameController now depends on PromotionChooser/DrawOfferResolver
+        // interfaces instead of creating PromoteGUI/FiftyRuleDraw directly, so
+        // these scenarios are driven with fake, headless implementations —
+        // no dialog-clicking Timer tricks needed for any of the tests below.
+        // Each test builds its own GameController sharing the test Board's
+        // BoardState (rather than using board.getGameController(), which is
+        // still wired to the real Swing dialogs) so the board's rendering
+        // plumbing (repaint/clocks/piece construction) stays real while the
+        // two dialog seams are swapped for test doubles.
+
+        test("GameController · makeMove executes a simple pawn push", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+
+                    Piece pawn = state.getPiece(4, 6); // e2
+                    Move m = new Move(state, pawn, 4, 4); // e2-e4
+                    check(gc.isValidMove(m), "e2-e4 must be a legal opening move");
+                    gc.makeMove(m);
+
+                    checkEqual(4, pawn.getCol(), "pawn column after move");
+                    checkEqual(4, pawn.getRow(), "pawn row after move");
+                    check(!gc.isTurnOfWhite(), "turn must pass to Black after White's move");
+                    checkEqual(1, gc.getMoveLog().size(), "move log must record one move");
+                    checkEqual("e4", gc.getMoveLog().get(0), "move must be recorded in algebraic notation");
+                }));
+
+        test("GameController · makeMove captures an enemy piece", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+
+                    gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // e2-e4
+                    gc.makeMove(new Move(state, state.getPiece(3, 1), 3, 3)); // d7-d5
+
+                    Piece blackPawn = state.getPiece(3, 3);
+                    Move capture = new Move(state, state.getPiece(4, 4), 3, 3); // exd5
+                    check(gc.isValidMove(capture), "exd5 must be a legal capture");
+                    checkEqual(blackPawn, capture.getCapture(), "capture must target the black pawn on d5");
+
+                    gc.makeMove(capture);
+                    check(!state.getPieces().contains(blackPawn), "captured pawn must be removed from the board");
+                }));
+
+        test("GameController · kingside castling moves both king and rook", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+
+                    state.removePiece(state.getPiece(5, 7)); // clear f1 (bishop)
+                    state.removePiece(state.getPiece(6, 7)); // clear g1 (knight)
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    Piece king = state.getPiece(4, 7);
+                    Piece rook = state.getPiece(7, 7);
+
+                    Move castleMove = new Move(state, king, 6, 7);
+                    check(gc.isValidMove(castleMove), "kingside castling must be legal with a clear path and no checks");
+                    gc.makeMove(castleMove);
+
+                    checkEqual(6, king.getCol(), "king must land on g1");
+                    checkEqual(5, rook.getCol(), "rook must land on f1");
+                    checkEqual("O-O", gc.getMoveLog().get(0), "castling must be recorded as O-O");
+                }));
+
+        test("GameController · en passant capture removes the passed pawn", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+
+                    gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // e2-e4
+                    gc.makeMove(new Move(state, state.getPiece(0, 1), 0, 2)); // a7-a6 (waiting move)
+                    gc.makeMove(new Move(state, state.getPiece(4, 4), 4, 3)); // e4-e5
+                    Piece blackPawn = state.getPiece(3, 1);
+                    gc.makeMove(new Move(state, blackPawn, 3, 3)); // d7-d5, lands beside White's e5 pawn
+
+                    Piece whitePawn = state.getPiece(4, 3);
+                    Move enPassant = new Move(state, whitePawn, 3, 2); // exd6 en passant
+
+                    // At construction, the destination square (d6) is empty, so Move
+                    // resolves capture=null here — en passant capture is only attached
+                    // once GameController.movePawn() commits the move. This reflects
+                    // the current (unmodified) two-step capture resolution, not a bug
+                    // introduced by this test.
+                    check(enPassant.getCapture() == null,
+                            "before commit, a Move to an empty square reports no capture yet");
+
+                    check(gc.isValidMove(enPassant), "en passant capture must be legal immediately after the double step");
+                    gc.makeMove(enPassant);
+
+                    checkEqual(blackPawn, enPassant.getCapture(),
+                            "after commit, the en-passant capture must be attached to the Move");
+                    check(!state.getPieces().contains(blackPawn), "the passed pawn must be captured");
+                    check(state.getPiece(3, 3) == null, "the passed pawn's original square must be empty");
+                }));
+
+        test("GameController · pawn promotion asks the PromotionChooser and replaces the piece", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whiteKing = new King(board, 4, 7, true);
+                    Piece blackKing = new King(board, 4, 0, false);
+                    Piece whitePawn = new Pawn(board, 0, 1, true); // one step from promoting on a8
+                    custom.add(whiteKing);
+                    custom.add(blackKing);
+                    custom.add(whitePawn);
+                    state.setPieces(custom);
+
+                    boolean[] askedWhite = {false};
+                    GameController gc = new GameController(board, cfg,
+                            white -> {
+                                askedWhite[0] = white;
+                                return PieceType.KNIGHT;
+                            }, noOpDrawResolver());
+
+                    Move promo = new Move(state, whitePawn, 0, 0);
+                    check(gc.isValidMove(promo), "the promoting push must be a legal move");
+                    gc.makeMove(promo);
+
+                    check(askedWhite[0], "PromotionChooser must be asked with isWhite = true");
+                    Piece onA8 = state.getPiece(0, 0);
+                    checkNotNull(onA8, "a piece must occupy a8 after promotion");
+                    check(onA8 instanceof Knight, "the promoted piece must be a Knight, matching the chooser's answer");
+                    check(!state.getPieces().contains(whitePawn), "the original pawn must be removed from the board");
+                    checkEqual("a8=N", gc.getMoveLog().get(0), "promotion must be recorded with the '=N' suffix");
+                }));
+
+        test("GameController · detects checkmate and fires the end-of-game listener", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+
+                    // Ladder-mate final move: Rb1-b8#. Rook A already covers rank 7,
+                    // Rook B slides onto rank 8 and the Black king has no escape square.
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whiteKing = new King(board, 0, 7, true);   // a1
+                    Piece blackKing = new King(board, 7, 0, false); // h8
+                    Piece rookA = new Rook(board, 0, 1, true);      // a7
+                    Piece rookB = new Rook(board, 1, 7, true);      // b1
+                    custom.add(whiteKing);
+                    custom.add(blackKing);
+                    custom.add(rookA);
+                    custom.add(rookB);
+                    state.setPieces(custom);
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    String[] result = {null};
+                    String[] message = {null};
+                    gc.setGameEndListener((record, msg) -> {
+                        result[0] = record.result;
+                        message[0] = msg;
+                    });
+
+                    Move mate = new Move(state, rookB, 1, 0); // Rb1-b8#
+                    check(gc.isValidMove(mate), "Rb1-b8 must be a legal move");
+                    gc.makeMove(mate);
+
+                    checkEqual("1-0", result[0], "White delivering checkmate must record a 1-0 result");
+                    check(message[0].contains("checkmate"), "end-of-game message must mention checkmate");
+                    check(gc.isCheckmate(false), "Black must now be in checkmate");
+                }));
+
+        test("GameController · detects stalemate (no legal moves, king not in check)", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+
+                    // Textbook queen stalemate final move: Qg5-g6.
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whiteKing = new King(board, 5, 1, true);   // f7
+                    Piece blackKing = new King(board, 7, 0, false); // h8
+                    Piece whiteQueen = new Queen(board, 6, 3, true); // g5
+                    custom.add(whiteKing);
+                    custom.add(blackKing);
+                    custom.add(whiteQueen);
+                    state.setPieces(custom);
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    String[] result = {null};
+                    gc.setGameEndListener((record, msg) -> result[0] = record.result);
+
+                    Move stalemateMove = new Move(state, whiteQueen, 6, 2); // Qg5-g6
+                    check(gc.isValidMove(stalemateMove), "Qg5-g6 must be a legal move");
+                    gc.makeMove(stalemateMove);
+
+                    checkEqual("1/2-1/2", result[0], "stalemate must be recorded as a 1/2-1/2 draw");
+                    check(!gc.isCheckmate(false), "Black king must not be in check");
+                    check(gc.isStalemate(false), "Black must have no legal moves");
+                }));
+
+        test("GameController · 50-move rule offers a draw at half-move 100; accepting ends the game", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    custom.add(new King(board, 4, 7, true));
+                    custom.add(new King(board, 4, 0, false));
+                    state.setPieces(custom);
+
+                    FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(true);
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    String[] result = {null};
+                    gc.setGameEndListener((record, msg) -> result[0] = record.result);
+
+                    shuffleKings(gc, state, 100);
+
+                    check(resolver.offerDrawCalled, "the 50-move draw must be offered at half-move 100");
+                    check(!resolver.forcedDrawNotified, "the 75-move forced draw must NOT fire yet");
+                    checkEqual("1/2-1/2", result[0], "accepting the offer must end the game as a draw");
+                }));
+
+        test("GameController · 50-move rule offer can be declined, letting the game continue", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    custom.add(new King(board, 4, 7, true));
+                    custom.add(new King(board, 4, 0, false));
+                    state.setPieces(custom);
+
+                    FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false);
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    String[] result = {null};
+                    gc.setGameEndListener((record, msg) -> result[0] = record.result);
+
+                    shuffleKings(gc, state, 100);
+
+                    check(resolver.offerDrawCalled, "the 50-move draw must still be offered at half-move 100");
+                    check(result[0] == null, "declining the offer must NOT end the game");
+                }));
+
+        test("GameController · 75-move rule forces a draw even if declined all along", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    custom.add(new King(board, 4, 7, true));
+                    custom.add(new King(board, 4, 0, false));
+                    state.setPieces(custom);
+
+                    FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // always decline
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    String[] result = {null};
+                    String[] message = {null};
+                    gc.setGameEndListener((record, msg) -> {
+                        result[0] = record.result;
+                        message[0] = msg;
+                    });
+
+                    shuffleKings(gc, state, 150);
+
+                    check(resolver.forcedDrawNotified, "the 75-move rule must fire regardless of prior declines");
+                    checkEqual("1/2-1/2", result[0], "the 75-move rule must end the game as a draw");
+                    check(message[0].contains("75-move"), "message must mention the 75-move rule");
+                }));
+
+        test("GameController · getMoveLog returns an unmodifiable view", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4));
+
+                    boolean threw = false;
+                    try {
+                        gc.getMoveLog().add("hack");
+                    } catch (UnsupportedOperationException e) {
+                        threw = true;
+                    }
+                    check(threw, "getMoveLog() must not allow external mutation of the recorded move history");
+                }));
+
         // ── Summary ──────────────────────────────────────────────────────
         SwingUtilities.invokeAndWait(frame::dispose);
 
@@ -1067,6 +1837,76 @@ public class GameTest {
     }
 
     // ── Test-only helpers ────────────────────────────────────────────────
+
+    /**
+     * A DrawOfferResolver that never offers/accepts anything — used by tests
+     * that exercise move mechanics and don't care about the draw-offer path.
+     */
+    private static DrawOfferResolver noOpDrawResolver() {
+        return new DrawOfferResolver() {
+            public void notifyForcedDraw() {
+            }
+
+            public boolean offerDraw() {
+                return false;
+            }
+        };
+    }
+
+    /**
+     * A configurable, headless DrawOfferResolver test double. Tracks whether
+     * each method was actually invoked, so tests can assert the 50/75-move
+     * rules fired at the right half-move count without any dialog involved.
+     */
+    private static class FakeDrawOfferResolver implements DrawOfferResolver {
+        private final boolean acceptOffer;
+        boolean offerDrawCalled = false;
+        boolean forcedDrawNotified = false;
+
+        FakeDrawOfferResolver(boolean acceptOffer) {
+            this.acceptOffer = acceptOffer;
+        }
+
+        @Override
+        public void notifyForcedDraw() {
+            forcedDrawNotified = true;
+        }
+
+        @Override
+        public boolean offerDraw() {
+            offerDrawCalled = true;
+            return acceptOffer;
+        }
+    }
+
+    /**
+     * Shuffles the White and Black kings back and forth between their home
+     * square and one step away, alternating turns, for exactly halfMoves
+     * moves. Used to rack up GameController's internal 50/75-move counter
+     * without ever making a pawn move or a capture (either of which would
+     * reset it). The two kings stay far apart the whole time, so a legal
+     * reply always exists and neither side is ever accidentally put in
+     * check, checkmate, or stalemate by this shuffling.
+     */
+    private static void shuffleKings(GameController gc, BoardState state, int halfMoves) {
+        boolean whiteAtHome = true;
+        boolean blackAtHome = true;
+        for (int i = 0; i < halfMoves; i++) {
+            if (i % 2 == 0) {
+                int from = whiteAtHome ? 7 : 6;
+                int to = whiteAtHome ? 6 : 7;
+                Piece king = state.getPiece(4, from);
+                gc.makeMove(new Move(state, king, 4, to));
+                whiteAtHome = !whiteAtHome;
+            } else {
+                int from = blackAtHome ? 0 : 1;
+                int to = blackAtHome ? 1 : 0;
+                Piece king = state.getPiece(4, from);
+                gc.makeMove(new Move(state, king, 4, to));
+                blackAtHome = !blackAtHome;
+            }
+        }
+    }
 
     /**
      * ReplayPanel's move-index label is the JLabel sitting in the SOUTH nav bar,
