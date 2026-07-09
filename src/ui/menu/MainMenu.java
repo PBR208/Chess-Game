@@ -67,7 +67,6 @@ public class MainMenu extends JPanel {
         b.setMaximumSize(new Dimension(Integer.MAX_VALUE, 48));
         b.setPreferredSize(new Dimension(240, 48));
         b.addActionListener(action);
-        UiComponents.addHoverEffect(b);
         return b;
     }
 }
