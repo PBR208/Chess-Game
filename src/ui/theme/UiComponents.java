@@ -17,6 +17,7 @@ public final class UiComponents {
         b.setBorderPainted(false);
         b.setFocusPainted(false);
         b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        addHoverEffect(b);
     }
 
     public static JButton button(String text, Font font, Color background) {
