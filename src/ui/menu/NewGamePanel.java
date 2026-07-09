@@ -29,7 +29,7 @@ public class NewGamePanel extends JPanel {
 
     private long selectedWhiteMs = 600_000L;
     private long selectedBlackMs = 600_000L;
-    private String selectedLabel = "Rapid 10+0";
+    private String selectedLabel = "Unlimited";
 
     public NewGamePanel() {
         setBackground(Theme.BG);
@@ -81,10 +81,17 @@ public class NewGamePanel extends JPanel {
                 selectedWhiteMs = wMs;
                 selectedBlackMs = bMs;
                 selectedLabel = label;
-                btn.setBackground(Theme.ACCENT);
             });
 
-            if (label.equals("Rapid 10+0")) {
+            btn.addItemListener(e -> {
+                if (btn.isSelected()) {
+                    btn.setBackground(Theme.ACCENT);
+                } else {
+                    btn.setBackground(Theme.BUTTON_SECONDARY);
+                }
+            });
+
+            if (label.equals("Unlimited")) {
                 btn.setSelected(true);
                 btn.setBackground(Theme.ACCENT);
             }
@@ -106,9 +113,17 @@ public class NewGamePanel extends JPanel {
         styleField(customSec);
 
         customBtn.addActionListener(e -> {
-            customBtn.setBackground(Theme.ACCENT);
             applyCustomTime();
         });
+
+        customBtn.addItemListener(e -> {
+            if (customBtn.isSelected()) {
+                customBtn.setBackground(Theme.ACCENT);
+            } else {
+                customBtn.setBackground(Theme.BUTTON_SECONDARY);
+            }
+        });
+
         customMin.addActionListener(e -> applyCustomTime());
         customSec.addActionListener(e -> applyCustomTime());
 
