@@ -24,7 +24,7 @@ public class Piece {
     static {
         BufferedImage tmp = null;
         try {
-            tmp = ImageIO.read(Piece.class.getResourceAsStream("/pieces.png"));
+            tmp = ImageIO.read(Piece.class.getResourceAsStream("/resources/pieces.png"));
             if (tmp == null) throw new IOException("Resource not found");
         } catch (IOException e) {
             e.printStackTrace();
