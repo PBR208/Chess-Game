@@ -72,7 +72,7 @@ public class ReplayPanel extends JPanel {
         moveLabel.setForeground(Theme.FG);
         moveLabel.setFont(new Font("Arial", Font.PLAIN, 13));
 
-        JButton first = navButton("⏮");
+        JButton first = navButton("⇤");
         first.addActionListener(e -> {
             cursor = 0;
             refresh(boardCanvas);
@@ -87,7 +87,7 @@ public class ReplayPanel extends JPanel {
             if (cursor < fens.size() - 1) cursor++;
             refresh(boardCanvas);
         });
-        JButton last = navButton("⏭");
+        JButton last = navButton("⇥");
         last.addActionListener(e -> {
             cursor = fens.size() - 1;
             refresh(boardCanvas);
@@ -161,8 +161,8 @@ public class ReplayPanel extends JPanel {
     }
 
     private JButton navButton(String text) {
-        JButton b = UiComponents.button(text, new Font("Arial", Font.BOLD, 16), Theme.BUTTON_SECONDARY);
-        b.setPreferredSize(new Dimension(44, 32));
+        JButton b = UiComponents.button(text, new Font("Arial", Font.BOLD, 24), Theme.BUTTON_SECONDARY);
+        b.setPreferredSize(new Dimension(54, 32));
         return b;
     }
 }
