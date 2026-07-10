@@ -14,6 +14,8 @@ public final class UiComponents {
         b.setFont(font);
         b.setForeground(Theme.FG);
         b.setBackground(background);
+        b.setContentAreaFilled(false);
+        b.setOpaque(true);
         b.setBorderPainted(false);
         b.setFocusPainted(false);
         b.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -31,11 +33,17 @@ public final class UiComponents {
         Color hover = normal.brighter();
         b.addMouseListener(new MouseAdapter() {
             public void mouseEntered(MouseEvent e) {
-                b.setBackground(hover);
+                if (b.getClientProperty("baseColor") == null) {
+                    b.putClientProperty("baseColor", b.getBackground());
+                }
+                b.setBackground(b.getBackground().brighter());
             }
 
             public void mouseExited(MouseEvent e) {
-                b.setBackground(normal);
+                Color base = (Color) b.getClientProperty("baseColor");
+                if (base != null) {
+                    b.setBackground(base);
+                }
             }
         });
     }
