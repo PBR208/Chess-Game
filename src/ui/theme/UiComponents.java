@@ -29,21 +29,20 @@ public final class UiComponents {
     }
 
     public static void addHoverEffect(AbstractButton b) {
-        Color normal = b.getBackground();
-        Color hover = normal.brighter();
         b.addMouseListener(new MouseAdapter() {
+            private Color baseColor;
+
             public void mouseEntered(MouseEvent e) {
-                if (b.getClientProperty("baseColor") == null) {
-                    b.putClientProperty("baseColor", b.getBackground());
-                }
-                b.setBackground(b.getBackground().brighter());
+                baseColor = b.getBackground();
+                b.setBackground(baseColor.brighter());
             }
 
             public void mouseExited(MouseEvent e) {
-                Color base = (Color) b.getClientProperty("baseColor");
-                if (base != null) {
-                    b.setBackground(base);
+                // Don't restore color for selected toggle buttons - keep them highlighted
+                if (b instanceof JToggleButton && ((JToggleButton) b).isSelected()) {
+                    return;
                 }
+                b.setBackground(baseColor);
             }
         });
     }

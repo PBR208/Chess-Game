@@ -84,11 +84,7 @@ public class NewGamePanel extends JPanel {
             });
 
             btn.addItemListener(e -> {
-                if (btn.isSelected()) {
-                    btn.setBackground(Theme.ACCENT);
-                } else {
-                    btn.setBackground(Theme.BUTTON_SECONDARY);
-                }
+                btn.setBackground(btn.isSelected() ? Theme.ACCENT : Theme.BUTTON_SECONDARY);
             });
 
             if (label.equals("Unlimited")) {
@@ -117,11 +113,7 @@ public class NewGamePanel extends JPanel {
         });
 
         customBtn.addItemListener(e -> {
-            if (customBtn.isSelected()) {
-                customBtn.setBackground(Theme.ACCENT);
-            } else {
-                customBtn.setBackground(Theme.BUTTON_SECONDARY);
-            }
+            customBtn.setBackground(customBtn.isSelected() ? Theme.ACCENT : Theme.BUTTON_SECONDARY);
         });
 
         customMin.addActionListener(e -> applyCustomTime());
