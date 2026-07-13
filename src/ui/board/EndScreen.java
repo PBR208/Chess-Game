@@ -1,5 +1,8 @@
 package ui.board;
 
+import ui.theme.Theme;
+import ui.theme.UiComponents;
+
 import javax.swing.*;
 import java.awt.*;
 
@@ -9,21 +12,29 @@ public class EndScreen extends JDialog {
         super(parent, true);
 
         int gap = tileSize / 8;
-        setLayout(new GridLayout(2, 1, gap, gap));
+        int padding = tileSize / 4;
+        setLayout(new BorderLayout(gap, gap));
         setUndecorated(true);
+        getContentPane().setBackground(Theme.PANEL_BG);
+
+        JPanel textPanel = new JPanel(new BorderLayout());
+        textPanel.setBackground(Theme.PANEL_BG);
+        textPanel.setBorder(BorderFactory.createEmptyBorder(padding, padding, padding, padding));
 
         JLabel txt = new JLabel(msg, SwingConstants.CENTER);
-        txt.setFont(new Font("Arial", Font.BOLD, tileSize / 3)); // fixed: was "Ariel"
+        txt.setFont(new Font(Font.DIALOG, Font.BOLD, Math.max(tileSize / 4, 14)));
+        txt.setForeground(Theme.FG);
 
-        JButton returnButton = new JButton("Return to Menu");
-        returnButton.setFont(new Font("Arial", Font.PLAIN, tileSize / 6));
+        textPanel.add(txt, BorderLayout.CENTER);
+
+        JButton returnButton = UiComponents.button("Return to Menu", new Font(Font.DIALOG, Font.PLAIN, Math.max(tileSize / 8, 12)), Theme.ACCENT);
         returnButton.addActionListener(e -> {
             dispose();
             onReturn.run();
         });
 
-        add(txt);
-        add(returnButton);
+        add(textPanel, BorderLayout.CENTER);
+        add(returnButton, BorderLayout.SOUTH);
 
         setSize(tileSize * 4, (int) (tileSize * 2.5));
         setLocationRelativeTo(parent);
