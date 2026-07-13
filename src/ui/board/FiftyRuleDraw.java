@@ -1,5 +1,8 @@
 package ui.board;
 
+import ui.theme.Theme;
+import ui.theme.UiComponents;
+
 import javax.swing.*;
 import java.awt.*;
 
@@ -20,6 +23,7 @@ public class FiftyRuleDraw extends JDialog {
         int rows = isForced ? 2 : 3;
         setLayout(new GridLayout(rows, 1, gap, gap));
         setUndecorated(true);
+        getContentPane().setBackground(Theme.PANEL_BG);
 
         String msg;
         JButton button1;
@@ -31,13 +35,13 @@ public class FiftyRuleDraw extends JDialog {
         if (isForced) {
             msg = "<html><center>The game has ended in a draw under the 75-move rule.<br>"
                     + "No captures or pawn moves occurred in the last 75 moves.</center></html>";
-            button1 = new JButton("Restart");
+            button1 = UiComponents.button("Restart", buttonFont, Theme.BUTTON_SECONDARY);
             button1.addActionListener(e -> dispose());
         } else {
             msg = "<html><center>A draw may be claimed — 50 moves have been played"
                     + " without a capture or pawn move.</center></html>";
-            button1 = new JButton("Claim Draw");
-            button2 = new JButton("Decline");
+            button1 = UiComponents.button("Claim Draw", buttonFont, Theme.ACCENT);
+            button2 = UiComponents.button("Decline", buttonFont, Theme.BUTTON_SECONDARY);
 
             button1.addActionListener(e -> {
                 result = DrawResult.ACCEPTED;
@@ -51,12 +55,11 @@ public class FiftyRuleDraw extends JDialog {
 
         JLabel txt = new JLabel(msg, SwingConstants.CENTER);
         txt.setFont(labelFont);
-        button1.setFont(buttonFont);
+        txt.setForeground(Theme.FG);
 
         add(txt);
         add(button1);
         if (button2 != null) {
-            button2.setFont(buttonFont);
             add(button2);
         }
 
