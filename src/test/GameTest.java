@@ -1171,6 +1171,7 @@ public class GameTest {
         System.out.println("\n── ReplayPanel ──────────────────────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
 
+        List<String> sampleMoves = List.of("e4", "e5", "Nf3");
         List<String> sampleFens = List.of(
                 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
                 "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
@@ -1179,7 +1180,7 @@ public class GameTest {
 
         test("ReplayPanel · displays first position's move label on construction", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    ReplayPanel p = new ReplayPanel(sampleFens);
+                    ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
                     JLabel lbl = findMoveLabel(p);
                     checkNotNull(lbl, "ReplayPanel must show a move-index label");
                     check(lbl.getText().contains("1/3"), "Should start at position 1 of 3, got: " + lbl.getText());
@@ -1187,7 +1188,7 @@ public class GameTest {
 
         test("ReplayPanel · next button advances position", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    ReplayPanel p = new ReplayPanel(sampleFens);
+                    ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
                     AbstractButton next = findButton(p, "→");
                     checkNotNull(next, "Must have a '→' next button");
                     next.doClick();
@@ -1197,9 +1198,9 @@ public class GameTest {
 
         test("ReplayPanel · last button jumps to final position", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    ReplayPanel p = new ReplayPanel(sampleFens);
-                    AbstractButton last = findButton(p, "⏭");
-                    checkNotNull(last, "Must have a '⏭' last button");
+                    ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
+                    AbstractButton last = findButton(p, "⇥");
+                    checkNotNull(last, "Must have a '⇥' last button");
                     last.doClick();
                     JLabel lbl = findMoveLabel(p);
                     check(lbl.getText().contains("3/3"), "Should be at the final position, got: " + lbl.getText());
@@ -1207,7 +1208,7 @@ public class GameTest {
 
         test("ReplayPanel · next button does not overrun the list", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    ReplayPanel p = new ReplayPanel(sampleFens);
+                    ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
                     AbstractButton next = findButton(p, "→");
                     for (int i = 0; i < 10; i++) next.doClick(); // click far past the end
                     JLabel lbl = findMoveLabel(p);
@@ -1216,10 +1217,10 @@ public class GameTest {
 
         test("ReplayPanel · first button returns to position 1", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    ReplayPanel p = new ReplayPanel(sampleFens);
-                    findButton(p, "⏭").doClick(); // jump to end first
-                    AbstractButton first = findButton(p, "⏮");
-                    checkNotNull(first, "Must have a '⏮' first button");
+                    ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
+                    findButton(p, "⇥").doClick(); // jump to end first
+                    AbstractButton first = findButton(p, "⇤");
+                    checkNotNull(first, "Must have a '⇤' first button");
                     first.doClick();
                     JLabel lbl = findMoveLabel(p);
                     check(lbl.getText().contains("1/3"), "Should be back at position 1, got: " + lbl.getText());
@@ -1227,7 +1228,7 @@ public class GameTest {
 
         test("ReplayPanel · prev button does not underrun position 1", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    ReplayPanel p = new ReplayPanel(sampleFens);
+                    ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
                     AbstractButton prev = findButton(p, "←");
                     for (int i = 0; i < 5; i++) prev.doClick(); // click before the start
                     JLabel lbl = findMoveLabel(p);
@@ -1236,7 +1237,7 @@ public class GameTest {
 
         test("ReplayPanel · empty FEN list shows 'No moves' without throwing", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    ReplayPanel p = new ReplayPanel(List.of());
+                    ReplayPanel p = new ReplayPanel(List.of(), List.of());
                     JLabel lbl = findMoveLabel(p);
                     checkEqual("No moves", lbl.getText(), "label text for empty history");
                     // Painting an empty history must not throw
