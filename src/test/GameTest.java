@@ -723,7 +723,7 @@ public class GameTest {
                     int[] updateCount = {0};
                     boolean[] clearedFlag = {false};
                     history.setListener(new MoveHistory.Listener() {
-                        public void onUpdate(List<String> moveLog) {
+                        public void onUpdate(List<String> moveLog, String currentFen) {
                             updateCount[0]++;
                         }
 
@@ -1116,7 +1116,7 @@ public class GameTest {
         test("MoveLogPanel · update with empty log clears text", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
-                    p.update(List.of());
+                    p.update(List.of(), "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
                     JTextArea ta = findTextArea(p);
                     checkNotNull(ta, "Must contain a JTextArea");
                     checkEqual("", ta.getText(), "text area should be empty after update with []");
@@ -1125,7 +1125,7 @@ public class GameTest {
         test("MoveLogPanel · update renders full move pairs", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
-                    p.update(List.of("e4", "e5", "Nf3", "Nc6"));
+                    p.update(List.of("e4", "e5", "Nf3", "Nc6"), "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
                     String text = findTextArea(p).getText();
                     check(text.contains("1."), "Must contain move number '1.'");
                     check(text.contains("e4"), "Must contain white's first move 'e4'");
@@ -1138,7 +1138,7 @@ public class GameTest {
         test("MoveLogPanel · update shows '...' when black has not moved yet", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
-                    p.update(List.of("e4", "e5", "Nf3"));
+                    p.update(List.of("e4", "e5", "Nf3"), "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
                     String text = findTextArea(p).getText();
                     check(text.contains("Nf3"), "Must contain white's pending move 'Nf3'");
                     check(text.contains("..."), "Must show '...' for black's pending reply");
@@ -1147,8 +1147,8 @@ public class GameTest {
         test("MoveLogPanel · repeated update replaces content, no duplication", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
-                    p.update(List.of("e4"));
-                    p.update(List.of("e4", "e5"));
+                    p.update(List.of("e4"), "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+                    p.update(List.of("e4", "e5"), "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
                     String text = findTextArea(p).getText();
                     int count = 0, idx = 0;
                     while ((idx = text.indexOf("1.", idx)) != -1) {
@@ -1161,7 +1161,7 @@ public class GameTest {
         test("MoveLogPanel · clear empties the text area", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
-                    p.update(List.of("e4", "e5", "Nf3", "Nc6"));
+                    p.update(List.of("e4", "e5", "Nf3", "Nc6"), "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
                     p.clear();
                     JTextArea ta = findTextArea(p);
                     checkEqual("", ta.getText(), "text area must be empty after clear()");
