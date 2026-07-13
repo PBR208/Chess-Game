@@ -1,5 +1,8 @@
 package ui.board;
 
+import ui.theme.Theme;
+import ui.theme.UiComponents;
+
 import javax.swing.*;
 import java.awt.*;
 
@@ -11,12 +14,13 @@ public class EndScreen extends JDialog {
         int gap = tileSize / 8;
         setLayout(new GridLayout(2, 1, gap, gap));
         setUndecorated(true);
+        getContentPane().setBackground(Theme.PANEL_BG);
 
         JLabel txt = new JLabel(msg, SwingConstants.CENTER);
-        txt.setFont(new Font("Arial", Font.BOLD, tileSize / 3)); // fixed: was "Ariel"
+        txt.setFont(new Font("Arial", Font.BOLD, tileSize / 3));
+        txt.setForeground(Theme.FG);
 
-        JButton returnButton = new JButton("Return to Menu");
-        returnButton.setFont(new Font("Arial", Font.PLAIN, tileSize / 6));
+        JButton returnButton = UiComponents.button("Return to Menu", new Font("Arial", Font.PLAIN, tileSize / 6), Theme.ACCENT);
         returnButton.addActionListener(e -> {
             dispose();
             onReturn.run();
