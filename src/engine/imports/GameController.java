@@ -292,8 +292,8 @@ public class GameController {
     public void setMoveLogPanel(MoveLogPanel panel) {
         history.setListener(panel == null ? null : new MoveHistory.Listener() {
             @Override
-            public void onUpdate(List<String> moveLog) {
-                panel.update(moveLog);
+            public void onUpdate(List<String> moveLog, String currentFen) {
+                panel.update(moveLog, currentFen);
             }
 
             @Override
