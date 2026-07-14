@@ -7,7 +7,7 @@ import java.util.List;
 public class MoveHistory {
 
     public interface Listener {
-        void onUpdate(List<String> moveLog);
+        void onUpdate(List<String> moveLog, String currentFen);
 
         void onClear();
     }
@@ -26,8 +26,9 @@ public class MoveHistory {
 
     public void record(Move m, int fromCol, int fromRow, boolean isWhiteTurn, int halfMoveClock, int fullMove) {
         moveLog.add(nh.toNotation(m, fromCol, fromRow));
-        fenHistory.add(fg.generate(isWhiteTurn, halfMoveClock, fullMove));
-        if (listener != null) listener.onUpdate(getMoveLog());
+        String fen = fg.generate(isWhiteTurn, halfMoveClock, fullMove);
+        fenHistory.add(fen);
+        if (listener != null) listener.onUpdate(getMoveLog(), fen);
     }
 
     public void clear() {
