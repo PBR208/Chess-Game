@@ -18,20 +18,30 @@ public class CheckScanner {
 
         int oldCol = piece.getCol();
         int oldRow = piece.getRow();
+        int newCol = move.getNewCol();
+        int newRow = move.getNewRow();
 
         Piece captured = move.getCapture();
 
-        piece.setCol(move.getNewCol());
-        piece.setRow(move.getNewRow());
+        // Simulate the move
+        piece.setCol(newCol);
+        piece.setRow(newRow);
 
         if (captured != null) {
             state.removePiece(captured);
         }
 
+        // Keep the grid in sync with the simulated position, since sliding
+        // pieces (Bishop/Rook/Queen) resolve collisions via the grid, not
+        // via the piece's own col/row fields.
+        state.moveOnGrid(piece, oldCol, oldRow);
+
         boolean kingInCheck = isKingInCheckRN(piece.isWhite());
 
+        // Revert the simulation
         piece.setCol(oldCol);
         piece.setRow(oldRow);
+        state.moveOnGrid(piece, newCol, newRow);
 
         if (captured != null) {
             state.addPiece(captured);
