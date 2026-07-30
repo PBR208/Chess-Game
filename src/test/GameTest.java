@@ -552,16 +552,29 @@ public class GameTest {
 
                     Move awayFromCheck = new Move(state, whiteKing, 0, 6); // Ka1-a2, off the rank
                     check(!cs.isKingLeftInCheck(awayFromCheck), "stepping off the attacked rank must be safe");
+                }));
 
-                    // NOTE: isKingLeftInCheck only updates the *moving piece's* col/row
-                    // during its simulate/undo — it does not call moveOnGrid(). That's
-                    // fine for the king's own destination (checked directly above), but
-                    // it means a *third* piece's discovered attack — e.g. a rook sliding
-                    // away and exposing its own king to a pin — is not detected, because
-                    // other pieces' collision scans still see the old piece occupying its
-                    // old grid square. This is a pre-existing characteristic of
-                    // CheckScanner, unrelated to the BoardState extraction, so it isn't
-                    // asserted here as correct behavior — just documented.
+        test("CheckScanner · isKingLeftInCheck detects a discovered check from a third piece", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+
+                    // White king on e1, White rook on e4 blocking a Black rook on e8.
+                    // Sliding the White rook off the e-file must expose the king.
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whiteKing = new King(board, 4, 7, true);   // e1
+                    Piece whiteRook = new Rook(board, 4, 4, true);   // e4
+                    Piece blackRook = new Rook(board, 4, 0, false);  // e8
+                    custom.add(whiteKing);
+                    custom.add(whiteRook);
+                    custom.add(blackRook);
+                    state.setPieces(custom);
+
+                    CheckScanner cs = new CheckScanner(state);
+
+                    Move slideOff = new Move(state, whiteRook, 3, 4); // Re4-d4, leaves the e-file
+                    check(cs.isKingLeftInCheck(slideOff),
+                            "moving the blocking rook off the file must expose the king to the rook on e8");
                 }));
 
         // ═════════════════════════════════════════════════════════════════

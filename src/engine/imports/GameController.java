@@ -133,6 +133,7 @@ public class GameController {
 
             state.capture(m);
             state.moveOnGrid(m.getPiece(), fromCol, fromRow);
+            state.setEnPassantTile(-1);
             if (m.getCapture() != null) {
                 passedMoves = -1;
             }

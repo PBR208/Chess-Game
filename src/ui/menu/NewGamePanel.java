@@ -87,7 +87,7 @@ public class NewGamePanel extends JPanel {
                 btn.setBackground(btn.isSelected() ? Theme.ACCENT : Theme.BUTTON_SECONDARY);
             });
 
-            if (label.equals("Unlimited")) {
+            if (label.equals("Rapid 10+0")) {
                 btn.setSelected(true);
                 btn.setBackground(Theme.ACCENT);
             }
