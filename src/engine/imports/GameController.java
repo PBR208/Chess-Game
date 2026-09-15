@@ -245,7 +245,8 @@ public class GameController {
      * moves handle their special rules, move any other piece and remove what it captures, and update
      * the fifty move counter, the side to move and the full move number. Then I judge check and
      * legal replies once, record the notation with its disambiguation and check marker plus the FEN,
-     * apply the end of game rules and finally hand the clock over.
+     * hand the clock over and finally apply the end of game rules, so a draw prompt already runs on
+     * the time of the player who has to decide.
      * <p>
      * Time complexity: O(p * s) where p is the number of pieces and s the 64 squares, dominated by
      * the checkmate and stalemate search after the move. Space complexity: O(m) for the growing
@@ -319,9 +320,10 @@ public class GameController {
 
         history.record(pMove, fromCol, fromRow, turnOfWhite, passedMoves, fullMove, disambiguation, suffix);
 
-        // look for mate, stalemate and draw rules before the clock moves on
-        checkGameEnd(pMove, opponentInCheck, opponentCanMove, repetitions);
+        // hand the clock over first, a draw prompt below must run on the claiming player's time
         flip();
+        // look for mate, stalemate and draw rules
+        checkGameEnd(pMove, opponentInCheck, opponentCanMove, repetitions);
     }
 
     /**
@@ -640,14 +642,15 @@ public class GameController {
      * After a normal move the player who just moved stops and the opponent's clock starts. Once the
      * game has ended both clocks must stay stopped, otherwise the loser's clock keeps running and
      * later reports a time forfeit for a game that is already over. I only switch clocks while the
-     * game is still running and always repaint so the final position is shown.
+     * game is still running, pass the side to move from this controller so the right clock runs
+     * whichever controller the board was built with, and always repaint so the position is shown.
      * <p>
      * Time complexity: O(1), the repaint is only scheduled. Space complexity: O(1).
      */
     private void flip() {
         // a finished game keeps both clocks stopped
         if (!gameOver) {
-            b.switchClocks();
+            b.switchClocks(turnOfWhite);
         }
         b.repaint();
     }
