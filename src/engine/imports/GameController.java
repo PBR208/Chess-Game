@@ -31,6 +31,9 @@ public class GameController {
     CheckScanner cs;
     MoveHistory history;
 
+    // works out disambiguation and check markers for the recorded notation
+    private final NotationHelper notation = new NotationHelper();
+
     private final GameConfig config;
     private final PromotionChooser promotionChooser;
     private final DrawOfferResolver drawOfferResolver;
@@ -84,16 +87,35 @@ public class GameController {
         endGame(result, winner + " wins on time!");
     }
 
-    private void checkGameEnd(Move m) {
-        boolean nextPlayer = !m.getPiece().isWhite();
+    /**
+     * Ends the game when the move just played finished it.
+     * <p>
+     * After every move the game may be over by checkmate, stalemate or the move-count rules. The
+     * check state and whether the opponent has any legal reply come from makeMove, which already
+     * needed them for the notation, so the expensive search over all replies runs only once per
+     * move. No reply while in check is checkmate, no reply without check is stalemate, and
+     * otherwise the fifty and seventy-five move rules are applied.
+     * <p>
+     * Time complexity: O(1) here, the reply search already happened in makeMove.
+     * Space complexity: O(1).
+     *
+     * @param pMove            move that was just played, never null
+     * @param pOpponentInCheck true if the side to move now is in check
+     * @param pOpponentCanMove true if the side to move now has at least one legal move
+     * @throws NullPointerException if pMove or its piece is null
+     */
+    private void checkGameEnd(Move pMove, boolean pOpponentInCheck, boolean pOpponentCanMove) {
+        boolean moverIsWhite = pMove.getPiece().isWhite();
 
-        if (isCheckmate(nextPlayer)) {
-            String winner = m.getPiece().isWhite() ? config.whiteName() : config.blackName();
-            endGame(m.getPiece().isWhite() ? "1-0" : "0-1", winner + " wins by checkmate!");
+        // no legal reply while in check is checkmate
+        if (pOpponentInCheck && !pOpponentCanMove) {
+            String winner = moverIsWhite ? config.whiteName() : config.blackName();
+            endGame(moverIsWhite ? "1-0" : "0-1", winner + " wins by checkmate!");
             return;
         }
 
-        if (isStalemate(nextPlayer)) {
+        // no legal reply without check is stalemate
+        if (!pOpponentCanMove) {
             endGame("1/2-1/2", "Stalemate — Draw");
             return;
         }
@@ -170,10 +192,12 @@ public class GameController {
      * Plays a move on the board and advances the game.
      * <p>
      * This is the single place where a validated move changes the position. Once the game is over
-     * I ignore the call, so nothing can alter the final position. Otherwise I move the rook along
-     * when castling, let pawn moves handle their special rules, move any other piece and remove what
-     * it captures, update the fifty move counter, the side to move and the full move number, record
-     * notation and FEN, check whether the game has ended and finally hand the clock over.
+     * I ignore the call, so nothing can alter the final position. Otherwise I look up identical
+     * pieces that could also reach the target square, move the rook along when castling, let pawn
+     * moves handle their special rules, move any other piece and remove what it captures, and update
+     * the fifty move counter, the side to move and the full move number. Then I judge check and
+     * legal replies once, record the notation with its disambiguation and check marker plus the FEN,
+     * apply the end of game rules and finally hand the clock over.
      * <p>
      * Time complexity: O(p * s) where p is the number of pieces and s the 64 squares, dominated by
      * the checkmate and stalemate search after the move. Space complexity: O(m) for the growing
@@ -191,6 +215,9 @@ public class GameController {
 
         int fromCol = pMove.getPiece().getCol();
         int fromRow = pMove.getPiece().getRow();
+
+        // rivals have to be found before the move changes the position
+        String disambiguation = notation.disambiguation(fromCol, fromRow, findRivals(pMove));
 
         // castling moves the rook first, the king follows below
         if (pMove.getPiece() instanceof King && Math.abs(pMove.getNewCol() - pMove.getPiece().getCol()) == 2) {
@@ -226,10 +253,15 @@ public class GameController {
             fullMove++;
         }
 
-        history.record(pMove, fromCol, fromRow, turnOfWhite, passedMoves, fullMove);
+        // judge check and legal replies once, both the notation and the end rules need them
+        boolean opponentInCheck = cs.isKingInCheckRN(turnOfWhite);
+        boolean opponentCanMove = hasLegalMoves(turnOfWhite);
+        String suffix = notation.checkSuffix(opponentInCheck, opponentInCheck && !opponentCanMove);
+
+        history.record(pMove, fromCol, fromRow, turnOfWhite, passedMoves, fullMove, disambiguation, suffix);
 
         // look for mate, stalemate and draw rules before the clock moves on
-        checkGameEnd(pMove);
+        checkGameEnd(pMove, opponentInCheck, opponentCanMove);
         flip();
     }
 
@@ -309,6 +341,42 @@ public class GameController {
             int behind = piece.isWhite() ? 1 : -1;
             pMove.setCapture(state.getPiece(pMove.getNewCol(), pMove.getNewRow() + behind));
         }
+    }
+
+    /**
+     * Finds the other pieces of the same type and colour that could make the same move.
+     * <p>
+     * SAN has to name the origin of a piece when an identical piece could reach the same square,
+     * for example Nbd2 when the knight on f3 could go to d2 as well. Pawns and kings never need
+     * this, so they get an empty list. For every other piece I run the normal legality check for
+     * each other piece of the same type and colour against the target square, before the move is
+     * played.
+     * <p>
+     * Time complexity: O(k * p) where k is the number of same type pieces and p the number of
+     * pieces scanned by each check simulation. Space complexity: O(r) for the r rivals found.
+     *
+     * @param pMove move that is about to be played, never null
+     * @return pieces that could legally reach the same square, never null, possibly empty
+     * @throws NullPointerException if pMove or its piece is null
+     */
+    private List<Piece> findRivals(Move pMove) {
+        List<Piece> rivals = new ArrayList<>();
+        Piece mover = pMove.getPiece();
+        // pawn captures already carry their file and there is only one king
+        if (mover instanceof Pawn || mover instanceof King) {
+            return rivals;
+        }
+        // copy, the check simulation temporarily changes the piece list
+        for (Piece other : new ArrayList<>(state.getPieces())) {
+            if (other == mover || other.getType() != mover.getType() || other.isWhite() != mover.isWhite()) {
+                continue;
+            }
+            // a rival is any identical piece that could legally land on the same square
+            if (isValidMove(new Move(state, other, pMove.getNewCol(), pMove.getNewRow()))) {
+                rivals.add(other);
+            }
+        }
+        return rivals;
     }
 
     private void promotePawn(Move m) {
