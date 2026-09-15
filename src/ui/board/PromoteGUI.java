@@ -58,7 +58,8 @@ public class PromoteGUI extends JDialog {
      * choices should look like that player's own pieces. I slice each piece icon from the white or
      * black row of the shared sprite sheet, wrap it in a themed button named after the piece, wire
      * every button to store its choice and close the dialog, and then size the dialog to four tiles
-     * and center it over the parent frame.
+     * and center it over the parent frame. Closing the window through the window system is ignored,
+     * because a promotion can't be skipped.
      * <p>
      * Time complexity: O(s^2) where s is the tile size, dominated by scaling the four sprites.
      * Space complexity: O(s^2) for the four scaled icon images.
@@ -109,6 +110,9 @@ public class PromoteGUI extends JDialog {
         add(rook);
         add(bishop);
         add(knight);
+
+        // a promotion can't be skipped, so closing the window through the system does nothing
+        setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
 
         // four tiles wide, one tile high, centered over the board
         setSize(pTileSize * 4, pTileSize);
@@ -176,8 +180,22 @@ public class PromoteGUI extends JDialog {
         return btn;
     }
 
+    /**
+     * Shows the dialog and waits until the player picks a piece.
+     * <p>
+     * The move can only finish once the promotion piece is known. I show the modal dialog, which
+     * blocks until a button closes it, and return the picked piece. If the dialog got closed another
+     * way, for example from code, I fall back to a queen, the most common choice by far, instead of
+     * returning null and crashing the move.
+     * <p>
+     * Time complexity: O(1) apart from waiting for the player. Space complexity: O(1).
+     *
+     * @return the chosen piece, never null
+     * @throws HeadlessException if the JVM has no display
+     */
     public Choice showDialog() {
         setVisible(true);
-        return choice;
+        // a dialog closed without a click still has to produce a piece
+        return choice != null ? choice : Choice.QUEEN;
     }
 }
