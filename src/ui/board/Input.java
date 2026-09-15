@@ -1,5 +1,16 @@
 package ui.board;
 
+/*
+ * Purpose: Input turns mouse actions on the board into game actions. Pressing on a piece picks it up
+ * and shows its legal moves, dragging moves it with the mouse and releasing it asks the rules
+ * engine whether the move is legal and plays it. I keep this apart from the board painting so the
+ * mouse handling can be tested with synthetic events. Only points on the 8 by 8 squares count, so
+ * the clock bars and everything outside the board are ignored.
+ *
+ * Owner: PBR208 - https://github.com/PBR208/
+ * Version: 1.0
+ */
+
 import engine.imports.GameController;
 import engine.imports.Move;
 import engine.pieces.Piece;
@@ -17,16 +28,34 @@ public class Input extends MouseAdapter {
         this.gc = gc;
     }
 
+    /**
+     * Picks up the piece under the mouse.
+     * <p>
+     * A move starts by pressing on a piece. Presses on the clock bars or outside the squares used to
+     * pick up pieces on the edge rank or crash with an index out of bounds, so I ignore them now.
+     * Otherwise I find the piece on the pressed square, center it under the mouse and select it,
+     * which also works out its legal move hints.
+     * <p>
+     * Time complexity: O(s * p) for the legal move hints of the selected piece over s squares and p
+     * pieces. Space complexity: O(s) for the hint squares.
+     *
+     * @param pEvent mouse press on the board panel, never null
+     */
     @Override
-    public void mousePressed(MouseEvent e) {
+    public void mousePressed(MouseEvent pEvent) {
+        // clicks on the clock bars or outside the squares select nothing
+        if (!b.isOnBoard(pEvent.getX(), pEvent.getY())) {
+            return;
+        }
 
-        int col = b.toLogicalCol(e.getX());
-        int row = b.toLogicalRow(e.getY());
+        int col = b.toLogicalCol(pEvent.getX());
+        int row = b.toLogicalRow(pEvent.getY());
 
         Piece pAtLocation = b.getPiece(col, row);
         if (pAtLocation != null) {
-            pAtLocation.setxPos(e.getX() - b.getTileSize() / 2);
-            pAtLocation.setyPos(e.getY() - b.getTileSize() / 2);
+            // keep the piece centered under the mouse while it is dragged
+            pAtLocation.setxPos(pEvent.getX() - b.getTileSize() / 2);
+            pAtLocation.setyPos(pEvent.getY() - b.getTileSize() / 2);
 
             b.setSelectedPiece(pAtLocation);
         }
@@ -43,20 +72,35 @@ public class Input extends MouseAdapter {
         }
     }
 
+    /**
+     * Drops the selected piece and plays the move if it is legal.
+     * <p>
+     * A move ends when the mouse button is released. A release outside the squares used to count as
+     * the nearest edge square, which could play a move nobody meant, so it now cancels the drag. For a
+     * release on a square I build the move, play it when the rules allow it and otherwise put the
+     * piece back on its own square. The selection is cleared in every case.
+     * <p>
+     * Time complexity: O(s * p) when a move is played, for the end of game search over s squares and p
+     * pieces. Space complexity: O(1) apart from the recorded move.
+     *
+     * @param pEvent mouse release on or around the board panel, never null
+     */
     @Override
-    public void mouseReleased(MouseEvent e) {
+    public void mouseReleased(MouseEvent pEvent) {
+        Piece selected = b.getSelectedPiece();
 
-        int col = b.toLogicalCol(e.getX());
-        int row = b.toLogicalRow(e.getY());
+        if (selected != null) {
+            // a release outside the squares cancels the drag instead of guessing a square
+            Move m = b.isOnBoard(pEvent.getX(), pEvent.getY())
+                    ? new Move(b.getState(), selected, b.toLogicalCol(pEvent.getX()), b.toLogicalRow(pEvent.getY()))
+                    : null;
 
-        if (b.getSelectedPiece() != null) {
-            Move m = new Move(b.getState(), b.getSelectedPiece(), col, row);
-
-            if (gc.isValidMove(m)) {
+            if (m != null && gc.isValidMove(m)) {
                 gc.makeMove(m);
             } else {
-                b.getSelectedPiece().setxPos(b.getSelectedPiece().getCol() * b.getTileSize());
-                b.getSelectedPiece().setyPos(b.getSelectedPiece().getRow() * b.getTileSize());
+                // put the piece back onto its own square
+                selected.setxPos(selected.getCol() * b.getTileSize());
+                selected.setyPos(selected.getRow() * b.getTileSize());
             }
         }
 
