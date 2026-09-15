@@ -59,33 +59,42 @@ reopened later, either as a plain move log or stepped through move-by-move on a 
 ## ✨ Features
 
 | ✅ Implemented                                                                                           | ❌ Not Yet Implemented                     |
-|---------------------------------------------------------------------------------------------------------|-------------------------------------------|
-| All six piece types with correct movement rules                                                         | Threefold repetition draw                 |
-| Legal move generation — self-check moves filtered out                                                   | Insufficient material draw (K vs K, etc.) |
-| Check & checkmate detection                                                                             | AI opponent                               |
-| Stalemate detection                                                                                     | Sound effects                             |
-| Castling — kingside & queenside with full validation                                                    | Online / network play                     |
-| En passant                                                                                              |                                           |
-| Pawn promotion with piece-selector dialog                                                               |                                           |
-| 50-move draw claim / 75-move forced draw                                                                |                                           |
-| Chess clock with configurable time controls — bullet/blitz/rapid/classical presets or a custom duration |                                           |
-| Board perspective flip after each move                                                                  |                                           |
-| Move highlighting on piece selection                                                                    |                                           |
-| End screen on checkmate, stalemate, or time loss                                                        |                                           |
-| Piece sprites loaded from a sprite sheet                                                                |                                           |
-| Move history / live move log panel                                                                      |                                           |
-| Main menu with New Game & Past Games navigation                                                         |                                           |
-| Custom player names per game                                                                            |                                           |
-| PGN export — every finished game auto-saved to `games/`                                                 |                                           |
-| FEN generation & parsing for board positions                                                            |                                           |
-| Past-games library with saved move logs                                                                 |                                           |
-| Move-by-move replay viewer for saved games                                                              |                                           |
+|---|---|
+| All six piece types with correct movement rules | AI opponent |
+| Legal move generation, self-check moves filtered out | Sound effects |
+| Check & checkmate detection | Online / network play |
+| Stalemate detection | |
+| Castling, kingside & queenside with full validation | |
+| En passant, including captures that answer a check and pins along the rank | |
+| Pawn promotion with a piece selector in the promoting side's colours | |
+| 50-move draw claim / 75-move forced draw | |
+| Threefold repetition claim / fivefold repetition forced draw | |
+| Insufficient material draw, and a draw on time against a lone king | |
+| Chess clock with bullet/blitz/rapid/classical presets, increments, or a custom duration | |
+| Board perspective flip after each move | |
+| Move highlighting on piece selection | |
+| End screen on checkmate, stalemate, draws, or time loss | |
+| Piece sprites loaded from a sprite sheet | |
+| Move history / live move log panel | |
+| Main menu with New Game & Past Games navigation | |
+| Custom player names per game | |
+| Standard algebraic notation with check, mate, and disambiguation (`Nbd2`, `Qh4#`) | |
+| PGN export, every finished game auto-saved to your user data folder | |
+| FEN generation & parsing for board positions | |
+| Past-games library with saved move logs | |
+| Move-by-move replay viewer for saved games | |
+| Window and board sized to fit smaller screens, with fonts every OS has | |
 
 ---
 
 ## 🏗️ Project Structure
 
 ```
+build/
+└── Build.java                        # Zero-dependency build script: clean, compile, test, test-gui, jar, run
+.github/
+└── workflows/
+    └── ci.yml                        # Build and tests on Windows, macOS, and Linux with JDK 17 and 25
 src/
 ├── app/
 │   └── Main.java                     # Entry point — owns the JFrame, swaps in menu/game/library panels
@@ -134,8 +143,11 @@ src/
 │   └── theme/
 │       ├── Theme.java                # Shared dark-theme color palette for the menu-style screens
 │       └── UiComponents.java         # Shared button styling/hover-effect factory
+├── resources/
+│   └── pieces.png                    # Sprite sheet, loaded from the classpath as /resources/pieces.png
 └── test/
-    └── GameTest.java                 # Standalone test runner (no external framework) — see Testing below
+    ├── GameTest.java                 # Standalone test runner (no external framework) — see Testing below
+    └── GuiTestSelector.java          # Launcher window that previews single screens by hand
 ```
 
 **Why `engine` and `ui` are separate top-level packages, not just separate classes:** the split marks where the rules
@@ -285,10 +297,16 @@ it prints what is missing and exits with code 2 instead of failing silently.
 4. Click a highlighted square to move
 5. The board flips so the other player faces their own pieces from the bottom
 6. The clocks switch automatically; a player who runs out of time loses
-7. The game ends on checkmate, stalemate, time loss, or a 50/75-move draw — the result is saved automatically as a
-   PGN file in a `games/` folder next to where you ran the app
+7. The game ends on checkmate, stalemate, time loss, or a draw by repetition, insufficient material, or the 50/75-move
+   rule, and the result is saved automatically as a PGN file (see below for where)
 
 White always moves first.
+
+Saved games go to your user data folder: `%APPDATA%\ChessGame\games` on Windows,
+`~/Library/Application Support/ChessGame/games` on macOS, and `$XDG_DATA_HOME/chess-game/games` (usually
+`~/.local/share/chess-game/games`) on Linux. Pass `-Dchess.gamesDir=<folder>` to `java` to use another folder. Games
+from the old `games/` folder in the working directory are copied over once, the first time the game reads or writes
+saved games.
 
 From the main menu, **Past Games** opens a library of every saved game. Select one to view its full move log, or
 switch to the **Replay** tab to step through the position move-by-move on a mini board.
