@@ -94,22 +94,22 @@ public class ReplayPanel extends JPanel {
         moveLabel.setForeground(Theme.FG);
         moveLabel.setFont(new Font(Font.SANS_SERIF,Font.PLAIN, 13));
 
-        JButton first = navButton("\u21e4");
+        JButton first = navButton("\u21e4", "|<", "first");
         first.addActionListener(e -> {
             cursor = 0;
             refresh(boardCanvas);
         });
-        JButton prev = navButton("\u2190");
+        JButton prev = navButton("\u2190", "<", "previous");
         prev.addActionListener(e -> {
             if (cursor > 0) cursor--;
             refresh(boardCanvas);
         });
-        JButton next = navButton("\u2192");
+        JButton next = navButton("\u2192", ">", "next");
         next.addActionListener(e -> {
             if (cursor < fens.size() - 1) cursor++;
             refresh(boardCanvas);
         });
-        JButton last = navButton("\u21e5");
+        JButton last = navButton("\u21e5", ">|", "last");
         last.addActionListener(e -> {
             cursor = fens.size() - 1;
             refresh(boardCanvas);
@@ -286,17 +286,22 @@ public class ReplayPanel extends JPanel {
     /**
      * Creates one of the four navigation buttons below the replay board.
      * <p>
-     * The first, previous, next and last buttons share size and look. I style a button with the
-     * shared dark look, a large bold logical font for the arrow and a fixed size.
+     * The first, previous, next and last buttons share size and look. Their arrows are missing from
+     * some fonts, so each button also carries an ASCII arrow and a component name that stays the same
+     * whichever text is shown. I style a button with the shared dark look, a large bold logical font
+     * for the arrow and a fixed size.
      * <p>
-     * Time complexity: O(1). Space complexity: O(1) apart from the button.
+     * Time complexity: O(n) for the n characters of pText. Space complexity: O(1) apart from the button.
      *
-     * @param pText arrow shown on the button, never null
+     * @param pText      arrow shown on the button, never null
+     * @param pAsciiText plain ASCII arrow for fonts without the symbol, never null
+     * @param pName      component name that identifies the button, never null
      * @return the finished button, never null
      */
-    private JButton navButton(String pText) {
+    private JButton navButton(String pText, String pAsciiText, String pName) {
         // logical fonts exist on every platform, Arial doesn't
-        JButton b = UiComponents.button(pText, new Font(Font.SANS_SERIF, Font.BOLD, 24), Theme.BUTTON_SECONDARY);
+        JButton b = UiComponents.button(pText, pAsciiText, new Font(Font.SANS_SERIF, Font.BOLD, 24), Theme.BUTTON_SECONDARY);
+        b.setName(pName);
         b.setPreferredSize(new Dimension(54, 32));
         return b;
     }
