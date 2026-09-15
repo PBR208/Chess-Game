@@ -53,6 +53,17 @@ public class GameController {
         this.history = new MoveHistory(state);
     }
 
+    /**
+     * Resets the controller and board to a fresh game with White to move.
+     * <p>
+     * A restart has to clear every piece of game state, including the finished flag, otherwise the
+     * new game would reject all moves. I put the starting pieces back, reset the side to move, the
+     * fifty move counter and the en passant square, reset both clocks, clear the history and mark
+     * the game as running again.
+     * <p>
+     * Time complexity: O(p + m) where p is the number of pieces placed and m the number of moves
+     * cleared from the history. Space complexity: O(p) for the new piece objects.
+     */
     public void restartGame() {
         b.setPieces(b.addPieces());
         turnOfWhite = true;
@@ -60,6 +71,8 @@ public class GameController {
         state.setEnPassantTile(-1);
         b.resetClocks();
         history.clear();
+        // a restarted game accepts moves again
+        gameOver = false;
     }
 
     public void flagFall(boolean isWhiteExpired) {
@@ -97,10 +110,10 @@ public class GameController {
      * Decides whether a move is legal in the current position.
      * <p>
      * Moves from the board, the legal move highlighting and the checkmate and stalemate detection
-     * all go through this check. It rejects moves by the side not to move and captures of own
-     * pieces, asks the piece whether its geometry and path allow the move, hands two-square king
-     * moves to the castling rules, attaches a pawn captured en passant and finally simulates the
-     * move to make sure the own king is not left in check.
+     * all go through this check. It rejects every move once the game is over, moves by the side not
+     * to move and captures of own pieces, asks the piece whether its geometry and path allow the
+     * move, hands two-square king moves to the castling rules, attaches a pawn captured en passant
+     * and finally simulates the move to make sure the own king is not left in check.
      * <p>
      * Time complexity: O(p) where p is the number of pieces, because the check simulation scans
      * every opposing piece. Space complexity: O(1).
@@ -110,6 +123,11 @@ public class GameController {
      * @throws NullPointerException if pMove or its piece is null
      */
     public boolean isValidMove(Move pMove) {
+
+        // the final position of a finished game can't change anymore
+        if (gameOver) {
+            return false;
+        }
 
         // only the side to move may move
         if (pMove.getPiece().isWhite() != turnOfWhite) {
@@ -145,30 +163,55 @@ public class GameController {
         return false;
     }
 
-    public void makeMove(Move m) {
+    /**
+     * Plays a move on the board and advances the game.
+     * <p>
+     * This is the single place where a validated move changes the position. Once the game is over
+     * I ignore the call, so nothing can alter the final position. Otherwise I move the rook along
+     * when castling, let pawn moves handle their special rules, move any other piece and remove what
+     * it captures, update the fifty move counter and the side to move, record notation and FEN,
+     * check whether the game has ended and finally hand the clock over.
+     * <p>
+     * Time complexity: O(p * s) where p is the number of pieces and s the 64 squares, dominated by
+     * the checkmate and stalemate search after the move. Space complexity: O(m) for the growing
+     * move history, where m is the number of moves played.
+     *
+     * @param pMove move that was accepted by isValidMove, never null
+     * @throws NullPointerException if pMove or its piece is null
+     */
+    public void makeMove(Move pMove) {
 
-        int fromCol = m.getPiece().getCol();
-        int fromRow = m.getPiece().getRow();
-
-        if (m.getPiece() instanceof King && Math.abs(m.getNewCol() - m.getPiece().getCol()) == 2) {
-            castle((King) m.getPiece(), m.getNewCol());
+        // a finished game ignores further moves, even direct calls
+        if (gameOver) {
+            return;
         }
 
-        if (m.getPiece() instanceof Pawn) {
-            movePawn(m);
+        int fromCol = pMove.getPiece().getCol();
+        int fromRow = pMove.getPiece().getRow();
+
+        // castling moves the rook first, the king follows below
+        if (pMove.getPiece() instanceof King && Math.abs(pMove.getNewCol() - pMove.getPiece().getCol()) == 2) {
+            castle((King) pMove.getPiece(), pMove.getNewCol());
+        }
+
+        if (pMove.getPiece() instanceof Pawn) {
+            // pawn moves always reset the fifty move counter
+            movePawn(pMove);
             passedMoves = -1;
         } else {
-            m.getPiece().setCol(m.getNewCol());
-            m.getPiece().setRow(m.getNewRow());
-            m.getPiece().setxPos(m.getNewCol() * b.getTileSize());
-            m.getPiece().setyPos(m.getNewRow() * b.getTileSize());
+            pMove.getPiece().setCol(pMove.getNewCol());
+            pMove.getPiece().setRow(pMove.getNewRow());
+            pMove.getPiece().setxPos(pMove.getNewCol() * b.getTileSize());
+            pMove.getPiece().setyPos(pMove.getNewRow() * b.getTileSize());
 
-            m.getPiece().setFirstMove(false);
+            pMove.getPiece().setFirstMove(false);
 
-            state.capture(m);
-            state.moveOnGrid(m.getPiece(), fromCol, fromRow);
+            state.capture(pMove);
+            state.moveOnGrid(pMove.getPiece(), fromCol, fromRow);
+            // en passant is only possible right after the double step
             state.setEnPassantTile(-1);
-            if (m.getCapture() != null) {
+            // captures reset the fifty move counter as well
+            if (pMove.getCapture() != null) {
                 passedMoves = -1;
             }
         }
@@ -176,9 +219,10 @@ public class GameController {
         passedMoves++;
         turnOfWhite = !turnOfWhite;
 
-        history.record(m, fromCol, fromRow, turnOfWhite, passedMoves, fullMove);
+        history.record(pMove, fromCol, fromRow, turnOfWhite, passedMoves, fullMove);
 
-        checkGameEnd(m);
+        // look for mate, stalemate and draw rules before the clock moves on
+        checkGameEnd(pMove);
         flip();
     }
 
