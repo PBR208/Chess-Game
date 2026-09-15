@@ -207,10 +207,10 @@ with the passed pawn removed before the scan.
 
 ## ✅ Testing
 
-`test/GameTest.java` is a from-scratch test runner (no JUnit) with over 115 named test cases, grouped by the class
+`test/GameTest.java` is a from-scratch test runner (no JUnit) with 176 named test cases, grouped by the class
 they exercise — `GameConfig`, `GameRecord`, `BoardState`, `Move`/`CheckScanner`, `NotationHelper`, `FenGenerator`,
 `MoveHistory`, `PieceType`, `ChessClock`, the dialogs, the menu panels, and `GameController`'s full rules engine
-(moves, captures, castling, en passant, promotion, checkmate, stalemate, and the 50/75-move draw rules).
+(moves, captures, castling, en passant, promotion, checkmate, stalemate, the 50/75-move rules, repetition, and insufficient material).
 
 Because `GameController` depends on the `PromotionChooser`/`DrawOfferResolver` interfaces rather than concrete
 dialogs, the rules-engine tests drive promotion and draw scenarios with small fake implementations instead of
@@ -218,17 +218,20 @@ simulating dialog clicks — no `Timer`-scheduled `doClick()` needed for any of 
 themselves (`PromoteGUI`, `FiftyRuleDraw`, `EndScreen`) and the two `Swing*` wrapper classes are still tested the
 old way, since they're the parts that genuinely need a real window.
 
-**Run the tests** (requires a display, since the dialog-based tests build real `JFrame`/`JDialog` windows):
+**Run the tests** from the repository root. The same commands work in PowerShell, `cmd.exe`, and any Unix shell:
 
 ```bash
-javac -d out $(find src -name "*.java")
-java -cp out test.GameTest
+java build/Build.java test        # headless: rules, notation, persistence and panel tests
+java build/Build.java test-gui    # also opens the real dialogs and frames, needs a display
 ```
 
-In an environment with no display available at all, only the tests that construct a `JFrame` or show a modal dialog
-will fail — everything else (all of `BoardState`, `Move`, `CheckScanner`, `NotationHelper`, `FenGenerator`,
-`MoveHistory`, `PieceType`, `Theme`/`UiComponents`, and `GameController`'s rules-engine tests) runs and passes without
-one, since none of it needs a real window.
+`test` runs the suite in a headless JVM, the way a build server would. Tests that need a real window, such as the
+modal dialogs or a `JFrame`, are reported as skipped there instead of failing, so a headless run ends with 146 passed
+and 30 skipped, while `test-gui` runs all 176. A watchdog closes any dialog a test left open and fails that test
+instead of hanging the run, and the suite saves its games to a temporary folder, so it never touches your own library.
+
+Every push to `main` and every pull request builds the game and runs the headless tests on Windows, macOS, and Linux
+with JDK 17 and JDK 25, plus the window tests on Linux under a virtual display (see `.github/workflows/ci.yml`).
 
 ---
 
