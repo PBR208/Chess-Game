@@ -1,5 +1,16 @@
 package engine.imports;
 
+/*
+ * Purpose: GameController is the referee of a running game. It decides whether a move is legal,
+ * applies it to the board state, tracks whose turn it is and detects checkmate, stalemate and the
+ * move-count draw rules. I keep these rules here instead of in the Swing board so they can be
+ * tested without a window. Promotion choices and draw offers are requested through small
+ * interfaces, so no dialog is ever created from inside this class.
+ *
+ * Owner: PBR208 - https://github.com/PBR208/
+ * Version: 1.0
+ */
+
 import engine.model.GameConfig;
 import engine.model.GameRecord;
 import ui.board.Board;
@@ -82,21 +93,44 @@ public class GameController {
         }
     }
 
-    public boolean isValidMove(Move m) {
+    /**
+     * Decides whether a move is legal in the current position.
+     * <p>
+     * Moves from the board, the legal move highlighting and the checkmate and stalemate detection
+     * all go through this check. It rejects moves by the side not to move and captures of own
+     * pieces, asks the piece whether its geometry and path allow the move, hands two-square king
+     * moves to the castling rules, attaches a pawn captured en passant and finally simulates the
+     * move to make sure the own king is not left in check.
+     * <p>
+     * Time complexity: O(p) where p is the number of pieces, because the check simulation scans
+     * every opposing piece. Space complexity: O(1).
+     *
+     * @param pMove candidate move whose piece belongs to this game's board, never null
+     * @return true if the move may be played now, false otherwise
+     * @throws NullPointerException if pMove or its piece is null
+     */
+    public boolean isValidMove(Move pMove) {
 
-        if (m.getPiece().isWhite() != turnOfWhite) {
+        // only the side to move may move
+        if (pMove.getPiece().isWhite() != turnOfWhite) {
             return false;
         }
 
-        if (!isSameTeam(m.getPiece(), m.getCapture())) {
-            if (m.getPiece().isValidMovement(m.getNewCol(), m.getNewRow())) {
-                if (!m.getPiece().isValidCollide(m.getNewCol(), m.getNewRow())) {
-                    if (m.getPiece() instanceof King
-                            && Math.abs(m.getNewCol() - m.getPiece().getCol()) == 2) {
-                        return isValidCastle(m);
+        // never capture an own piece
+        if (!isSameTeam(pMove.getPiece(), pMove.getCapture())) {
+            // piece geometry first, then blocked paths
+            if (pMove.getPiece().isValidMovement(pMove.getNewCol(), pMove.getNewRow())) {
+                if (!pMove.getPiece().isValidCollide(pMove.getNewCol(), pMove.getNewRow())) {
+                    // a two-square king move is castling and follows its own rules
+                    if (pMove.getPiece() instanceof King
+                            && Math.abs(pMove.getNewCol() - pMove.getPiece().getCol()) == 2) {
+                        return isValidCastle(pMove);
                     }
 
-                    return !cs.isKingLeftInCheck(m);
+                    // the passed pawn has to leave the board in the check simulation as well
+                    attachEnPassantCapture(pMove);
+                    // the own king must not be in check after the move
+                    return !cs.isKingLeftInCheck(pMove);
                 }
             }
         }
@@ -148,38 +182,82 @@ public class GameController {
         flip();
     }
 
-    private void movePawn(Move m) {
+    /**
+     * Applies a legal pawn move, including en passant, double steps and promotion.
+     * <p>
+     * Pawns carry most of the special rules, so they get their own move handling. I attach the pawn
+     * captured en passant, remember the skipped square after a double step or clear it otherwise,
+     * hand moves onto the last rank to the promotion logic and for every other move update the
+     * pawn's coordinates, clear its first-move flag, remove the captured piece and sync the grid.
+     * <p>
+     * Time complexity: O(p) where p is the number of pieces, because removing a captured piece
+     * searches the piece list. Space complexity: O(1).
+     *
+     * @param pMove legal pawn move that was already validated by isValidMove, never null
+     * @throws NullPointerException if pMove or its piece is null
+     */
+    private void movePawn(Move pMove) {
 
-        int fromCol = m.getPiece().getCol();
-        int fromRow = m.getPiece().getRow();
+        int fromCol = pMove.getPiece().getCol();
+        int fromRow = pMove.getPiece().getRow();
 
-        int colorIndex = m.getPiece().isWhite() ? 1 : -1;
+        // rows count downwards for white and upwards for black
+        int colorIndex = pMove.getPiece().isWhite() ? 1 : -1;
 
-        if (state.getTileNum(m.getNewCol(), m.getNewRow()) == state.getEnPassantTile()) {
-            m.setCapture(state.getPiece(m.getNewCol(), m.getNewRow() + colorIndex));
-        }
+        // same en passant resolution the validation used
+        attachEnPassantCapture(pMove);
 
-        if (Math.abs(m.getPiece().getRow() - m.getNewRow()) == 2) {
-            state.setEnPassantTile(state.getTileNum(m.getNewCol(), m.getNewRow() + colorIndex));
+        // a double step leaves the skipped square open for en passant
+        if (Math.abs(pMove.getPiece().getRow() - pMove.getNewRow()) == 2) {
+            state.setEnPassantTile(state.getTileNum(pMove.getNewCol(), pMove.getNewRow() + colorIndex));
         } else {
             state.setEnPassantTile(-1);
         }
 
-        colorIndex = m.getPiece().isWhite() ? 0 : 7;
-        if (m.getNewRow() == colorIndex) {
-            promotePawn(m);
+        // reaching the last rank means promotion
+        colorIndex = pMove.getPiece().isWhite() ? 0 : 7;
+        if (pMove.getNewRow() == colorIndex) {
+            promotePawn(pMove);
             return;
         }
 
-        m.getPiece().setCol(m.getNewCol());
-        m.getPiece().setRow(m.getNewRow());
-        m.getPiece().setxPos(m.getNewCol() * b.getTileSize());
-        m.getPiece().setyPos(m.getNewRow() * b.getTileSize());
+        pMove.getPiece().setCol(pMove.getNewCol());
+        pMove.getPiece().setRow(pMove.getNewRow());
+        pMove.getPiece().setxPos(pMove.getNewCol() * b.getTileSize());
+        pMove.getPiece().setyPos(pMove.getNewRow() * b.getTileSize());
 
-        m.getPiece().setFirstMove(false);
+        // a moved pawn loses its double step
+        pMove.getPiece().setFirstMove(false);
 
-        state.capture(m);
-        state.moveOnGrid(m.getPiece(), fromCol, fromRow);
+        // remove the captured piece, then move the pawn on the grid
+        state.capture(pMove);
+        state.moveOnGrid(pMove.getPiece(), fromCol, fromRow);
+    }
+
+    /**
+     * Attaches the pawn captured en passant to a move.
+     * <p>
+     * An en passant capture lands on an empty square, so a freshly built Move reports no capture.
+     * Without the victim attached, the check simulation left the passed pawn on the board, which
+     * rejected legal replies to a pawn check and allowed captures that expose the own king along
+     * the rank. I only act when a pawn steps diagonally onto the current en passant square without a
+     * regular capture, and then take the pawn standing directly behind that square.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pMove move to inspect and complete in place, never null
+     * @throws NullPointerException if pMove or its piece is null
+     */
+    private void attachEnPassantCapture(Move pMove) {
+        Piece piece = pMove.getPiece();
+        // only a diagonal pawn step onto the empty en passant square qualifies
+        if (piece instanceof Pawn && pMove.getCapture() == null
+                && pMove.getNewCol() != piece.getCol()
+                && state.getTileNum(pMove.getNewCol(), pMove.getNewRow()) == state.getEnPassantTile()) {
+            // the passed pawn stands one row behind the target square, seen from the mover
+            int behind = piece.isWhite() ? 1 : -1;
+            pMove.setCapture(state.getPiece(pMove.getNewCol(), pMove.getNewRow() + behind));
+        }
     }
 
     private void promotePawn(Move m) {
