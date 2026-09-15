@@ -964,6 +964,24 @@ public class GameTest {
             checkEqual("Pawn", PieceType.PAWN.getDisplayName(), "Pawn display name");
         });
 
+        test("Piece · sprite sheet loads from the classpath with six piece columns", () -> {
+            BufferedImage sheet = Piece.loadSpriteSheet(Piece.SPRITE_SHEET_PATH);
+            checkNotNull(sheet, "the bundled sprite sheet must load");
+            checkEqual(0, sheet.getWidth() % 6, "the sheet width must split into six piece columns");
+            check(sheet.getHeight() >= sheet.getWidth() / 6 * 2, "the sheet must hold a white and a black row");
+        });
+
+        test("Piece · a missing sprite sheet fails with a message naming the resource", () -> {
+            String missing = "/resources/does-not-exist.png";
+            try {
+                Piece.loadSpriteSheet(missing);
+            } catch (IllegalStateException e) {
+                check(e.getMessage().contains(missing), "the message must name the missing resource, got: " + e.getMessage());
+                return;
+            }
+            check(false, "loading a missing sprite sheet must throw IllegalStateException");
+        });
+
         // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── ChessClock ───────────────────────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
