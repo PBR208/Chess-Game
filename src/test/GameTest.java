@@ -1828,6 +1828,31 @@ public class GameTest {
                     check(gc.getMoveLog().isEmpty(), "no move may be recorded after the game ended");
                 }));
 
+        test("GameController · FEN full-move number grows after every Black move", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameRecord[] finished = {null};
+                    gc.setGameEndListener((record, message) -> finished[0] = record);
+
+                    gc.makeMove(new Move(state, state.getPiece(6, 7), 5, 5)); // 1. Nf3
+                    gc.makeMove(new Move(state, state.getPiece(4, 1), 4, 3)); // 1... e5
+                    gc.makeMove(new Move(state, state.getPiece(3, 6), 3, 4)); // 2. d4
+                    gc.makeMove(new Move(state, state.getPiece(1, 0), 2, 2)); // 2... Nc6
+                    gc.makeMove(new Move(state, state.getPiece(1, 7), 3, 6)); // 3. Nbd2
+                    gc.flagFall(false); // ending the game hands over the recorded history
+
+                    List<String> expected = List.of(
+                            "rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq - 1 1",
+                            "rnbqkbnr/pppp1ppp/8/4p3/8/5N2/PPPPPPPP/RNBQKB1R w KQkq e6 0 2",
+                            "rnbqkbnr/pppp1ppp/8/4p3/3P4/5N2/PPP1PPPP/RNBQKB1R b KQkq d3 0 2",
+                            "r1bqkbnr/pppp1ppp/2n5/4p3/3P4/5N2/PPP1PPPP/RNBQKB1R w KQkq - 1 3",
+                            "r1bqkbnr/pppp1ppp/2n5/4p3/3P4/5N2/PPPNPPPP/R1BQKB1R b KQkq - 2 3");
+                    checkEqual(expected, finished[0].fenHistory, "every recorded FEN must carry the right counters");
+                }));
+
         // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── GameController · rules engine ────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
