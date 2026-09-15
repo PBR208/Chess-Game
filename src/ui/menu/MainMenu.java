@@ -45,9 +45,11 @@ public class MainMenu extends JPanel {
         card.setBorder(new EmptyBorder(48, 64, 48, 64));
         card.setMaximumSize(new Dimension(360, Integer.MAX_VALUE));
 
-        JLabel icons = new JLabel("\u2654  \u265a", SwingConstants.CENTER);
+        // plain letters stand in when the font has no chess symbols
+        Font iconFont = new Font(Font.SERIF, Font.PLAIN, 40);
+        JLabel icons = new JLabel(UiComponents.displayable(iconFont, "\u2654  \u265a", "K  k"), SwingConstants.CENTER);
         icons.setForeground(new Color(180, 180, 190));
-        icons.setFont(new Font(Font.SERIF, Font.PLAIN, 40));
+        icons.setFont(iconFont);
         icons.setAlignmentX(CENTER_ALIGNMENT);
         card.add(icons);
         card.add(Box.createVerticalStrut(12));
