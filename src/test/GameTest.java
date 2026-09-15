@@ -490,6 +490,13 @@ public class GameTest {
             checkEqual("Unlimited", cfg.timeLabel(), "timeLabel");
         });
 
+        test("GameConfig · increment defaults to zero and is kept when given", () -> {
+            checkEqual(0L, new GameConfig("A", "B", 60_000, 60_000, "Bullet 1+0").incrementMs(),
+                    "a configuration without increment must add nothing");
+            checkEqual(1_000L, new GameConfig("A", "B", 120_000, 120_000, "Bullet 2+1", 1_000).incrementMs(),
+                    "the given increment must be kept");
+        });
+
         // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── GameRecord ──────────────────────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
@@ -1060,6 +1067,48 @@ public class GameTest {
             check(expiredWhite[0], "expired flag should report isWhite = true");
             check(!clock.isRunning(), "clock must stop itself after expiring");
         });
+
+        test("ChessClock · keeps counting while the event thread is busy", () -> {
+            ChessClock clock = new ChessClock(true, 60_000, () -> {
+            }, (w) -> {
+            });
+            clock.start();
+            // block the event dispatch thread the clock timer runs on
+            SwingUtilities.invokeAndWait(() -> {
+                try {
+                    Thread.sleep(1_500);
+                } catch (InterruptedException ignored) {
+                }
+            });
+            long used = 60_000 - clock.getTimeMs();
+            clock.stop();
+            check(used >= 1_400, "a busy event thread must not hand out free time, only " + used + " ms were counted");
+        });
+
+        test("ChessClock · addTime adds an increment, but not to an unlimited clock", () -> {
+            ChessClock timed = new ChessClock(true, 60_000, () -> {
+            }, (w) -> {
+            });
+            timed.addTime(2_000);
+            checkEqual(62_000L, timed.getTimeMs(), "a timed clock must gain the added time");
+
+            ChessClock unlimited = new ChessClock(false, 0, () -> {
+            }, (w) -> {
+            });
+            unlimited.addTime(2_000);
+            checkEqual(0L, unlimited.getTimeMs(), "an unlimited clock must stay unlimited");
+        });
+
+        test("Board · the player who just moved gets the increment", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(new GameConfig("Alice", "Bob", 120_000, 120_000, "Bullet 2+1", 1_000));
+                    BoardState state = board.getState();
+                    board.getGameController().makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // e2-e4
+
+                    long whiteLeft = board.getRemainingTimeMs(true);
+                    check(whiteLeft > 120_000, "White's clock must include the one second increment, got " + whiteLeft + " ms");
+                    check(board.isClockRunning(false), "Black's clock must run after White's move");
+                }));
 
         // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── EndScreen ────────────────────────────────────────────────────");
@@ -1655,6 +1704,17 @@ public class GameTest {
                     NewGamePanel p = new NewGamePanel();
                     check(hasButton(p, "← Back"), "Must have a Back button");
                     check(hasButton(p, "Start ▶"), "Must have a Start button");
+                }));
+
+        test("NewGamePanel · presets with an increment pass it on to the game", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    findButton(p, "Bullet 2+1").doClick();
+                    checkEqual(1_000L, p.createConfig().incrementMs(), "Bullet 2+1 must add one second per move");
+                    findButton(p, "Rapid 15+10").doClick();
+                    checkEqual(10_000L, p.createConfig().incrementMs(), "Rapid 15+10 must add ten seconds per move");
+                    findButton(p, "Blitz 5+0").doClick();
+                    checkEqual(0L, p.createConfig().incrementMs(), "Blitz 5+0 has no increment");
                 }));
 
         // ═════════════════════════════════════════════════════════════════
