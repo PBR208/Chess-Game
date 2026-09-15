@@ -1110,6 +1110,45 @@ public class GameTest {
                     check(board.isClockRunning(false), "Black's clock must run after White's move");
                 }));
 
+        test("Input · a press on the bottom clock bar is ignored", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    Input input = new Input(board, board.getGameController());
+                    // below the first rank, on White's clock bar
+                    input.mousePressed(new java.awt.event.MouseEvent(board, java.awt.event.MouseEvent.MOUSE_PRESSED,
+                            System.currentTimeMillis(), 0, 40, 805, 1, false));
+                    check(board.getSelectedPiece() == null, "nothing may be selected from the clock bar");
+                }));
+
+        test("Input · a press on the top clock bar doesn't pick up a piece", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    Input input = new Input(board, board.getGameController());
+                    // above the eighth rank, on Black's clock bar, right over the a8 rook
+                    input.mousePressed(new java.awt.event.MouseEvent(board, java.awt.event.MouseEvent.MOUSE_PRESSED,
+                            System.currentTimeMillis(), 0, 40, 40, 1, false));
+                    check(board.getSelectedPiece() == null, "the a8 rook must not be picked up from the clock bar");
+                }));
+
+        test("Input · releasing a piece left of the board cancels the move", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    BoardState state = board.getState();
+                    Input input = new Input(board, board.getGameController());
+                    Piece knight = state.getPiece(1, 7); // b1
+
+                    // pick up the b1 knight in the middle of its square
+                    input.mousePressed(new java.awt.event.MouseEvent(board, java.awt.event.MouseEvent.MOUSE_PRESSED,
+                            System.currentTimeMillis(), 0, 125, 720, 1, false));
+                    // let go left of the board, level with a3
+                    input.mouseReleased(new java.awt.event.MouseEvent(board, java.awt.event.MouseEvent.MOUSE_RELEASED,
+                            System.currentTimeMillis(), 0, -50, 550, 1, false));
+
+                    checkEqual(1, knight.getCol(), "the knight must stay on the b-file");
+                    checkEqual(7, knight.getRow(), "the knight must stay on the first rank");
+                    check(board.getGameController().getMoveLog().isEmpty(), "no move may be played");
+                }));
+
         // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── EndScreen ────────────────────────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
