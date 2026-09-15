@@ -40,8 +40,8 @@ public class GameRecord {
 
     public String getDisplayTitle() {
         return whiteName + " vs " + blackName
-                + "  —  " + result
-                + "  —  " + date
-                + "  —  " + timeControl;
+                + "  \u2014  " + result
+                + "  \u2014  " + date
+                + "  \u2014  " + timeControl;
     }
 }

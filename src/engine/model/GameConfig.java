@@ -12,7 +12,7 @@ package engine.model;
 
 /**
  * @param whiteTimeMs 0 = unlimited
- * @param timeLabel   e.g. "Blitz 5+0" — shown in saved PGN
+ * @param timeLabel   e.g. "Blitz 5+0" - shown in saved PGN
  * @param incrementMs time added to a player's clock after each of their moves, 0 for none
  */
 public record GameConfig(String whiteName, String blackName, long whiteTimeMs, long blackTimeMs, String timeLabel,

@@ -20,7 +20,7 @@ public class FenLoader {
         return grid;
     }
 
-    //Whose turn is reflected in this FEN — 'w' or 'b'
+    //Whose turn is reflected in this FEN - 'w' or 'b'
     public static boolean isWhiteTurn(String fen) {
         String[] fields = fen.split(" ");
         return fields.length < 2 || fields[1].equals("w");
