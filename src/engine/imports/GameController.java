@@ -40,7 +40,8 @@ public class GameController {
     private boolean gameOver = false;
 
     private int passedMoves = 0;
-    private final int fullMove = 1;
+    // FEN full-move number, starts at 1 and grows after every Black move
+    private int fullMove = 1;
 
     public GameController(Board b, GameConfig config,
                           PromotionChooser promotionChooser, DrawOfferResolver drawOfferResolver) {
@@ -58,8 +59,8 @@ public class GameController {
      * <p>
      * A restart has to clear every piece of game state, including the finished flag, otherwise the
      * new game would reject all moves. I put the starting pieces back, reset the side to move, the
-     * fifty move counter and the en passant square, reset both clocks, clear the history and mark
-     * the game as running again.
+     * fifty move counter, the full move number and the en passant square, reset both clocks, clear
+     * the history and mark the game as running again.
      * <p>
      * Time complexity: O(p + m) where p is the number of pieces placed and m the number of moves
      * cleared from the history. Space complexity: O(p) for the new piece objects.
@@ -68,6 +69,8 @@ public class GameController {
         b.setPieces(b.addPieces());
         turnOfWhite = true;
         passedMoves = 0;
+        // a new game starts again at move 1
+        fullMove = 1;
         state.setEnPassantTile(-1);
         b.resetClocks();
         history.clear();
@@ -169,8 +172,8 @@ public class GameController {
      * This is the single place where a validated move changes the position. Once the game is over
      * I ignore the call, so nothing can alter the final position. Otherwise I move the rook along
      * when castling, let pawn moves handle their special rules, move any other piece and remove what
-     * it captures, update the fifty move counter and the side to move, record notation and FEN,
-     * check whether the game has ended and finally hand the clock over.
+     * it captures, update the fifty move counter, the side to move and the full move number, record
+     * notation and FEN, check whether the game has ended and finally hand the clock over.
      * <p>
      * Time complexity: O(p * s) where p is the number of pieces and s the 64 squares, dominated by
      * the checkmate and stalemate search after the move. Space complexity: O(m) for the growing
@@ -218,6 +221,10 @@ public class GameController {
 
         passedMoves++;
         turnOfWhite = !turnOfWhite;
+        // a full move is complete once Black has moved, the FEN below must already show the new number
+        if (turnOfWhite) {
+            fullMove++;
+        }
 
         history.record(pMove, fromCol, fromRow, turnOfWhite, passedMoves, fullMove);
 
