@@ -2144,6 +2144,64 @@ public class GameTest {
                     check(ending[0].startsWith("1/2-1/2"), "a lone king can't win on time, got: " + ending[0]);
                 }));
 
+        test("GameController · the 50-move claim is offered once to each player, not after every move", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    custom.add(new King(board, 0, 7, true));   // a1, start of the white king tour
+                    custom.add(new King(board, 5, 0, false));  // f8, start of the black king tour
+                    custom.add(new Pawn(board, 0, 4, true));   // a4, blocked by a5
+                    custom.add(new Pawn(board, 0, 3, false));  // a5
+                    state.setPieces(custom);
+
+                    FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // both players decline
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    shuffleKings(gc, state, 120);
+
+                    checkEqual(2, resolver.offerDrawCount,
+                            "White and Black must each be asked once, not after all 21 moves past the limit");
+                }));
+
+        guiTest("GameController · the 50-move claim runs on the claiming player's clock", () -> {
+            boolean[] clocks = {false, false, false}; // claim seen, white running, black running
+            Board[] boardHolder = {null};
+            // read both clocks while the claim dialog is on screen, then decline it
+            Timer decline = new Timer(20, e -> {
+                for (Window w : Window.getWindows()) {
+                    if (w instanceof JDialog d && d.isVisible() && boardHolder[0] != null && hasButton(d, "Decline")) {
+                        clocks[0] = true;
+                        clocks[1] = boardHolder[0].isClockRunning(true);
+                        clocks[2] = boardHolder[0].isClockRunning(false);
+                        clickButton(d, "Decline");
+                        ((Timer) e.getSource()).stop();
+                    }
+                }
+            });
+            decline.start();
+
+            SwingUtilities.invokeAndWait(() -> {
+                Board board = new Board(new GameConfig("Alice", "Bob", 600_000, 600_000, "Rapid 10+0"));
+                boardHolder[0] = board;
+                ArrayList<Piece> custom = new ArrayList<>();
+                custom.add(new King(board, 0, 7, true));   // a1, start of the white king tour
+                custom.add(new King(board, 5, 0, false));  // f8, start of the black king tour
+                custom.add(new Pawn(board, 0, 4, true));   // a4, blocked by a5
+                custom.add(new Pawn(board, 0, 3, false));  // a5
+                board.getState().setPieces(custom);
+                board.getGameController().setGameEndListener((record, message) -> {
+                });
+                // Black's 50th move opens the claim for White on the board's own controller
+                shuffleKings(board.getGameController(), board.getState(), 100);
+            });
+            decline.stop();
+
+            check(clocks[0], "the 50-move claim must have been offered");
+            check(clocks[1], "White is the one to decide, so White's clock must run");
+            check(!clocks[2], "Black already moved, so Black's clock must be stopped");
+        });
+
         // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── GameController · rules engine ────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
@@ -2551,6 +2609,7 @@ public class GameTest {
     private static class FakeDrawOfferResolver implements DrawOfferResolver {
         private final boolean acceptOffer;
         boolean offerDrawCalled = false;
+        int offerDrawCount = 0;
         boolean forcedDrawNotified = false;
 
         FakeDrawOfferResolver(boolean acceptOffer) {
@@ -2562,9 +2621,21 @@ public class GameTest {
             forcedDrawNotified = true;
         }
 
+        /**
+         * Records that a draw claim was offered and answers with the configured choice.
+         * <p>
+         * Tests check both whether and how often a claim was offered. I set the flag, count the call
+         * and return the answer the test picked when it created this fake.
+         * <p>
+         * Time complexity: O(1). Space complexity: O(1).
+         *
+         * @return true if this fake accepts every offer, false if it declines them
+         */
         @Override
         public boolean offerDraw() {
             offerDrawCalled = true;
+            // lets tests make sure a claim isn't offered over and over
+            offerDrawCount++;
             return acceptOffer;
         }
     }
