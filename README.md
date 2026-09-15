@@ -239,8 +239,8 @@ with JDK 17 and JDK 25, plus the window tests on Linux under a virtual display (
 
 ### Prerequisites
 
-- Java **JDK 17** or later
-- Any Java IDE (IntelliJ IDEA, Eclipse, VS Code with Java Extension Pack)
+A Java **JDK 17** or later is all you need. The build script is plain Java, so there is no Maven, Gradle, or shell
+script to install. An IDE (IntelliJ IDEA, Eclipse, VS Code with the Java Extension Pack) is optional.
 
 ### Running the Game
 
@@ -251,22 +251,28 @@ git clone https://github.com/PBR208/Chess-Game.git
 cd Chess-Game
 ```
 
-**Compile from the command line:**
+**Build and run from the command line**, with the same commands on Windows, macOS, and Linux:
 
 ```bash
-javac -d out $(find src -name "*.java")
+java build/Build.java              # compile for Java 17, run the headless tests, package out/Chess-Game.jar
+java build/Build.java run          # compile if needed and start the game
+java -jar out/Chess-Game.jar       # start the packaged jar
 ```
 
-**Run:**
+The script also knows the targets `clean`, `compile`, `test`, `test-gui`, and `jar`, and runs several of them in the
+order given. It compiles with `--release 17` and UTF-8 source encoding no matter which JDK runs it, copies
+`src/resources` next to the classes so the sprite sheet is found, and refuses to package class files that need a Java
+newer than 17.
 
-```bash
-java -cp out app.Main
-```
+**Or open in an IDE:** import the project folder, mark `src` as the source root, and run `app.Main`.
 
-**Or open in an IDE:** import the project folder and run `Main.java` directly.
+The game needs a graphical display. Started without one, for example on a server or with `-Djava.awt.headless=true`,
+it prints what is missing and exits with code 2 instead of failing silently.
 
-> Alternatively, download the pre-built `.jar` from
-> the [latest release](https://github.com/PBR208/Chess-Game/releases/latest) and run it with `java -jar Chess-Game.jar`.
+> **About the release jar:** the `Chess-Game.jar` attached to
+> [v1.2.1](https://github.com/PBR208/Chess-Game/releases/tag/v1.2.1) was built for Java 25 and won't start on older
+> runtimes. Until the next release is out, build the jar yourself as shown above, or download the `Chess-Game-jar`
+> artifact of a recent CI run, which targets Java 17.
 
 ---
 
