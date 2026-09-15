@@ -253,6 +253,20 @@ public class ChessClock {
     }
 
     /**
+     * Tells whether the refresh timer of this clock is currently active.
+     * <p>
+     * A timer that keeps firing holds on to the board through its repaint callback, so tests need to
+     * see whether it still runs. I report the state of the Swing timer.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return true if the refresh timer is running
+     */
+    public boolean isTicking() {
+        return timer.isRunning();
+    }
+
+    /**
      * Returns the time this player has left.
      * <p>
      * Tests, the result logic and later features need the exact remaining time, not the value that
