@@ -97,12 +97,13 @@ public class GameController {
     /**
      * Ends the game when the move just played finished it.
      * <p>
-     * After every move the game may be over by checkmate, stalemate, repetition or the move-count
-     * rules. The check state, whether the opponent has any legal reply and how often the new
-     * position occurred come from makeMove, so the expensive search over all replies runs only once
-     * per move. No reply while in check is checkmate and no reply without check is stalemate. After
-     * that the automatic draws come first, the fifth occurrence of a position and the 75-move rule,
-     * and then the draws the player may claim, a third or fourth occurrence and the 50-move rule.
+     * After every move the game may be over by checkmate, stalemate, insufficient material,
+     * repetition or the move-count rules. The check state, whether the opponent has any legal reply
+     * and how often the new position occurred come from makeMove, so the expensive search over all
+     * replies runs only once per move. No reply while in check is checkmate, no reply without check
+     * is stalemate, and material that can never checkmate ends the game as a draw. After that the
+     * automatic draws come first, the fifth occurrence of a position and the 75-move rule, and then
+     * the draws the player may claim, a third or fourth occurrence and the 50-move rule.
      * <p>
      * Time complexity: O(1) here, the reply search already happened in makeMove.
      * Space complexity: O(1).
@@ -126,6 +127,12 @@ public class GameController {
         // no legal reply without check is stalemate
         if (!pOpponentCanMove) {
             endGame("1/2-1/2", "Stalemate — Draw");
+            return;
+        }
+
+        // a position where nobody can ever checkmate is a draw right away
+        if (isInsufficientMaterial()) {
+            endGame("1/2-1/2", "Insufficient material — Draw");
             return;
         }
 
@@ -478,6 +485,47 @@ public class GameController {
             }
         }
         return false;
+    }
+
+    /**
+     * Tells whether neither side has enough material left to ever checkmate.
+     * <p>
+     * With only kings, a king and a single knight, or kings and bishops that all stand on squares of
+     * one colour, no sequence of legal moves can end in checkmate, so FIDE rule 5.2.2 treats the game
+     * as drawn right away. I go through all pieces and give up as soon as a queen, rook or pawn shows
+     * up, count the knights and remember which square colours the bishops stand on.
+     * <p>
+     * Time complexity: O(p) for p pieces. Space complexity: O(1).
+     *
+     * @return true if the remaining material can never produce a checkmate
+     */
+    private boolean isInsufficientMaterial() {
+        int knights = 0;
+        boolean lightBishop = false;
+        boolean darkBishop = false;
+        for (Piece piece : state.getPieces()) {
+            switch (piece.getType()) {
+                // both kings are always on the board
+                case KING -> {
+                }
+                case KNIGHT -> knights++;
+                // a8 is a light square, so an even column plus row means light
+                case BISHOP -> {
+                    if ((piece.getCol() + piece.getRow()) % 2 == 0) {
+                        lightBishop = true;
+                    } else {
+                        darkBishop = true;
+                    }
+                }
+                // a queen, rook or pawn can still lead to a mate
+                default -> {
+                    return false;
+                }
+            }
+        }
+        // bishops on a single colour without knights, or one knight without bishops
+        return (knights == 0 && !(lightBishop && darkBishop))
+                || (knights == 1 && !lightBishop && !darkBishop);
     }
 
     private void promotePawn(Move m) {
