@@ -1105,6 +1105,16 @@ public class GameTest {
             check(!callbackFired[0], "onReturn must only fire from the button click, not from dispose()");
         });
 
+        guiTest("EndScreen · closing the window also invokes onReturn", () -> {
+            boolean[] callbackFired = {false};
+            SwingUtilities.invokeAndWait(() -> {
+                EndScreen d = new EndScreen(frame, "White wins", TILE_SIZE, () -> callbackFired[0] = true);
+                // same event the window system sends for Alt+F4
+                d.dispatchEvent(new java.awt.event.WindowEvent(d, java.awt.event.WindowEvent.WINDOW_CLOSING));
+            });
+            check(callbackFired[0], "closing the end screen window must return to the menu as well");
+        });
+
         // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── FiftyRuleDraw (optional claim) ──────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
@@ -1781,6 +1791,24 @@ public class GameTest {
             checkEqual(1, endMessages.size(), "only the checkmate may end the game, got: " + endMessages);
             check(endMessages.get(0).contains("checkmate"), "the single result must be the checkmate");
         });
+
+        test("GameController · no move is accepted after the game is over", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    gc.setGameEndListener((record, message) -> {
+                    });
+                    gc.flagFall(true); // the game ends on time
+
+                    Piece pawn = state.getPiece(4, 6);
+                    Move m = new Move(state, pawn, 4, 4); // e2-e4
+                    check(!gc.isValidMove(m), "e2-e4 must be rejected once the game is over");
+                    gc.makeMove(m); // a direct call must be ignored as well
+                    checkEqual(6, pawn.getRow(), "the pawn must stay on e2");
+                    check(gc.getMoveLog().isEmpty(), "no move may be recorded after the game ended");
+                }));
 
         // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── GameController · rules engine ────────────────────────────────");
