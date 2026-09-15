@@ -327,8 +327,21 @@ public class GameController {
         return !cs.isKingInCheckRN(teamColorWhite) && !hasLegalMoves(teamColorWhite);
     }
 
+    /**
+     * Hands the clock over to the next player and repaints the board after a move.
+     * <p>
+     * After a normal move the player who just moved stops and the opponent's clock starts. Once the
+     * game has ended both clocks must stay stopped, otherwise the loser's clock keeps running and
+     * later reports a time forfeit for a game that is already over. I only switch clocks while the
+     * game is still running and always repaint so the final position is shown.
+     * <p>
+     * Time complexity: O(1), the repaint is only scheduled. Space complexity: O(1).
+     */
     private void flip() {
-        b.switchClocks();
+        // a finished game keeps both clocks stopped
+        if (!gameOver) {
+            b.switchClocks();
+        }
         b.repaint();
     }
 
@@ -342,13 +355,33 @@ public class GameController {
         return false;
     }
 
-    private void endGame(String result, String displayMessage) {
+    /**
+     * Finishes the game with a result and notifies the listener exactly once.
+     * <p>
+     * A game can only end one way, even when a flag falls right after a checkmate. I ignore every
+     * call after the first, then mark the game as over, stop both clocks, build the record from the
+     * move and FEN history and hand it to the listener, which saves the PGN and shows the end
+     * screen.
+     * <p>
+     * Time complexity: O(m) where m is the number of recorded moves, for copying the history into
+     * the record. Space complexity: O(m) for the record.
+     *
+     * @param pResult         PGN result token, one of "1-0", "0-1" or "1/2-1/2"; never null
+     * @param pDisplayMessage human readable message for the end screen, never null
+     */
+    private void endGame(String pResult, String pDisplayMessage) {
+        // the first result is final
+        if (gameOver) {
+            return;
+        }
         gameOver = true;
+        // a finished game has no running clock
         b.stopClocks();
-        GameRecord record = new GameRecord(config, result,
+        GameRecord record = new GameRecord(config, pResult,
                 history.getMoveLog(), history.getFenHistory());
+        // the listener saves the game and shows the end screen
         if (gameEndListener != null) {
-            gameEndListener.onGameEnd(record, displayMessage);
+            gameEndListener.onGameEnd(record, pDisplayMessage);
         }
     }
 

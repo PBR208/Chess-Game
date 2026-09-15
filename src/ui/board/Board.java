@@ -1,5 +1,16 @@
 package ui.board;
 
+/*
+ * Purpose: Board is the Swing panel that shows a running game. It paints the tiles, the pieces,
+ * the legal move hints and both player clocks, and it translates between screen pixels and board
+ * squares while turning the view towards the player to move. The position data itself lives in
+ * BoardState and the rules in GameController, so this class stays focused on presentation and on
+ * owning the two clocks.
+ *
+ * Owner: PBR208 - https://github.com/PBR208/
+ * Version: 1.0
+ */
+
 import engine.imports.BoardState;
 import engine.model.GameConfig;
 import engine.imports.GameController;
@@ -147,6 +158,21 @@ public class Board extends JPanel {
         whiteClock.reset();
         blackClock.reset();
         whiteClock.start();
+    }
+
+    /**
+     * Tells whether either player's clock is currently counting down.
+     * <p>
+     * The end of a game has to freeze both clocks, and tests need a way to confirm that without
+     * waiting for a flag to fall. I simply ask both clocks for their running state.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return true if the white or the black clock is running, false when both are stopped
+     */
+    public boolean areClocksRunning() {
+        // a single running clock is enough
+        return whiteClock.isRunning() || blackClock.isRunning();
     }
 
     public int toVisualX(int col) {
