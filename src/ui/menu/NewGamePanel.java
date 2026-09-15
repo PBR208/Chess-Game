@@ -37,6 +37,13 @@ public class NewGamePanel extends JPanel {
     private final JTextField blackField = new JTextField("Black", 14);
     private final JTextField customMin = new JTextField("10", 4);
     private final JTextField customSec = new JTextField("0", 4);
+    // selecting it makes the game use the minutes and seconds typed next to it
+    private final JToggleButton customBtn = new JToggleButton("Custom:");
+    // explains why a custom time can't be used, a single space keeps the line's height
+    private final JLabel customError = new JLabel(" ");
+
+    // longest custom time the screen accepts
+    private static final long MAX_CUSTOM_TIME_MS = 24 * 60 * 60 * 1000L;
 
     // preset that is selected when the screen opens
     private static final String DEFAULT_PRESET = "Rapid 10+0";
@@ -52,8 +59,9 @@ public class NewGamePanel extends JPanel {
      * <p>
      * Before a game starts the players pick their names and a time control. I lay out the name
      * fields, one toggle button per preset that remembers its times and increment, with Rapid 10+0
-     * selected and filled in from the start, the custom time row and the Back and Start buttons.
-     * Start hands the resulting configuration to the main window.
+     * selected and filled in from the start, the custom time row with a line for input problems, and
+     * the Back and Start buttons. Start hands the resulting configuration to the main window unless
+     * the custom time can't be used.
      * <p>
      * Time complexity: O(k) for k presets. Space complexity: O(k) for their buttons.
      */
@@ -127,23 +135,22 @@ public class NewGamePanel extends JPanel {
         JPanel customRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         customRow.setBackground(Theme.PANEL_BG);
 
-        JToggleButton customBtn = new JToggleButton("Custom:");
         UiComponents.style(customBtn, new Font("Arial", Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
         group.add(customBtn);
 
         styleField(customMin);
         styleField(customSec);
 
-        customBtn.addActionListener(e -> {
-            applyCustomTime();
-        });
+        // the fields are read when the game starts, so selecting Custom only clears an old message
+        customBtn.addActionListener(e -> customError.setText(" "));
 
         customBtn.addItemListener(e -> {
             customBtn.setBackground(customBtn.isSelected() ? Theme.ACCENT : Theme.BUTTON_SECONDARY);
         });
 
-        customMin.addActionListener(e -> applyCustomTime());
-        customSec.addActionListener(e -> applyCustomTime());
+        // pressing Enter in a field picks the custom time
+        customMin.addActionListener(e -> customBtn.doClick());
+        customSec.addActionListener(e -> customBtn.doClick());
 
         customRow.add(customBtn);
         customRow.add(customMin);
@@ -151,7 +158,13 @@ public class NewGamePanel extends JPanel {
         customRow.add(customSec);
         customRow.add(fieldLabel("sec"));
         card.add(customRow);
-        card.add(Box.createVerticalStrut(32));
+
+        // tells the player why a custom time can't be used
+        customError.setForeground(new Color(210, 90, 90));
+        customError.setFont(new Font("Arial", Font.PLAIN, 12));
+        customError.setAlignmentX(LEFT_ALIGNMENT);
+        card.add(customError);
+        card.add(Box.createVerticalStrut(24));
 
         JPanel buttons = new JPanel(new GridLayout(1, 2, 12, 0));
         buttons.setBackground(Theme.PANEL_BG);
@@ -160,8 +173,13 @@ public class NewGamePanel extends JPanel {
         JButton startBtn = actionButton("Start \u25b6", true);
 
         backBtn.addActionListener(e -> Main.showMenu());
-        // start the game with everything selected on this screen
-        startBtn.addActionListener(e -> Main.startGame(createConfig()));
+        // start the game with everything selected on this screen, unless the custom time is unusable
+        startBtn.addActionListener(e -> {
+            GameConfig config = createConfig();
+            if (config != null) {
+                Main.startGame(config);
+            }
+        });
 
         buttons.add(backBtn);
         buttons.add(startBtn);
@@ -191,46 +209,82 @@ public class NewGamePanel extends JPanel {
     }
 
     /**
-     * Uses the minutes and seconds from the custom fields as the time control.
+     * Reads the custom time from the minute and second fields and checks that it can be used.
      * <p>
-     * Players who want a time that isn't a preset type it into the two fields. I parse both fields,
-     * set the same total time for both players with no increment and build a matching label.
-     * Invalid input keeps the previous selection.
+     * Players who want a time that isn't a preset type it into the two fields, and the value has to
+     * make sense for a clock. I parse both fields as whole numbers, accept 0 to 59 seconds and a
+     * total above zero and at most 24 hours, and show the reason under the fields when something is
+     * wrong. A valid time clears the message.
      * <p>
-     * Time complexity: O(1). Space complexity: O(1).
+     * Time complexity: O(n) in the length of the field texts. Space complexity: O(1).
+     *
+     * @return the custom time in milliseconds, or -1 when the input can't be used
      */
-    private void applyCustomTime() {
+    private long readCustomTimeMs() {
+        long mins;
+        long secs;
         try {
-            long mins = Long.parseLong(customMin.getText().trim());
-            long secs = Long.parseLong(customSec.getText().trim());
-            selectedWhiteMs = (mins * 60 + secs) * 1000L;
-            selectedBlackMs = selectedWhiteMs;
-            selectedLabel = "Custom " + mins + "+" + secs;
-            // custom times don't have an increment
-            selectedIncrementMs = 0;
+            mins = Long.parseLong(customMin.getText().trim());
+            secs = Long.parseLong(customSec.getText().trim());
         } catch (NumberFormatException ex) {
-            // ignore invalid input, keep previous selection
+            customError.setText("Minutes and seconds have to be whole numbers.");
+            return -1;
         }
+        // seconds above 59 belong in the minutes field
+        if (mins < 0 || secs < 0 || secs > 59) {
+            customError.setText("Use 0 or more minutes and 0 to 59 seconds.");
+            return -1;
+        }
+        // checking the minutes first also keeps the multiplication below from overflowing
+        if (mins > MAX_CUSTOM_TIME_MS / 60_000 || (mins * 60 + secs) * 1000L > MAX_CUSTOM_TIME_MS
+                || mins + secs == 0) {
+            customError.setText("The time has to be more than 0 and at most 24 hours.");
+            return -1;
+        }
+        customError.setText(" ");
+        return (mins * 60 + secs) * 1000L;
     }
 
     /**
      * Builds the configuration for a new game from the current selections.
      * <p>
      * The Start button needs one object with everything the game has to know. I take the trimmed
-     * names from the two fields and the times, label and increment of the selected time control.
+     * names from the two fields and the times, label and increment of the selected preset. When
+     * Custom is selected, I read the minute and second fields right now, so the value counts without
+     * pressing Enter, and use it for both players without an increment. An unusable custom time gives
+     * no configuration, and the reason is shown under the fields.
      * <p>
-     * Time complexity: O(n) in the length of the names. Space complexity: O(n) for the configuration.
+     * Time complexity: O(n) in the length of the names and field texts.
+     * Space complexity: O(n) for the configuration.
      *
-     * @return the configuration for the new game, never null
+     * @return the configuration for the new game, or null when the custom time can't be used
      */
     public GameConfig createConfig() {
+        long whiteMs = selectedWhiteMs;
+        long blackMs = selectedBlackMs;
+        String label = selectedLabel;
+        long incrementMs = selectedIncrementMs;
+
+        // a selected custom time is taken from the fields as they are now
+        if (customBtn.isSelected()) {
+            long customMs = readCustomTimeMs();
+            if (customMs < 0) {
+                return null;
+            }
+            whiteMs = customMs;
+            blackMs = customMs;
+            // minutes and seconds, so it can't be mistaken for an increment like 5+30
+            label = "Custom " + customMs / 60_000 + ":" + String.format("%02d", customMs / 1000 % 60);
+            incrementMs = 0;
+        }
+
         return new GameConfig(
                 whiteField.getText().trim(),
                 blackField.getText().trim(),
-                selectedWhiteMs,
-                selectedBlackMs,
-                selectedLabel,
-                selectedIncrementMs);
+                whiteMs,
+                blackMs,
+                label,
+                incrementMs);
     }
 
     private JLabel sectionLabel(String text) {
