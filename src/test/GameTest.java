@@ -1850,6 +1850,70 @@ public class GameTest {
                     check(state.getPiece(3, 3) == null, "the passed pawn's original square must be empty");
                 }));
 
+        test("GameController · en passant that captures the checking pawn is legal, not checkmate", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+
+                    // FEN 5r1k/8/2p5/3pP3/p3K3/P7/8/2br4 w - d6 0 2, Black just played d7-d5 with check
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whitePawn = new Pawn(board, 4, 3, true);     // e5
+                    Piece checkingPawn = new Pawn(board, 3, 3, false); // d5
+                    custom.add(new King(board, 4, 4, true));           // e4
+                    custom.add(whitePawn);
+                    custom.add(new Pawn(board, 0, 5, true));           // a3, blocked by a4
+                    custom.add(checkingPawn);
+                    custom.add(new King(board, 7, 0, false));          // h8
+                    custom.add(new Rook(board, 5, 0, false));          // f8 covers the f-file
+                    custom.add(new Rook(board, 3, 7, false));          // d1 covers the d-file
+                    custom.add(new Bishop(board, 2, 7, false));        // c1 covers e3
+                    custom.add(new Pawn(board, 2, 2, false));          // c6 guards d5
+                    custom.add(new Pawn(board, 0, 4, false));          // a4
+                    for (Piece p : custom) if (p instanceof Pawn) p.setFirstMove(false);
+                    state.setPieces(custom);
+                    state.setEnPassantTile(state.getTileNum(3, 2));    // d6
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    String[] endMessage = {null};
+                    gc.setGameEndListener((record, msg) -> endMessage[0] = msg);
+
+                    check(!gc.isCheckmate(true), "exd6 en passant removes the checking pawn, so White is not mated");
+                    Move enPassant = new Move(state, whitePawn, 3, 2); // exd6
+                    check(gc.isValidMove(enPassant), "exd6 en passant must be legal while in check from d5");
+
+                    gc.makeMove(enPassant);
+                    check(!state.getPieces().contains(checkingPawn), "the checking pawn must be captured");
+                    check(!new CheckScanner(state).isKingInCheckRN(true), "White must be out of check after exd6");
+                    check(endMessage[0] == null, "the game must go on after exd6");
+                }));
+
+        test("GameController · en passant that exposes the own king along the rank is illegal", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+
+                    // FEN 4k3/8/8/KPp4r/8/7P/8/8 w - c6 0 2, Black just played c7-c5
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whitePawn = new Pawn(board, 1, 3, true); // b5
+                    custom.add(new King(board, 0, 3, true));        // a5
+                    custom.add(whitePawn);
+                    custom.add(new Pawn(board, 7, 5, true));        // h3
+                    custom.add(new Pawn(board, 2, 3, false));       // c5
+                    custom.add(new Rook(board, 7, 3, false));       // h5, same rank as the king
+                    custom.add(new King(board, 4, 0, false));       // e8
+                    for (Piece p : custom) if (p instanceof Pawn) p.setFirstMove(false);
+                    state.setPieces(custom);
+                    state.setEnPassantTile(state.getTileNum(2, 2)); // c6
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    Move enPassant = new Move(state, whitePawn, 2, 2); // bxc6
+                    check(!gc.isValidMove(enPassant),
+                            "bxc6 en passant clears both pawns from the 5th rank and must be illegal");
+                    check(state.getPiece(2, 3) != null, "the check simulation must put the c5 pawn back");
+                }));
+
         test("GameController · pawn promotion asks the PromotionChooser and replaces the piece", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
