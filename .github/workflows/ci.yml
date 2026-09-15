@@ -40,3 +40,10 @@ jobs:
       - name: Window tests
         if: runner.os == 'Linux'
         run: xvfb-run --auto-servernum java build/Build.java test-gui
+      # keep the jar built with the oldest supported Java so it can be downloaded and tried
+      - name: Upload the jar
+        if: runner.os == 'Linux' && matrix.java == '17'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chess-Game-jar
+          path: out/Chess-Game.jar
