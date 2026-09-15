@@ -49,8 +49,9 @@ public class ChessClock {
      * Creates a stopped clock with the given starting time.
      * <p>
      * Every player gets their own clock when a board is built. I store the colour, the starting
-     * time and the two callbacks, and start the Swing timer that refreshes the display ten times a
-     * second. The timer only looks at the clock, the actual time is measured separately.
+     * time and the two callbacks, and create the Swing timer that refreshes the display ten times a
+     * second while the clock runs. The timer only looks at the clock, the actual time is measured
+     * separately.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
@@ -67,16 +68,16 @@ public class ChessClock {
         this.onRepaint = pOnRepaint;
         this.onExpired = pOnExpired;
 
+        // started and stopped together with the clock, a timer that keeps running keeps the board alive
         timer = new Timer(100, e -> tick());
-        timer.start(); // always spinning; only counts while running == true
     }
 
     /**
      * Starts counting down this player's time.
      * <p>
      * A player's time runs from the moment it is their turn. I remember that moment from the
-     * monotonic clock and mark the clock as running. Starting a clock that already runs changes
-     * nothing, so its original start moment is kept.
+     * monotonic clock, mark the clock as running and start the refresh timer. Starting a clock that
+     * already runs changes nothing, so its original start moment is kept.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      */
@@ -87,14 +88,17 @@ public class ChessClock {
         }
         runningSinceNanos = System.nanoTime();
         running = true;
+        // only a running clock needs display refreshes
+        timer.start();
     }
 
     /**
      * Stops counting down and keeps the time that is left.
      * <p>
      * When a player finishes a move their time has to freeze exactly where it is. I work out the
-     * remaining time from the monotonic clock, store it and mark the clock as stopped. Stopping a
-     * clock that isn't running changes nothing.
+     * remaining time from the monotonic clock, store it, mark the clock as stopped and stop the
+     * refresh timer, so nothing keeps firing for a clock that doesn't run. Stopping a clock that
+     * isn't running changes nothing.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      */
@@ -107,18 +111,21 @@ public class ChessClock {
         bankedMs = currentTimeMs();
         timeMs = bankedMs;
         running = false;
+        // a stopped timer no longer holds on to this clock and its board
+        timer.stop();
     }
 
     /**
      * Stops the clock and puts the starting time back.
      * <p>
-     * A restarted game needs both clocks as they were at the beginning. I stop the clock and reset
-     * the stored and displayed time to the starting time.
+     * A restarted game needs both clocks as they were at the beginning. I stop the clock and its
+     * refresh timer and reset the stored and displayed time to the starting time.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      */
     public void reset() {
         running = false;
+        timer.stop();
         timeMs = START_TIME_MS;
         bankedMs = START_TIME_MS;
     }
