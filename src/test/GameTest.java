@@ -1744,6 +1744,44 @@ public class GameTest {
                     checkEqual(1, callCount[0], "listener must fire exactly once");
                 }));
 
+        test("GameController · a second end condition after the game is over is ignored", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = new GameConfig("Alice", "Bob", 100, 100, "Bullet");
+                    Board board = new Board(cfg);
+                    List<String> results = new ArrayList<>();
+                    board.getGameController().setGameEndListener((record, message) -> results.add(record.result));
+
+                    board.getGameController().flagFall(true);  // White flags first
+                    board.getGameController().flagFall(false); // a late second flag must not count
+                    checkEqual(List.of("0-1"), results, "only the first result may be reported");
+                }));
+
+        test("GameController · checkmate leaves both clocks stopped so no flag can fall later", () -> {
+            GameConfig cfg = new GameConfig("Alice", "Bob", 400, 400, "Bullet");
+            List<String> endMessages = new java.util.concurrent.CopyOnWriteArrayList<>();
+            Board[] boardHolder = {null};
+
+            SwingUtilities.invokeAndWait(() -> {
+                Board board = new Board(cfg);
+                BoardState state = board.getState();
+                GameController gc = board.getGameController();
+                gc.setGameEndListener((record, message) -> endMessages.add(message));
+
+                // Fool's mate
+                gc.makeMove(new Move(state, state.getPiece(5, 6), 5, 5)); // f2-f3
+                gc.makeMove(new Move(state, state.getPiece(4, 1), 4, 3)); // e7-e5
+                gc.makeMove(new Move(state, state.getPiece(6, 6), 6, 4)); // g2-g4
+                gc.makeMove(new Move(state, state.getPiece(3, 0), 7, 4)); // Qd8-h4#
+                boardHolder[0] = board;
+            });
+
+            check(!boardHolder[0].areClocksRunning(), "no clock may run once the game is over");
+            // wait longer than the whole clock, a restarted clock would have flagged by now
+            Thread.sleep(1_000);
+            checkEqual(1, endMessages.size(), "only the checkmate may end the game, got: " + endMessages);
+            check(endMessages.get(0).contains("checkmate"), "the single result must be the checkmate");
+        });
+
         // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── GameController · rules engine ────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
