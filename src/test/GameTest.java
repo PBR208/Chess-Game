@@ -1943,6 +1943,42 @@ public class GameTest {
                     checkEqual(0L, p.createConfig().incrementMs(), "Blitz 5+0 has no increment");
                 }));
 
+        test("NewGamePanel: an untouched screen starts the preselected Rapid 10+0", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = new NewGamePanel().createConfig();
+                    checkEqual("Rapid 10+0", cfg.timeLabel(), "the label must match the preselected preset");
+                    checkEqual(600_000L, cfg.whiteTimeMs(), "White must get ten minutes");
+                    checkEqual(600_000L, cfg.blackTimeMs(), "Black must get ten minutes");
+                }));
+
+        test("NewGamePanel: a custom time counts without pressing Enter", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    findButton(p, "Custom:").doClick();
+                    List<JTextField> fields = findAllTextFields(p);
+                    // the minute and second fields follow the two name fields
+                    fields.get(2).setText("5");
+                    fields.get(3).setText("30");
+
+                    GameConfig cfg = p.createConfig();
+                    checkNotNull(cfg, "a valid custom time must produce a configuration");
+                    checkEqual(330_000L, cfg.whiteTimeMs(), "White must get five and a half minutes");
+                    checkEqual(330_000L, cfg.blackTimeMs(), "Black must get five and a half minutes");
+                    checkEqual("Custom 5:30", cfg.timeLabel(), "the label must show minutes and seconds");
+                }));
+
+        test("NewGamePanel: an invalid custom time is refused with a message", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    findButton(p, "Custom:").doClick();
+                    findAllTextFields(p).get(2).setText("-3");
+
+                    check(p.createConfig() == null, "a negative time must not produce a configuration");
+                    boolean explained = findAllLabels(p).stream()
+                            .anyMatch(l -> l.getText() != null && l.getText().contains("minutes"));
+                    check(explained, "the reason must be shown on the screen");
+                }));
+
         // =================================================================
         System.out.println("\n-- PastGamesPanel -----------------------------------------------");
         // =================================================================
