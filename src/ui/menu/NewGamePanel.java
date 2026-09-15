@@ -38,18 +38,22 @@ public class NewGamePanel extends JPanel {
     private final JTextField customMin = new JTextField("10", 4);
     private final JTextField customSec = new JTextField("0", 4);
 
-    private long selectedWhiteMs = 600_000L;
-    private long selectedBlackMs = 600_000L;
-    private String selectedLabel = "Unlimited";
-    private long selectedIncrementMs = 0;
+    // preset that is selected when the screen opens
+    private static final String DEFAULT_PRESET = "Rapid 10+0";
+
+    // filled in from the default preset while the buttons are built
+    private long selectedWhiteMs;
+    private long selectedBlackMs;
+    private String selectedLabel;
+    private long selectedIncrementMs;
 
     /**
      * Builds the New Game screen with player names, time controls and the start and back buttons.
      * <p>
      * Before a game starts the players pick their names and a time control. I lay out the name
-     * fields, one toggle button per preset that remembers its times and increment, the custom time
-     * row and the Back and Start buttons. Start hands the resulting configuration to the main
-     * window.
+     * fields, one toggle button per preset that remembers its times and increment, with Rapid 10+0
+     * selected and filled in from the start, the custom time row and the Back and Start buttons.
+     * Start hands the resulting configuration to the main window.
      * <p>
      * Time complexity: O(k) for k presets. Space complexity: O(k) for their buttons.
      */
@@ -101,20 +105,17 @@ public class NewGamePanel extends JPanel {
             // Bullet 2+1 and Rapid 15+10 add time after every move
             long incMs = (long) p[4];
 
-            btn.addActionListener(e -> {
-                selectedWhiteMs = wMs;
-                selectedBlackMs = bMs;
-                selectedLabel = label;
-                selectedIncrementMs = incMs;
-            });
+            btn.addActionListener(e -> selectPreset(wMs, bMs, label, incMs));
 
             btn.addItemListener(e -> {
                 btn.setBackground(btn.isSelected() ? Theme.ACCENT : Theme.BUTTON_SECONDARY);
             });
 
-            if (label.equals("Rapid 10+0")) {
+            // setSelected doesn't run the button's action, so the default fills in its values here
+            if (label.equals(DEFAULT_PRESET)) {
                 btn.setSelected(true);
                 btn.setBackground(Theme.ACCENT);
+                selectPreset(wMs, bMs, label, incMs);
             }
 
             group.add(btn);
@@ -167,6 +168,26 @@ public class NewGamePanel extends JPanel {
         card.add(buttons);
 
         add(card, new GridBagConstraints());
+    }
+
+    /**
+     * Makes a preset the time control of the next game.
+     * <p>
+     * A preset has to fill in everything a game needs, whether it was clicked or preselected when
+     * the screen opened. I store both starting times, the label and the increment of the preset.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pWhiteMs     White's starting time in milliseconds, 0 for unlimited
+     * @param pBlackMs     Black's starting time in milliseconds, 0 for unlimited
+     * @param pLabel       label of the preset such as "Rapid 10+0", never null
+     * @param pIncrementMs time added after each move in milliseconds, 0 for none
+     */
+    private void selectPreset(long pWhiteMs, long pBlackMs, String pLabel, long pIncrementMs) {
+        selectedWhiteMs = pWhiteMs;
+        selectedBlackMs = pBlackMs;
+        selectedLabel = pLabel;
+        selectedIncrementMs = pIncrementMs;
     }
 
     /**
