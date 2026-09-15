@@ -335,18 +335,25 @@ public class GameTest {
     /**
      * Runs every registered test and reports the result.
      * <p>
-     * This is the single entry point I use for local runs and build scripts. It creates the host
-     * frame the dialog tests attach to, executes each test group in order, prints a summary and
-     * exits with status 1 when anything failed. It has to be public because the Java 17 launcher
-     * only accepts a public static main method.
+     * This is the single entry point I use for local runs and build scripts. It points saved games
+     * at a temporary folder unless chess.gamesDir is already set, creates the host frame the
+     * dialog tests attach to, executes each test group in order, prints a summary and exits with
+     * status 1 when anything failed. It has to be public because the Java 17 launcher only
+     * accepts a public static main method.
      * <p>
      * Time complexity: O(t) where t is the number of registered tests, not counting the work done
      * inside each test body. Space complexity: O(t) for the passed and failed result lists.
      *
      * @param pArgs command line arguments, currently unused; may be empty but never null
-     * @throws Exception if the host frame cannot be created on the event dispatch thread
+     * @throws Exception if the temporary games folder or the host frame cannot be created
      */
     public static void main(String[] pArgs) throws Exception {
+        // keep test games out of the real library unless a folder was given explicitly
+        if (System.getProperty(PgnManager.GAMES_DIR_PROPERTY) == null) {
+            System.setProperty(PgnManager.GAMES_DIR_PROPERTY,
+                    Files.createTempDirectory("chess-game-tests").toString());
+        }
+
         // engine and panel tests still run headless, only window tests get skipped
         if (!HAS_DISPLAY) {
             System.out.println("No display available, skipping tests that open windows.");
@@ -2045,17 +2052,30 @@ public class GameTest {
     }
 
     /**
-     * Deletes any saved PGN file(s) created by a test so repeated runs stay clean.
+     * Deletes the PGN files a test saved so repeated runs stay clean.
+     * <p>
+     * Persistence tests write real files, and leftovers would pile up between runs. I look in the
+     * same games directory PgnManager writes to, pick every file whose name contains the sanitized
+     * unique white player name and delete it. Problems are only printed as a warning, because a
+     * failed cleanup should never fail a test that already passed.
+     * <p>
+     * Time complexity: O(f) where f is the number of files in the games directory.
+     * Space complexity: O(f) for the directory listing.
+     *
+     * @param pUniqueWhiteName unique white player name the test saved its game under, never null
      */
-    private static void cleanupSavedGame(String uniqueWhiteName) {
+    private static void cleanupSavedGame(String pUniqueWhiteName) {
         try {
-            File gamesDir = new File(System.getProperty("user.dir"), "games");
+            // same folder PgnManager saved into, so the property override is respected
+            File gamesDir = PgnManager.getGamesDirectory().toFile();
+            // saved file names contain the sanitized player name
             File[] matches = gamesDir.listFiles((dir, name) ->
-                    name.contains(uniqueWhiteName.replaceAll("[^a-zA-Z0-9_-]", "_")));
+                    name.contains(pUniqueWhiteName.replaceAll("[^a-zA-Z0-9_-]", "_")));
             if (matches != null) {
                 for (File f : matches) Files.deleteIfExists(f.toPath());
             }
         } catch (Exception e) {
+            // a cleanup problem must not turn a passing test red
             System.out.println("  (cleanup warning: " + e.getMessage() + ")");
         }
     }
