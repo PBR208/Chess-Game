@@ -2313,6 +2313,9 @@ public class GameTest {
                     ArrayList<Piece> custom = new ArrayList<>();
                     custom.add(new King(board, 0, 7, true));  // a1, start of the white king tour
                     custom.add(new King(board, 5, 0, false)); // f8, start of the black king tour
+                    // two pawns blocking each other, so the material never counts as insufficient
+                    custom.add(new Pawn(board, 0, 4, true));  // a4
+                    custom.add(new Pawn(board, 0, 3, false)); // a5
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(true);
@@ -2335,6 +2338,9 @@ public class GameTest {
                     ArrayList<Piece> custom = new ArrayList<>();
                     custom.add(new King(board, 0, 7, true));  // a1, start of the white king tour
                     custom.add(new King(board, 5, 0, false)); // f8, start of the black king tour
+                    // two pawns blocking each other, so the material never counts as insufficient
+                    custom.add(new Pawn(board, 0, 4, true));  // a4
+                    custom.add(new Pawn(board, 0, 3, false)); // a5
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false);
@@ -2356,6 +2362,9 @@ public class GameTest {
                     ArrayList<Piece> custom = new ArrayList<>();
                     custom.add(new King(board, 0, 7, true));  // a1, start of the white king tour
                     custom.add(new King(board, 5, 0, false)); // f8, start of the black king tour
+                    // two pawns blocking each other, so the material never counts as insufficient
+                    custom.add(new Pawn(board, 0, 4, true));  // a4
+                    custom.add(new Pawn(board, 0, 3, false)); // a5
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // always decline
@@ -2472,7 +2481,7 @@ public class GameTest {
      * search over p pieces and s squares. Space complexity: O(h) for the recorded move history.
      *
      * @param pGc        controller that plays the moves, never null
-     * @param pState     board state with only the two kings, on a1 and f8, never null
+     * @param pState     board state with the kings on a1 and f8 and nothing else on their tours, never null
      * @param pHalfMoves number of half moves to play, from 0 up to 180
      */
     private static void shuffleKings(GameController pGc, BoardState pState, int pHalfMoves) {
