@@ -198,13 +198,11 @@ public class GameController {
     }
 
     /**
-     * Decides whether a move is legal in the current position.
+     * Decides whether a move may be played now.
      * <p>
-     * Moves from the board, the legal move highlighting and the checkmate and stalemate detection
-     * all go through this check. It rejects every move once the game is over, moves by the side not
-     * to move and captures of own pieces, asks the piece whether its geometry and path allow the
-     * move, hands two-square king moves to the castling rules, attaches a pawn captured en passant
-     * and finally simulates the move to make sure the own king is not left in check.
+     * Moves from the board and the legal move highlighting go through this check. It rejects every
+     * move once the game is over and every move by the side that is not to move, and leaves the
+     * rules of the move itself to isLegalForItsSide.
      * <p>
      * Time complexity: O(p) where p is the number of pieces, because the check simulation scans
      * every opposing piece. Space complexity: O(1).
@@ -224,6 +222,28 @@ public class GameController {
         if (pMove.getPiece().isWhite() != turnOfWhite) {
             return false;
         }
+
+        return isLegalForItsSide(pMove);
+    }
+
+    /**
+     * Decides whether a move follows the rules for the side that owns the piece, whoever is to move.
+     * <p>
+     * Checkmate and stalemate have to be judged for either side, but the turn check in isValidMove
+     * made every move of the side not to move look illegal, so that side always looked mated or
+     * stalemated. This check leaves the turn out. It rejects captures of own pieces, asks the piece
+     * whether its geometry and path allow the move, hands two-square king moves to the castling
+     * rules, attaches a pawn captured en passant and finally simulates the move to make sure the own
+     * king is not left in check.
+     * <p>
+     * Time complexity: O(p) where p is the number of pieces, because the check simulation scans
+     * every opposing piece. Space complexity: O(1).
+     *
+     * @param pMove candidate move whose piece belongs to this game's board, never null
+     * @return true if the move follows the rules for the side that owns the piece
+     * @throws NullPointerException if pMove or its piece is null
+     */
+    private boolean isLegalForItsSide(Move pMove) {
 
         // never capture an own piece
         if (!isSameTeam(pMove.getPiece(), pMove.getCapture())) {
@@ -649,12 +669,39 @@ public class GameController {
         return !cs.isKingLeftInCheck(m);
     }
 
-    public boolean isCheckmate(boolean teamColorWhite) {
-        return cs.isKingInCheckRN(teamColorWhite) && !hasLegalMoves(teamColorWhite);
+    /**
+     * Tells whether a side is checkmated in the current position.
+     * <p>
+     * Tests and the end of game rules ask this for either side, not only for the side to move. A
+     * side is checkmated when its king is in check and none of its moves follows the rules. Both
+     * parts are judged for that side alone, whoever is to move.
+     * <p>
+     * Time complexity: O(p * s * p) in the worst case, for trying every square with every piece and
+     * simulating each candidate. Space complexity: O(p) for the copied piece list.
+     *
+     * @param pWhite true to judge White, false to judge Black
+     * @return true if that side is checkmated
+     */
+    public boolean isCheckmate(boolean pWhite) {
+        return cs.isKingInCheckRN(pWhite) && !hasLegalMoves(pWhite);
     }
 
-    public boolean isStalemate(boolean teamColorWhite) {
-        return !cs.isKingInCheckRN(teamColorWhite) && !hasLegalMoves(teamColorWhite);
+    /**
+     * Tells whether a side is stalemated in the current position.
+     * <p>
+     * A side is stalemated when its king is not in check but none of its moves follows the rules. In
+     * the starting position this used to report Black as stalemated while White was to move, because
+     * every Black move was rejected for being out of turn. Both parts are now judged for that side
+     * alone, whoever is to move.
+     * <p>
+     * Time complexity: O(p * s * p) in the worst case, for trying every square with every piece and
+     * simulating each candidate. Space complexity: O(p) for the copied piece list.
+     *
+     * @param pWhite true to judge White, false to judge Black
+     * @return true if that side is stalemated
+     */
+    public boolean isStalemate(boolean pWhite) {
+        return !cs.isKingInCheckRN(pWhite) && !hasLegalMoves(pWhite);
     }
 
     /**
@@ -676,12 +723,28 @@ public class GameController {
         b.repaint();
     }
 
-    private boolean hasLegalMoves(boolean teamColorWhite) {
+    /**
+     * Tells whether a side has at least one move that follows the rules.
+     * <p>
+     * Checkmate, stalemate and the check marker in the notation all need to know whether a side can
+     * still move. I try every square for every piece of that side with the turn-agnostic legality
+     * check and stop at the first legal move, so the answer is right for either side and doesn't
+     * depend on whose turn it is.
+     * <p>
+     * Time complexity: O(p * s * p) in the worst case, for p pieces, s squares and a check simulation
+     * per candidate. Space complexity: O(p) for the copied piece list.
+     *
+     * @param pWhite true to look at White's pieces, false for Black's
+     * @return true if that side has a legal move
+     */
+    private boolean hasLegalMoves(boolean pWhite) {
+        // copy, the check simulation temporarily changes the piece list
         for (Piece p : new ArrayList<>(state.getPieces())) {
-            if (p.isWhite() != teamColorWhite) continue;
+            if (p.isWhite() != pWhite) continue;
             for (int row = 0; row < 8; row++)
                 for (int col = 0; col < 8; col++)
-                    if (isValidMove(new Move(state, p, col, row))) return true;
+                    // the turn doesn't matter, only the rules for this side
+                    if (isLegalForItsSide(new Move(state, p, col, row))) return true;
         }
         return false;
     }
