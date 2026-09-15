@@ -92,7 +92,7 @@ public class ReplayPanel extends JPanel {
 
         moveLabel = new JLabel(moveText(), SwingConstants.CENTER);
         moveLabel.setForeground(Theme.FG);
-        moveLabel.setFont(new Font(Font.SANS_SERIF,Font.PLAIN, 13));
+        moveLabel.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
 
         JButton first = navButton("\u21e4", "|<", "first");
         first.addActionListener(e -> {
@@ -132,7 +132,7 @@ public class ReplayPanel extends JPanel {
         // Move History
         JLabel moveHistoryHeader = new JLabel("  Move History");
         moveHistoryHeader.setForeground(new Color(140, 140, 140));
-        moveHistoryHeader.setFont(new Font(Font.SANS_SERIF,Font.BOLD, 12));
+        moveHistoryHeader.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
         moveHistoryHeader.setBackground(new Color(40, 40, 42));
         moveHistoryHeader.setOpaque(true);
         moveHistoryHeader.setPreferredSize(new Dimension(220, 30));
@@ -141,7 +141,7 @@ public class ReplayPanel extends JPanel {
         moveHistoryArea.setEditable(false);
         moveHistoryArea.setBackground(new Color(28, 28, 30));
         moveHistoryArea.setForeground(new Color(210, 210, 210));
-        moveHistoryArea.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        moveHistoryArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         moveHistoryArea.setMargin(new Insets(8, 8, 8, 8));
 
         JScrollPane moveScroll = new JScrollPane(moveHistoryArea);
@@ -156,7 +156,7 @@ public class ReplayPanel extends JPanel {
         // FEN Display
         JLabel fenHeader = new JLabel("  Current FEN");
         fenHeader.setForeground(new Color(140, 140, 140));
-        fenHeader.setFont(new Font(Font.SANS_SERIF,Font.BOLD, 12));
+        fenHeader.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
         fenHeader.setBackground(new Color(40, 40, 42));
         fenHeader.setOpaque(true);
         fenHeader.setPreferredSize(new Dimension(220, 25));
@@ -165,7 +165,7 @@ public class ReplayPanel extends JPanel {
         fenArea.setEditable(false);
         fenArea.setBackground(new Color(28, 28, 30));
         fenArea.setForeground(new Color(210, 210, 210));
-        fenArea.setFont(new Font("Monospaced", Font.PLAIN, 10));
+        fenArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 10));
         fenArea.setMargin(new Insets(6, 8, 6, 8));
         fenArea.setLineWrap(true);
         fenArea.setWrapStyleWord(true);

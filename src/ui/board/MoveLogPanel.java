@@ -39,13 +39,13 @@ public class MoveLogPanel extends JPanel {
         area.setEditable(false);
         area.setBackground(new Color(28, 28, 30));
         area.setForeground(new Color(210, 210, 210));
-        area.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         area.setMargin(new Insets(8, 8, 8, 8));
 
         // Header label for moves
         JLabel header = new JLabel("  Move History");
         header.setForeground(new Color(140, 140, 140));
-        header.setFont(new Font(Font.SANS_SERIF,Font.BOLD, 12));
+        header.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
         header.setBackground(new Color(40, 40, 42));
         header.setOpaque(true);
         header.setPreferredSize(new Dimension(200, 30));
@@ -57,7 +57,7 @@ public class MoveLogPanel extends JPanel {
         // Header label for FEN
         JLabel fenHeader = new JLabel("  Current FEN");
         fenHeader.setForeground(new Color(140, 140, 140));
-        fenHeader.setFont(new Font(Font.SANS_SERIF,Font.BOLD, 12));
+        fenHeader.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
         fenHeader.setBackground(new Color(40, 40, 42));
         fenHeader.setOpaque(true);
         fenHeader.setPreferredSize(new Dimension(200, 25));
@@ -66,7 +66,7 @@ public class MoveLogPanel extends JPanel {
         fenArea.setEditable(false);
         fenArea.setBackground(new Color(28, 28, 30));
         fenArea.setForeground(new Color(210, 210, 210));
-        fenArea.setFont(new Font("Monospaced", Font.PLAIN, 10));
+        fenArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 10));
         fenArea.setMargin(new Insets(6, 8, 6, 8));
         fenArea.setLineWrap(true);
         fenArea.setWrapStyleWord(true);

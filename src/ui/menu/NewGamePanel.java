@@ -77,7 +77,7 @@ public class NewGamePanel extends JPanel {
 
         JLabel title = new JLabel("New Game");
         title.setForeground(Theme.FG);
-        title.setFont(new Font(Font.SANS_SERIF,Font.BOLD, 26));
+        title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 26));
         title.setAlignmentX(CENTER_ALIGNMENT);
         card.add(title);
         card.add(Box.createVerticalStrut(28));
@@ -105,7 +105,7 @@ public class NewGamePanel extends JPanel {
 
         for (Object[] p : PRESETS) {
             JToggleButton btn = new JToggleButton((String) p[0]);
-            UiComponents.style(btn, new Font(Font.SANS_SERIF,Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
+            UiComponents.style(btn, new Font(Font.SANS_SERIF, Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
 
             long wMs = (long) p[2];
             long bMs = (long) p[3];
@@ -135,7 +135,7 @@ public class NewGamePanel extends JPanel {
         JPanel customRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         customRow.setBackground(Theme.PANEL_BG);
 
-        UiComponents.style(customBtn, new Font(Font.SANS_SERIF,Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
+        UiComponents.style(customBtn, new Font(Font.SANS_SERIF, Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
         group.add(customBtn);
 
         styleField(customMin);
@@ -161,7 +161,7 @@ public class NewGamePanel extends JPanel {
 
         // tells the player why a custom time can't be used
         customError.setForeground(new Color(210, 90, 90));
-        customError.setFont(new Font(Font.SANS_SERIF,Font.PLAIN, 12));
+        customError.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
         customError.setAlignmentX(LEFT_ALIGNMENT);
         card.add(customError);
         card.add(Box.createVerticalStrut(24));

@@ -50,7 +50,7 @@ public class PastGamesPanel extends JPanel {
 
         JLabel title = new JLabel("Past Games");
         title.setForeground(Theme.FG);
-        title.setFont(new Font(Font.SANS_SERIF,Font.BOLD, 20));
+        title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 20));
 
         JButton backBtn = styledButton("\u2190 Back to Menu", "< Back to Menu", "backToMenu");
         backBtn.addActionListener(e -> Main.showMenu());
@@ -69,7 +69,7 @@ public class PastGamesPanel extends JPanel {
         JList<String> gameList = new JList<>(listModel);
         gameList.setBackground(Theme.PANEL_BG);
         gameList.setForeground(Theme.FG);
-        gameList.setFont(new Font(Font.SANS_SERIF,Font.PLAIN, 13));
+        gameList.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
         gameList.setSelectionBackground(new Color(60, 60, 70));
         gameList.setSelectionForeground(Theme.FG);
         gameList.setFixedCellHeight(36);
@@ -85,12 +85,12 @@ public class PastGamesPanel extends JPanel {
 
         JLabel placeholder = new JLabel("Select a game from the list", SwingConstants.CENTER);
         placeholder.setForeground(new Color(120, 120, 120));
-        placeholder.setFont(new Font(Font.SANS_SERIF,Font.ITALIC, 14));
+        placeholder.setFont(new Font(Font.SANS_SERIF, Font.ITALIC, 14));
         rightPanel.add(placeholder, "empty");
 
         moveLogArea = new JTextArea();
         moveLogArea.setEditable(false);
-        moveLogArea.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        moveLogArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         moveLogArea.setBackground(Theme.PANEL_BG);
         moveLogArea.setForeground(Theme.FG);
         moveLogArea.setLineWrap(true);
