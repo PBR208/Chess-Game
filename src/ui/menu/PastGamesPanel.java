@@ -52,7 +52,7 @@ public class PastGamesPanel extends JPanel {
         title.setForeground(Theme.FG);
         title.setFont(new Font(Font.SANS_SERIF,Font.BOLD, 20));
 
-        JButton backBtn = styledButton("\u2190 Back to Menu");
+        JButton backBtn = styledButton("\u2190 Back to Menu", "< Back to Menu", "backToMenu");
         backBtn.addActionListener(e -> Main.showMenu());
 
         topBar.add(title, BorderLayout.WEST);
@@ -110,7 +110,7 @@ public class PastGamesPanel extends JPanel {
         toggleBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(60, 60, 65)));
 
         JButton showLog = styledButton("Move Log");
-        JButton showReplay = styledButton("Replay \u25b6");
+        JButton showReplay = styledButton("Replay \u25b6", "Replay >", "replay");
         toggleBar.add(showLog);
         toggleBar.add(showReplay);
         showLog.addActionListener(e -> rightCards.show(rightPanel, "log"));
@@ -180,5 +180,25 @@ public class PastGamesPanel extends JPanel {
     private JButton styledButton(String pText) {
         // logical fonts exist on every platform, Arial doesn't
         return UiComponents.button(pText, new Font(Font.SANS_SERIF, Font.PLAIN, 13), Theme.BUTTON_SECONDARY);
+    }
+
+    /**
+     * Creates a button in the secondary style of this screen for a text with a symbol.
+     * <p>
+     * The back and replay buttons show an arrow or a play symbol, which some fonts don't contain. I
+     * build the button like the plain version, let its text fall back to ASCII and give it a
+     * component name that stays the same whichever text is shown.
+     * <p>
+     * Time complexity: O(n) for the n characters of pText. Space complexity: O(1) apart from the button.
+     *
+     * @param pText      button text with its symbol, never null
+     * @param pAsciiText plain ASCII text for fonts without the symbol, never null
+     * @param pName      component name that identifies the button, never null
+     * @return the finished button, never null
+     */
+    private JButton styledButton(String pText, String pAsciiText, String pName) {
+        JButton b = UiComponents.button(pText, pAsciiText, new Font(Font.SANS_SERIF, Font.PLAIN, 13), Theme.BUTTON_SECONDARY);
+        b.setName(pName);
+        return b;
     }
 }

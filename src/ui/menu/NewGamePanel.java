@@ -169,8 +169,8 @@ public class NewGamePanel extends JPanel {
         JPanel buttons = new JPanel(new GridLayout(1, 2, 12, 0));
         buttons.setBackground(Theme.PANEL_BG);
 
-        JButton backBtn = actionButton("\u2190 Back", false);
-        JButton startBtn = actionButton("Start \u25b6", true);
+        JButton backBtn = actionButton("\u2190 Back", "< Back", "back", false);
+        JButton startBtn = actionButton("Start \u25b6", "Start >", "start", true);
 
         backBtn.addActionListener(e -> Main.showMenu());
         // start the game with everything selected on this screen, unless the custom time is unusable
@@ -349,18 +349,23 @@ public class NewGamePanel extends JPanel {
     /**
      * Creates one of the two large buttons at the bottom of the screen, Back or Start.
      * <p>
-     * Both buttons share size and font, and the primary one stands out in the accent colour. I style
-     * a button with the shared look, a bold logical font and a fixed height.
+     * Both buttons share size and font, and the primary one stands out in the accent colour. Their
+     * arrow symbols are missing from some fonts, so each button also carries an ASCII text and a
+     * component name that stays the same whichever text is shown. I style a button with the shared
+     * look, a bold logical font and a fixed height.
      * <p>
-     * Time complexity: O(1). Space complexity: O(1) apart from the button.
+     * Time complexity: O(n) for the n characters of pText. Space complexity: O(1) apart from the button.
      *
-     * @param pText    button text, never null
-     * @param pPrimary true for the accent coloured main action, false for a secondary one
+     * @param pText      button text with its arrow symbol, never null
+     * @param pAsciiText plain ASCII text for fonts without the symbol, never null
+     * @param pName      component name that identifies the button, never null
+     * @param pPrimary   true for the accent coloured main action, false for a secondary one
      * @return the finished button, never null
      */
-    private JButton actionButton(String pText, boolean pPrimary) {
-        JButton b = UiComponents.button(pText, new Font(Font.SANS_SERIF, Font.BOLD, 14),
+    private JButton actionButton(String pText, String pAsciiText, String pName, boolean pPrimary) {
+        JButton b = UiComponents.button(pText, pAsciiText, new Font(Font.SANS_SERIF, Font.BOLD, 14),
                 pPrimary ? Theme.ACCENT : Theme.BUTTON_SECONDARY);
+        b.setName(pName);
         b.setPreferredSize(new Dimension(0, 44));
         return b;
     }
