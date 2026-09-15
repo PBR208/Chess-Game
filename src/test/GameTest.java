@@ -2209,8 +2209,8 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board, 4, 7, true));
-                    custom.add(new King(board, 4, 0, false));
+                    custom.add(new King(board, 0, 7, true));  // a1, start of the white king tour
+                    custom.add(new King(board, 5, 0, false)); // f8, start of the black king tour
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(true);
@@ -2231,8 +2231,8 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board, 4, 7, true));
-                    custom.add(new King(board, 4, 0, false));
+                    custom.add(new King(board, 0, 7, true));  // a1, start of the white king tour
+                    custom.add(new King(board, 5, 0, false)); // f8, start of the black king tour
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false);
@@ -2252,8 +2252,8 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board, 4, 7, true));
-                    custom.add(new King(board, 4, 0, false));
+                    custom.add(new King(board, 0, 7, true));  // a1, start of the white king tour
+                    custom.add(new King(board, 5, 0, false)); // f8, start of the black king tour
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // always decline
@@ -2350,31 +2350,46 @@ public class GameTest {
         }
     }
 
+    // king tours of 9 and 10 squares, together they only repeat a position every 90 full moves
+    private static final int[][] WHITE_KING_TOUR = {
+            {0, 7}, {0, 6}, {0, 5}, {1, 5}, {2, 5}, {2, 6}, {1, 6}, {2, 7}, {1, 7}};         // a1 a2 a3 b3 c3 c2 b2 c1 b1
+    private static final int[][] BLACK_KING_TOUR = {
+            {5, 0}, {6, 0}, {7, 0}, {7, 1}, {7, 2}, {6, 2}, {5, 2}, {4, 2}, {4, 1}, {4, 0}}; // f8 g8 h8 h7 h6 g6 f6 e6 e7 e8
+
     /**
-     * Shuffles the White and Black kings back and forth between their home
-     * square and one step away, alternating turns, for exactly halfMoves
-     * moves. Used to rack up GameController's internal 50/75-move counter
-     * without ever making a pawn move or a capture (either of which would
-     * reset it). The two kings stay far apart the whole time, so a legal
-     * reply always exists and neither side is ever accidentally put in
-     * check, checkmate, or stalemate by this shuffling.
+     * Walks both kings around their tours for a given number of half moves.
+     * <p>
+     * The 50 and 75 move rule tests need a long stretch of moves without a pawn move or a capture.
+     * Shuffling the kings between two squares did that, but it repeats the same positions, which
+     * correctly ends a game by repetition long before the move-count rules apply. I move the white
+     * king around a nine square tour in the lower left corner and the black king around a ten
+     * square tour in the upper right corner, alternating turns. Since 9 and 10 share no factor, no
+     * position comes back within 90 full moves, and the kings never get close to each other.
+     * <p>
+     * Time complexity: O(h * p * s) for h half moves, because every move runs the end of game
+     * search over p pieces and s squares. Space complexity: O(h) for the recorded move history.
+     *
+     * @param pGc        controller that plays the moves, never null
+     * @param pState     board state with only the two kings, on a1 and f8, never null
+     * @param pHalfMoves number of half moves to play, from 0 up to 180
      */
-    private static void shuffleKings(GameController gc, BoardState state, int halfMoves) {
-        boolean whiteAtHome = true;
-        boolean blackAtHome = true;
-        for (int i = 0; i < halfMoves; i++) {
-            if (i % 2 == 0) {
-                int from = whiteAtHome ? 7 : 6;
-                int to = whiteAtHome ? 6 : 7;
-                Piece king = state.getPiece(4, from);
-                gc.makeMove(new Move(state, king, 4, to));
-                whiteAtHome = !whiteAtHome;
+    private static void shuffleKings(GameController pGc, BoardState pState, int pHalfMoves) {
+        int whiteStep = 0;
+        int blackStep = 0;
+        for (int i = 0; i < pHalfMoves; i++) {
+            // White moves on even half moves
+            boolean whiteMoves = i % 2 == 0;
+            int[][] tour = whiteMoves ? WHITE_KING_TOUR : BLACK_KING_TOUR;
+            int step = whiteMoves ? whiteStep : blackStep;
+            int[] from = tour[step % tour.length];
+            int[] to = tour[(step + 1) % tour.length];
+            // move the king from its current tour square to the next one
+            Piece king = pState.getPiece(from[0], from[1]);
+            pGc.makeMove(new Move(pState, king, to[0], to[1]));
+            if (whiteMoves) {
+                whiteStep++;
             } else {
-                int from = blackAtHome ? 0 : 1;
-                int to = blackAtHome ? 1 : 0;
-                Piece king = state.getPiece(4, from);
-                gc.makeMove(new Move(state, king, 4, to));
-                blackAtHome = !blackAtHome;
+                blackStep++;
             }
         }
     }
