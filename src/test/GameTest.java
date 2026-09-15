@@ -1853,6 +1853,87 @@ public class GameTest {
                     checkEqual(expected, finished[0].fenHistory, "every recorded FEN must carry the right counters");
                 }));
 
+        test("GameController · SAN marks a check with +", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+
+                    gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // 1. e4
+                    gc.makeMove(new Move(state, state.getPiece(5, 1), 5, 3)); // 1... f5
+                    gc.makeMove(new Move(state, state.getPiece(3, 7), 7, 3)); // 2. Qh5+
+                    checkEqual(List.of("e4", "f5", "Qh5+"), gc.getMoveLog(), "a checking move must end with +");
+                }));
+
+        test("GameController · SAN marks checkmate with #", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+
+                    gc.makeMove(new Move(state, state.getPiece(5, 6), 5, 5)); // 1. f3
+                    gc.makeMove(new Move(state, state.getPiece(4, 1), 4, 3)); // 1... e5
+                    gc.makeMove(new Move(state, state.getPiece(6, 6), 6, 4)); // 2. g4
+                    gc.makeMove(new Move(state, state.getPiece(3, 0), 7, 4)); // 2... Qh4#
+                    checkEqual(List.of("f3", "e5", "g4", "Qh4#"), gc.getMoveLog(), "the mating move must end with #");
+                }));
+
+        test("GameController · SAN adds the origin file when two knights can reach the square", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+
+                    gc.makeMove(new Move(state, state.getPiece(6, 7), 5, 5)); // 1. Nf3
+                    gc.makeMove(new Move(state, state.getPiece(4, 1), 4, 3)); // 1... e5
+                    gc.makeMove(new Move(state, state.getPiece(3, 6), 3, 4)); // 2. d4
+                    gc.makeMove(new Move(state, state.getPiece(1, 0), 2, 2)); // 2... Nc6
+                    gc.makeMove(new Move(state, state.getPiece(1, 7), 3, 6)); // 3. Nbd2, Nf3 could go to d2 too
+                    checkEqual("Nbd2", gc.getMoveLog().get(4), "knights on different files are told apart by file");
+                }));
+
+        test("GameController · SAN adds the origin rank when the rivals share the file", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece lowerRook = new Rook(board, 0, 7, true); // a1
+                    custom.add(lowerRook);
+                    custom.add(new Rook(board, 0, 3, true));       // a5
+                    custom.add(new King(board, 7, 7, true));       // h1
+                    custom.add(new King(board, 7, 0, false));      // h8
+                    state.setPieces(custom);
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    gc.makeMove(new Move(state, lowerRook, 0, 5)); // Ra1-a3, the a5 rook could go there too
+                    checkEqual("R1a3", gc.getMoveLog().get(0), "rooks on one file are told apart by rank");
+                }));
+
+        test("GameController · SAN adds file and rank when neither alone is unique", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece movingQueen = new Queen(board, 0, 7, true); // a1
+                    custom.add(movingQueen);
+                    custom.add(new Queen(board, 2, 7, true));  // c1, same rank
+                    custom.add(new Queen(board, 0, 5, true));  // a3, same file
+                    custom.add(new King(board, 7, 7, true));   // h1
+                    custom.add(new King(board, 3, 0, false));  // d8
+                    state.setPieces(custom);
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    gc.makeMove(new Move(state, movingQueen, 1, 6)); // Qa1-b2, c1 and a3 could go there too
+                    checkEqual("Qa1b2", gc.getMoveLog().get(0), "file and rank are both needed when each is shared");
+                }));
+
         // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── GameController · rules engine ────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
