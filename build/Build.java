@@ -12,6 +12,7 @@
 
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -36,6 +37,9 @@ public class Build {
     private static final Path MAIN_CLASSES = OUT.resolve("classes");
     private static final Path TEST_CLASSES = OUT.resolve("test-classes");
 
+    // set once this run has compiled, so later targets can reuse the classes
+    private static boolean compiled = false;
+
     /**
      * Runs the requested build targets in the order they were given.
      * <p>
@@ -47,10 +51,11 @@ public class Build {
      * Time complexity: O(t) for t targets, each dominated by the size of the source tree it handles.
      * Space complexity: O(t) for the target list.
      *
-     * @param pArgs target names such as clean or compile; may be empty but never null
-     * @throws IOException if reading sources or writing build output fails
+     * @param pArgs target names such as clean, compile, test or test-gui; may be empty but never null
+     * @throws IOException          if reading sources, writing build output or starting a JVM fails
+     * @throws InterruptedException if the script is interrupted while waiting for the tests
      */
-    public static void main(String[] pArgs) throws IOException {
+    public static void main(String[] pArgs) throws IOException, InterruptedException {
         // all paths are relative, so the working directory has to be the repository root
         if (!Files.isDirectory(SOURCE_ROOT)) {
             fail("run the script from the repository root, for example: java build/Build.java compile");
@@ -61,7 +66,9 @@ public class Build {
             switch (target) {
                 case "clean" -> clean();
                 case "compile" -> compile();
-                default -> fail("unknown target '" + target + "', expected clean or compile");
+                case "test" -> test(false);
+                case "test-gui" -> test(true);
+                default -> fail("unknown target '" + target + "', expected clean, compile, test or test-gui");
             }
         }
     }
@@ -110,6 +117,8 @@ public class Build {
 
         List<Path> testSources = javaSources(TEST_SOURCES, null);
         runJavac(testSources, TEST_CLASSES, MAIN_CLASSES);
+        // later targets in the same run can use these classes
+        compiled = true;
 
         System.out.println("compiled " + mainSources.size() + " game sources and "
                 + testSources.size() + " test sources for Java " + RELEASE);
@@ -206,6 +215,80 @@ public class Build {
                 Files.copy(source, destination, StandardCopyOption.REPLACE_EXISTING);
             }
         }
+    }
+
+    /**
+     * Compiles if needed and runs the test suite in a separate JVM.
+     * <p>
+     * The suite ends with System.exit, so it needs its own JVM to report a status code without
+     * taking the build script down with it. I compile first when this run has not compiled yet,
+     * start test.GameTest with the game and test classes on the classpath, force headless mode
+     * unless the window tests should run too, and fail the build when the suite reports failures.
+     * <p>
+     * Time complexity: O(n) for compiling plus the runtime of the suite.
+     * Space complexity: O(1) apart from the child process.
+     *
+     * @param pWithDisplay true to also run the dialog and frame tests on a real display, false to
+     *                     run headless so the target works on build machines
+     * @throws IOException          if compiling fails or the test JVM cannot be started
+     * @throws InterruptedException if the script is interrupted while waiting for the tests
+     */
+    private static void test(boolean pWithDisplay) throws IOException, InterruptedException {
+        // reuse classes compiled earlier in the same run
+        if (!compiled) {
+            compile();
+        }
+
+        List<String> command = new ArrayList<>();
+        command.add(javaExecutable());
+        // headless unless the window tests should run as well
+        if (!pWithDisplay) {
+            command.add("-Djava.awt.headless=true");
+        }
+        command.add("-cp");
+        // the separator is ';' on Windows and ':' everywhere else
+        command.add(MAIN_CLASSES + File.pathSeparator + TEST_CLASSES);
+        command.add("test.GameTest");
+
+        int exitCode = runProcess(command);
+        if (exitCode != 0) {
+            fail("tests failed with exit code " + exitCode);
+        }
+    }
+
+    /**
+     * Returns the java launcher of the JDK that runs this script.
+     * <p>
+     * Child JVMs should use the same Java installation as the build, not whichever java comes first
+     * on the PATH. I build the path from the java.home system property. The name works without the
+     * .exe suffix on Windows, because process creation adds it there.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return path of the java launcher, never null
+     */
+    private static String javaExecutable() {
+        return Paths.get(System.getProperty("java.home"), "bin", "java").toString();
+    }
+
+    /**
+     * Runs a command as a child process on the same console and waits for it to finish.
+     * <p>
+     * Test output should appear live next to the build output. I start the process with inherited
+     * standard streams and return its exit code once it ends.
+     * <p>
+     * Time complexity: O(1) apart from the runtime of the child process.
+     * Space complexity: O(k) for the k command arguments held by the process builder.
+     *
+     * @param pCommand program followed by its arguments, never null and never empty
+     * @return exit code of the finished process
+     * @throws IOException          if the process cannot be started
+     * @throws InterruptedException if waiting for the process is interrupted
+     */
+    private static int runProcess(List<String> pCommand) throws IOException, InterruptedException {
+        // share stdout and stderr so progress shows up right away
+        Process process = new ProcessBuilder(pCommand).inheritIO().start();
+        return process.waitFor();
     }
 
     /**
