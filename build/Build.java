@@ -21,6 +21,10 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.jar.Attributes;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
+import java.util.jar.Manifest;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -36,6 +40,10 @@ public class Build {
     private static final Path OUT = Paths.get("out");
     private static final Path MAIN_CLASSES = OUT.resolve("classes");
     private static final Path TEST_CLASSES = OUT.resolve("test-classes");
+    private static final Path JAR = OUT.resolve("Chess-Game.jar");
+
+    // entry point of the game, written into the jar manifest
+    private static final String MAIN_CLASS = "app.Main";
 
     // set once this run has compiled, so later targets can reuse the classes
     private static boolean compiled = false;
@@ -46,12 +54,12 @@ public class Build {
      * This is the entry point for "java build/Build.java target...". I first make sure the script
      * runs from the repository root, because every path is relative to it, then execute each target
      * and stop with a non-zero exit code on the first problem. Without arguments the script
-     * compiles everything.
+     * compiles, runs the headless tests and packages the jar.
      * <p>
      * Time complexity: O(t) for t targets, each dominated by the size of the source tree it handles.
      * Space complexity: O(t) for the target list.
      *
-     * @param pArgs target names such as clean, compile, test or test-gui; may be empty but never null
+     * @param pArgs target names clean, compile, test, test-gui, jar or run; may be empty but never null
      * @throws IOException          if reading sources, writing build output or starting a JVM fails
      * @throws InterruptedException if the script is interrupted while waiting for the tests
      */
@@ -60,15 +68,17 @@ public class Build {
         if (!Files.isDirectory(SOURCE_ROOT)) {
             fail("run the script from the repository root, for example: java build/Build.java compile");
         }
-        // compiling is the useful default
-        List<String> targets = pArgs.length == 0 ? List.of("compile") : List.of(pArgs);
+        // the full build is the useful default
+        List<String> targets = pArgs.length == 0 ? List.of("compile", "test", "jar") : List.of(pArgs);
         for (String target : targets) {
             switch (target) {
                 case "clean" -> clean();
                 case "compile" -> compile();
                 case "test" -> test(false);
                 case "test-gui" -> test(true);
-                default -> fail("unknown target '" + target + "', expected clean, compile, test or test-gui");
+                case "jar" -> jar();
+                case "run" -> run();
+                default -> fail("unknown target '" + target + "', expected clean, compile, test, test-gui, jar or run");
             }
         }
     }
@@ -77,8 +87,8 @@ public class Build {
      * Deletes the output this script produced.
      * <p>
      * A fresh build must not pick up classes of sources that were deleted in the meantime. I only
-     * remove the folders this script owns inside out, so the IDE's own out/production folder is
-     * left untouched.
+     * remove the folders and the jar this script owns inside out, so the IDE's own out/production
+     * folder is left untouched.
      * <p>
      * Time complexity: O(f) where f is the number of files deleted.
      * Space complexity: O(f) for the directory listing.
@@ -88,7 +98,8 @@ public class Build {
     private static void clean() throws IOException {
         deleteRecursively(MAIN_CLASSES);
         deleteRecursively(TEST_CLASSES);
-        System.out.println("cleaned " + MAIN_CLASSES + " and " + TEST_CLASSES);
+        Files.deleteIfExists(JAR);
+        System.out.println("cleaned " + MAIN_CLASSES + ", " + TEST_CLASSES + " and " + JAR);
     }
 
     /**
@@ -253,6 +264,71 @@ public class Build {
         int exitCode = runProcess(command);
         if (exitCode != 0) {
             fail("tests failed with exit code " + exitCode);
+        }
+    }
+
+    /**
+     * Compiles if needed and packages the game classes and resources into a runnable jar.
+     * <p>
+     * A release should be one file that starts with java -jar on any OS. I compile first when this
+     * run has not compiled yet, write a manifest with app.Main as the main class, and add every file
+     * below out/classes with forward slash entry names. Test classes never end up in the jar,
+     * because they are compiled into their own folder.
+     * <p>
+     * Time complexity: O(b) in the total size of the packaged files.
+     * Space complexity: O(f) for the list of f packaged files.
+     *
+     * @throws IOException if compiling fails or the jar cannot be written
+     */
+    private static void jar() throws IOException {
+        // reuse classes compiled earlier in the same run
+        if (!compiled) {
+            compile();
+        }
+
+        Manifest manifest = new Manifest();
+        Attributes attributes = manifest.getMainAttributes();
+        // without a manifest version every other attribute is silently ignored
+        attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
+        attributes.put(Attributes.Name.MAIN_CLASS, MAIN_CLASS);
+
+        Files.createDirectories(OUT);
+        try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(JAR), manifest);
+             Stream<Path> paths = Files.walk(MAIN_CLASSES)) {
+            for (Path file : paths.filter(Files::isRegularFile).sorted().collect(Collectors.toList())) {
+                // jar entry names always use forward slashes, also on Windows
+                String entryName = MAIN_CLASSES.relativize(file).toString().replace(File.separatorChar, '/');
+                jar.putNextEntry(new JarEntry(entryName));
+                Files.copy(file, jar);
+                jar.closeEntry();
+            }
+        }
+        System.out.println("packaged " + JAR);
+    }
+
+    /**
+     * Compiles if needed and starts the game from the compiled classes.
+     * <p>
+     * During development I want to start the game with one command and the current sources. I
+     * compile first when this run has not compiled yet and launch app.Main in a child JVM from the
+     * same JDK, with the game classes and copied resources on the classpath. A non-zero exit code of
+     * the game fails the build.
+     * <p>
+     * Time complexity: O(n) for compiling plus the time the game stays open.
+     * Space complexity: O(1) apart from the child process.
+     *
+     * @throws IOException          if compiling fails or the game JVM cannot be started
+     * @throws InterruptedException if the script is interrupted while the game is running
+     */
+    private static void run() throws IOException, InterruptedException {
+        // reuse classes compiled earlier in the same run
+        if (!compiled) {
+            compile();
+        }
+        // the class folder already contains the resources
+        int exitCode = runProcess(List.of(javaExecutable(), "-cp", MAIN_CLASSES.toString(), MAIN_CLASS));
+        if (exitCode != 0) {
+            fail("the game exited with code " + exitCode);
         }
     }
 
