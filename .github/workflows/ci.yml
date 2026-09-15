@@ -36,3 +36,7 @@ jobs:
       # compiles for Java 17, runs the headless tests and packages the jar
       - name: Build, test and package
         run: java build/Build.java
+      # the dialog and frame tests need a display, Linux runners get a virtual one
+      - name: Window tests
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum java build/Build.java test-gui
