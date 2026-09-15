@@ -80,9 +80,21 @@ public class Main {
         });
     }
 
-    public static void startGame(GameConfig config) {
-        if (config == null) config = GameConfig.unlimited();
-        final GameConfig cfg = config;
+    /**
+     * Opens the game screen for a new game.
+     * <p>
+     * After the New Game screen the board, the move log and the end of game handling have to be set
+     * up together. I fall back to an unlimited game without a configuration, build the board and the
+     * move log panel, and register what happens when the game ends: the game is saved, a warning
+     * appears when that failed, and the end screen leads back to the menu.
+     * <p>
+     * Time complexity: O(p) for the starting pieces. Space complexity: O(p) for the new board.
+     *
+     * @param pConfig names, times and increment of the new game; null starts an unlimited game
+     */
+    public static void startGame(GameConfig pConfig) {
+        // no configuration means a casual game without clocks
+        final GameConfig cfg = pConfig == null ? GameConfig.unlimited() : pConfig;
 
         SwingUtilities.invokeLater(() -> {
             Board board = new Board(cfg);
@@ -90,9 +102,15 @@ public class Main {
             board.getGameController().setMoveLogPanel(logPanel);
 
             board.getGameController().setGameEndListener((record, displayMessage) -> {
-                PgnManager.save(record);
+                // a game that couldn't be written must not disappear without a word
+                boolean saved = PgnManager.save(record);
 
                 SwingUtilities.invokeLater(() -> {
+                    if (!saved) {
+                        JOptionPane.showMessageDialog(frame,
+                                "This game could not be saved to " + PgnManager.getGamesDirectory() + ".",
+                                "Game not saved", JOptionPane.WARNING_MESSAGE);
+                    }
                     EndScreen screen = new EndScreen(frame, displayMessage,
                             board.getTileSize(), Main::showMenu);
                     screen.setVisible(true);
