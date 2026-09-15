@@ -51,6 +51,10 @@ public class GameController {
     // FEN full-move number, starts at 1 and grows after every Black move
     private int fullMove = 1;
 
+    // each player is offered the 50-move claim once, until a pawn move or capture starts over
+    private boolean whiteOfferedFiftyMoveClaim = false;
+    private boolean blackOfferedFiftyMoveClaim = false;
+
     public GameController(Board b, GameConfig config,
                           PromotionChooser promotionChooser, DrawOfferResolver drawOfferResolver) {
         this.b = b;
@@ -68,7 +72,8 @@ public class GameController {
      * A restart has to clear every piece of game state, including the finished flag, otherwise the
      * new game would reject all moves. I put the starting pieces back, reset the side to move, the
      * fifty move counter, the full move number and the en passant square, reset both clocks, clear
-     * the history and the position counts and mark the game as running again.
+     * the history, the position counts and the 50-move claim offers and mark the game as running
+     * again.
      * <p>
      * Time complexity: O(p + m) where p is the number of pieces placed and m the number of moves
      * cleared from the history. Space complexity: O(p) for the new piece objects.
@@ -84,6 +89,9 @@ public class GameController {
         history.clear();
         // repetitions only count within one game
         positionCounts.clear();
+        // both players may be offered the 50-move claim again
+        whiteOfferedFiftyMoveClaim = false;
+        blackOfferedFiftyMoveClaim = false;
         // a restarted game accepts moves again
         gameOver = false;
     }
@@ -121,7 +129,9 @@ public class GameController {
      * replies runs only once per move. No reply while in check is checkmate, no reply without check
      * is stalemate, and material that can never checkmate ends the game as a draw. After that the
      * automatic draws come first, the fifth occurrence of a position and the 75-move rule, and then
-     * the draws the player may claim, a third or fourth occurrence and the 50-move rule.
+     * the draws the player may claim, a third or fourth occurrence and the 50-move rule. The 50-move
+     * claim is offered to each player once per stretch without pawn moves or captures, not after
+     * every single move.
      * <p>
      * Time complexity: O(1) here, the reply search already happened in makeMove.
      * Space complexity: O(1).
@@ -172,7 +182,15 @@ public class GameController {
             return;
         }
 
-        if (passedMoves >= 100) {
+        // ask the player to move once, a declined claim is not repeated after every move
+        boolean alreadyOffered = turnOfWhite ? whiteOfferedFiftyMoveClaim : blackOfferedFiftyMoveClaim;
+        if (passedMoves >= 100 && !alreadyOffered) {
+            if (turnOfWhite) {
+                whiteOfferedFiftyMoveClaim = true;
+            } else {
+                blackOfferedFiftyMoveClaim = true;
+            }
+            // TODO [PBR208]: Add a permanent "Claim draw" action so a player can still claim after declining once.
             if (drawOfferResolver.offerDraw()) {
                 endGame("1/2-1/2", "Draw agreed");
             }
@@ -310,6 +328,9 @@ public class GameController {
         // pawn moves and captures make every earlier position unreachable
         if (passedMoves == 0) {
             positionCounts.clear();
+            // and a new stretch towards the 50-move rule begins
+            whiteOfferedFiftyMoveClaim = false;
+            blackOfferedFiftyMoveClaim = false;
         }
         int repetitions = countCurrentPosition();
 
