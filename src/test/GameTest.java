@@ -2036,6 +2036,114 @@ public class GameTest {
                     check(ending[0].contains("Threefold"), "the game must end by threefold repetition, got: " + ending[0]);
                 }));
 
+        test("GameController · king against king is an immediate draw", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whiteKing = new King(board, 4, 7, true);   // e1
+                    custom.add(whiteKing);
+                    custom.add(new King(board, 4, 0, false));         // e8
+                    custom.add(new Knight(board, 3, 6, false));       // d2, the last piece besides the kings
+                    state.setPieces(custom);
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    String[] ending = {null};
+                    gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
+
+                    gc.makeMove(new Move(state, whiteKing, 3, 6)); // Kxd2 leaves two bare kings
+                    checkNotNull(ending[0], "two bare kings must end the game");
+                    check(ending[0].startsWith("1/2-1/2") && ending[0].contains("Insufficient material"),
+                            "the game must end as a draw by insufficient material, got: " + ending[0]);
+                }));
+
+        test("GameController · king and knight against king is a draw", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whiteKnight = new Knight(board, 1, 7, true); // b1
+                    custom.add(new King(board, 4, 7, true));           // e1
+                    custom.add(whiteKnight);
+                    custom.add(new King(board, 4, 0, false));          // e8
+                    state.setPieces(custom);
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    String[] ending = {null};
+                    gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
+
+                    gc.makeMove(new Move(state, whiteKnight, 2, 5)); // Nc3
+                    checkNotNull(ending[0], "a lone knight can never mate, so the game must end");
+                    check(ending[0].startsWith("1/2-1/2") && ending[0].contains("Insufficient material"),
+                            "the game must end as a draw by insufficient material, got: " + ending[0]);
+                }));
+
+        test("GameController · bishops on the same colour can't mate, so the game is drawn", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whiteKing = new King(board, 4, 7, true);   // e1
+                    custom.add(whiteKing);
+                    custom.add(new Bishop(board, 2, 7, true));        // c1, dark square
+                    custom.add(new King(board, 4, 0, false));         // e8
+                    custom.add(new Bishop(board, 5, 0, false));       // f8, dark square as well
+                    state.setPieces(custom);
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    String[] ending = {null};
+                    gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
+
+                    gc.makeMove(new Move(state, whiteKing, 4, 6)); // Ke2
+                    checkNotNull(ending[0], "same coloured bishops can never mate, so the game must end");
+                    check(ending[0].startsWith("1/2-1/2") && ending[0].contains("Insufficient material"),
+                            "the game must end as a draw by insufficient material, got: " + ending[0]);
+                }));
+
+        test("GameController · bishops on opposite colours keep the game going", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whiteKing = new King(board, 4, 7, true);   // e1
+                    custom.add(whiteKing);
+                    custom.add(new Bishop(board, 2, 7, true));        // c1, dark square
+                    custom.add(new King(board, 4, 0, false));         // e8
+                    custom.add(new Bishop(board, 2, 0, false));       // c8, light square
+                    state.setPieces(custom);
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    String[] ending = {null};
+                    gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
+
+                    gc.makeMove(new Move(state, whiteKing, 4, 6)); // Ke2
+                    check(ending[0] == null, "opposite coloured bishops can still mate, got: " + ending[0]);
+                }));
+
+        test("GameController · running out of time against a lone king is a draw", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    custom.add(new King(board, 4, 7, true));   // e1
+                    custom.add(new Queen(board, 3, 7, true));  // d1
+                    custom.add(new King(board, 4, 0, false));  // e8, Black has nothing else
+                    state.setPieces(custom);
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    String[] ending = {null};
+                    gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
+
+                    gc.flagFall(true); // White's clock runs out
+                    checkNotNull(ending[0], "a flag fall always ends the game");
+                    check(ending[0].startsWith("1/2-1/2"), "a lone king can't win on time, got: " + ending[0]);
+                }));
+
         // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── GameController · rules engine ────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
