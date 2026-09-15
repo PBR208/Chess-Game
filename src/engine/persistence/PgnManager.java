@@ -26,10 +26,11 @@ public class PgnManager {
     /**
      * Resolves the directory where finished games are stored as PGN files.
      * <p>
-     * Saved games need a predictable home, and tests need a way to keep their files out of the
-     * real library. I first read the chess.gamesDir system property and use it when it holds a
-     * non-blank value. Otherwise I fall back to a games folder in the current working directory,
-     * which is how the app has always behaved.
+     * Saved games need a predictable home that doesn't depend on where the app was started, and
+     * tests need a way to keep their files out of the real library. I first read the chess.gamesDir
+     * system property and use it when it holds a non-blank value. Otherwise I use the per-user data
+     * folder of the operating system, because the working directory of a double-clicked jar or an
+     * installed app is often unwritable or unexpected.
      * <p>
      * Time complexity: O(p) where p is the length of the path string.
      * Space complexity: O(p) for the resulting Path.
@@ -41,8 +42,48 @@ public class PgnManager {
         // an explicit location always wins
         String override = System.getProperty(GAMES_DIR_PROPERTY);
         if (override != null && !override.isBlank()) return Paths.get(override.trim());
-        // default is a games folder next to where the app was started
-        return Paths.get(System.getProperty("user.dir"), "games");
+        // otherwise the per-user data folder of this operating system
+        return defaultGamesDirectory(System.getProperty("os.name", ""), System.getProperty("user.home"),
+                System.getenv("APPDATA"), System.getenv("XDG_DATA_HOME"));
+    }
+
+    /**
+     * Works out the default games folder for an operating system.
+     * <p>
+     * Every platform has its own place for per-user application data. On Windows I use the roaming
+     * application data folder from APPDATA, or AppData\Roaming in the home folder when it isn't set.
+     * On macOS I use Library/Application Support in the home folder. Everywhere else I follow the XDG
+     * base directory rules, which means XDG_DATA_HOME when it is an absolute path and .local/share in
+     * the home folder otherwise. The inputs are parameters, so the rules can be tested for every
+     * platform on any machine.
+     * <p>
+     * Time complexity: O(p) in the length of the paths. Space complexity: O(p) for the result.
+     *
+     * @param pOsName      value of the os.name property, such as "Windows 11" or "Mac OS X"; never null
+     * @param pUserHome    home folder of the user, never null
+     * @param pAppData     value of the APPDATA environment variable, may be null or blank
+     * @param pXdgDataHome value of the XDG_DATA_HOME environment variable, may be null or blank
+     * @return the games folder inside the platform's data folder, never null
+     * @throws NullPointerException if pOsName or pUserHome is null
+     * @throws InvalidPathException if one of the values is not a valid path on this OS
+     */
+    public static Path defaultGamesDirectory(String pOsName, String pUserHome, String pAppData, String pXdgDataHome) {
+        String os = pOsName.toLowerCase(Locale.ROOT);
+        if (os.startsWith("windows")) {
+            // roaming application data is where per-user files live on Windows
+            Path base = pAppData != null && !pAppData.isBlank()
+                    ? Paths.get(pAppData)
+                    : Paths.get(pUserHome, "AppData", "Roaming");
+            return base.resolve("ChessGame").resolve("games");
+        }
+        if (os.startsWith("mac")) {
+            return Paths.get(pUserHome, "Library", "Application Support", "ChessGame", "games");
+        }
+        // Linux and other Unix systems, the XDG spec ignores relative values
+        Path base = pXdgDataHome != null && !pXdgDataHome.isBlank() && Paths.get(pXdgDataHome).isAbsolute()
+                ? Paths.get(pXdgDataHome)
+                : Paths.get(pUserHome, ".local", "share");
+        return base.resolve("chess-game").resolve("games");
     }
 
     /**
