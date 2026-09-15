@@ -12,6 +12,7 @@
 
 import javax.tools.JavaCompiler;
 import javax.tools.ToolProvider;
+import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -44,6 +45,13 @@ public class Build {
 
     // entry point of the game, written into the jar manifest
     private static final String MAIN_CLASS = "app.Main";
+
+    // release version for the manifest, pass -Dchess.version=1.2.2 when building a release
+    private static final String VERSION = System.getProperty("chess.version", "dev");
+
+
+    // the class file major version is the Java release plus 44, so 61 for Java 17
+    private static final int EXPECTED_CLASS_VERSION = Integer.parseInt(RELEASE) + 44;
 
     // set once this run has compiled, so later targets can reuse the classes
     private static boolean compiled = false;
@@ -271,9 +279,10 @@ public class Build {
      * Compiles if needed and packages the game classes and resources into a runnable jar.
      * <p>
      * A release should be one file that starts with java -jar on any OS. I compile first when this
-     * run has not compiled yet, write a manifest with app.Main as the main class, and add every file
-     * below out/classes with forward slash entry names. Test classes never end up in the jar,
-     * because they are compiled into their own folder.
+     * run has not compiled yet and check that every class targets Java 17. Then I write a manifest
+     * with app.Main as the main class plus the title, version, Java level and the JDK that built
+     * it, and add every file below out/classes with forward slash entry names. Test classes never
+     * end up in the jar, because they are compiled into their own folder.
      * <p>
      * Time complexity: O(b) in the total size of the packaged files.
      * Space complexity: O(f) for the list of f packaged files.
@@ -286,11 +295,20 @@ public class Build {
             compile();
         }
 
+        // a release must never contain classes that need a newer Java than 17
+        verifyClassFileVersions();
+
         Manifest manifest = new Manifest();
         Attributes attributes = manifest.getMainAttributes();
         // without a manifest version every other attribute is silently ignored
         attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
         attributes.put(Attributes.Name.MAIN_CLASS, MAIN_CLASS);
+        // shows which version and Java level a jar was built for
+        attributes.put(Attributes.Name.IMPLEMENTATION_TITLE, "Chess-Game");
+        attributes.put(Attributes.Name.IMPLEMENTATION_VERSION, VERSION);
+        attributes.put(new Attributes.Name("Build-Jdk-Spec"), RELEASE);
+        attributes.put(new Attributes.Name("Created-By"),
+                System.getProperty("java.version") + " (" + System.getProperty("java.vendor") + ")");
 
         Files.createDirectories(OUT);
         try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(JAR), manifest);
@@ -304,6 +322,41 @@ public class Build {
             }
         }
         System.out.println("packaged " + JAR);
+    }
+
+    /**
+     * Makes sure every compiled game class targets exactly Java 17.
+     * <p>
+     * My last published jar was built for Java 25 and refused to start on anything older, although
+     * the project promises Java 17. I read the header of every class file below out/classes and stop
+     * the build when a file is not a class file or its major version differs from the one Java 17
+     * uses. That way a changed compiler setting or stray classes from another build can never slip
+     * into a release.
+     * <p>
+     * Time complexity: O(c) for c class files, each read only up to its first eight bytes.
+     * Space complexity: O(c) for the list of class file paths.
+     *
+     * @throws IOException if a class file cannot be read
+     */
+    private static void verifyClassFileVersions() throws IOException {
+        try (Stream<Path> paths = Files.walk(MAIN_CLASSES)) {
+            for (Path classFile : paths.filter(path -> path.toString().endsWith(".class")).collect(Collectors.toList())) {
+                try (DataInputStream in = new DataInputStream(Files.newInputStream(classFile))) {
+                    // every class file starts with CAFEBABE, then minor and major version
+                    int magic = in.readInt();
+                    in.readUnsignedShort();
+                    int major = in.readUnsignedShort();
+                    if (magic != 0xCAFEBABE) {
+                        fail(classFile + " is not a valid class file");
+                    }
+                    // anything else would not start on the Java version the project promises
+                    if (major != EXPECTED_CLASS_VERSION) {
+                        fail(classFile + " has class file version " + major + ", expected "
+                                + EXPECTED_CLASS_VERSION + " for Java " + RELEASE);
+                    }
+                }
+            }
+        }
     }
 
     /**
