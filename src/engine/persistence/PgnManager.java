@@ -172,17 +172,19 @@ public class PgnManager {
      * Every finished game should show up in the Past Games library without overwriting an older
      * one. I bring games from the old default folder along the first time, make sure the games
      * directory exists, build a file name from the date and both player
-     * names, append a counter when that name is taken and write the PGN text. I/O failures are
-     * only reported on standard error so a full or read-only disk never crashes the game screen.
+     * names, append a counter when that name is taken and write the PGN text. I/O failures don't
+     * throw, so a full or read-only disk never crashes the game screen, but they are reported on
+     * standard error and through the return value, so the caller can tell the player.
      * <p>
      * Time complexity: O(m + f) where m is the number of moves written and f is the number of
      * existing files sharing the same base name. Space complexity: O(m) for the PGN text.
      *
      * @param pRecord finished game to persist, never null
+     * @return true if the game was written, false if an I/O error prevented it
      * @throws NullPointerException if pRecord is null
      * @throws InvalidPathException if the configured games directory is not a valid path
      */
-    public static void save(GameRecord pRecord) {
+    public static boolean save(GameRecord pRecord) {
         try {
             // games from the old default folder come along the first time
             migrateLegacyGamesOnce();
@@ -197,8 +199,11 @@ public class PgnManager {
             Path file = uniquePath(dir, base, ".pgn");
 
             Files.writeString(file, buildPgn(pRecord));
+            return true;
         } catch (IOException e) {
             System.err.println("PgnManager: failed to save: " + e.getMessage());
+            // let the caller tell the player instead of pretending it worked
+            return false;
         }
     }
 
