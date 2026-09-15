@@ -296,7 +296,7 @@ it prints what is missing and exits with code 2 instead of failing silently.
 3. Click one of your pieces to select it — valid moves are highlighted in green
 4. Click a highlighted square to move
 5. The board flips so the other player faces their own pieces from the bottom
-6. The clocks switch automatically; a player who runs out of time loses
+6. The clocks switch automatically; a player who runs out of time loses, unless the player still on time has only a king left or neither side has enough material to checkmate, which makes it a draw
 7. The game ends on checkmate, stalemate, time loss, or a draw by repetition, insufficient material, or the 50/75-move
    rule, and the result is saved automatically as a PGN file (see below for where)
 
