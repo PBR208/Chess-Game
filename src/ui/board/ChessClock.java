@@ -124,6 +124,26 @@ public class ChessClock {
     }
 
     /**
+     * Adds time to this player's clock, for example the increment after a move.
+     * <p>
+     * Time controls such as 2+1 give a player extra seconds after every move they make. I add the
+     * amount to the banked time, which works whether the clock is running or not, and refresh the
+     * displayed value. Unlimited clocks and amounts of zero or less are ignored.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pExtraMs milliseconds to add, 0 or less does nothing
+     */
+    public void addTime(long pExtraMs) {
+        // an unlimited clock has nothing to add to
+        if (START_TIME_MS == 0 || pExtraMs <= 0) {
+            return;
+        }
+        bankedMs += pExtraMs;
+        timeMs = currentTimeMs();
+    }
+
+    /**
      * Refreshes the display and detects when the time has run out.
      * <p>
      * The Swing timer calls this ten times a second. A stopped clock is ignored and an unlimited
