@@ -33,8 +33,8 @@ borrowed from elsewhere. Every line of logic was written by hand. These are the 
 | **Event-Driven Programming**    | `MouseListener` and `MouseMotionListener` wired to game logic; `javax.swing.Timer` driving a clock tick via a functional callback interface                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | **Persistence & Serialization** | Hand-rolled PGN writer/parser (`PgnManager`), FEN generation and loading (`FenGenerator`/`FenLoader`), and algebraic notation output (`NotationHelper`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | **UI Navigation & State**       | A panel-swapping menu system (`MainMenu` → `NewGamePanel` → `Board` / `PastGamesPanel` → `ReplayPanel`) driven by a config object (`GameConfig`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **Dependency Inversion**        | `GameController` no longer constructs `PromoteGUI`/`FiftyRuleDraw` directly — it depends on `PromotionChooser`/`DrawOfferResolver` interfaces, with `Swing*` classes supplying the real dialogs. The rules engine has zero Swing imports                                                                                                                                                                                                                                                                                                                                                                                   |
-| **Separation of Concerns**      | Split what was one `Board` class doing four jobs (rendering, position data, coordinate flipping, clock ownership) into `Board` (rendering) + `BoardState` (position data); split move-history bookkeeping out of `GameController` into `MoveHistory`; pulled the repeated dark-theme styling out of four GUI panels into `Theme`/`UiComponents`; then carried that same separation all the way through the package layout — `engine.imports`, `engine.model`, `engine.persistence`, and `engine.pieces` hold zero-Swing rules/data code, while `ui.board`, `ui.menu`, and `ui.theme` hold everything that touches a window |
+| **Dependency Inversion**        | `GameController` no longer constructs `PromoteGUI`/`FiftyRuleDraw` directly — it depends on `PromotionChooser`/`DrawOfferResolver` interfaces, with `Swing*` classes supplying the real dialogs. The dialogs are out of the rules engine, although `GameController` and the pieces still import `ui.board` (see Project Structure)                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Separation of Concerns**      | Split what was one `Board` class doing four jobs (rendering, position data, coordinate flipping, clock ownership) into `Board` (rendering) + `BoardState` (position data); split move-history bookkeeping out of `GameController` into `MoveHistory`; pulled the repeated dark-theme styling out of four GUI panels into `Theme`/`UiComponents`; then carried that same separation all the way through the package layout — `ui.board`, `ui.menu`, and `ui.theme` hold everything that opens or draws a window, `engine.model` and `engine.persistence` hold no window code at all, and `engine.imports` and `engine.pieces` still lean on `ui.board` for the board and the sprites |
 | **Refactoring**                 | Introduced enums (`DrawResult`, `Choice`) to replace magic strings; every refactor here was done as a small, isolated, behavior-preserving change verified by a full recompile each time                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | **Testing**                     | Built a minimal test runner from scratch — named tests, assertion helpers, auto-dismissing modal dialogs via `Timer`-scheduled `doClick()` — and grew it alongside the refactors above so the newly-decoupled engine classes are now testable without any dialog simulation at all                                                                                                                                                                                                                                                                                                                                         |
 | **Git Workflow**                | Feature branching, PRs per feature (`enPassantFix`, `clock`, `50MoveRule`, `boardFlip`, …), tagged releases                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -90,7 +90,7 @@ src/
 ├── app/
 │   └── Main.java                     # Entry point — owns the JFrame, swaps in menu/game/library panels
 ├── engine/
-│   ├── imports/                      # Rules engine — zero Swing/AWT imports
+│   ├── imports/                      # Rules engine — still imports ui.board.Board and MoveLogPanel
 │   │   ├── GameController.java       # Turn management, move execution, game-end rule checks
 │   │   ├── CheckScanner.java         # Simulate-and-undo check detection
 │   │   ├── Move.java                 # Value object: piece + target square + captured piece
@@ -138,11 +138,12 @@ src/
     └── GameTest.java                 # Standalone test runner (no external framework) — see Testing below
 ```
 
-**Why `engine` and `ui` are separate top-level packages, not just separate classes:** nothing under `engine/imports`,
-`engine/model`, `engine/persistence`, or `engine/pieces` imports anything from `ui`. That's not just a naming
-convention — it's checkable: `GameController`, `CheckScanner`, `Move`, `BoardState`, `MoveHistory`, `NotationHelper`,
-and `FenGenerator` all run and are fully tested without a display of any kind. `ui/board` and `ui/menu` are the only
-places a `JFrame`/`JDialog` gets created.
+**Why `engine` and `ui` are separate top-level packages, not just separate classes:** the split marks where the rules
+end and the windows begin, but it isn't a clean cut yet. `engine/model` and `engine/persistence` import nothing from
+`ui`. `GameController` still imports `ui.board.Board` and `ui.board.MoveLogPanel`, and every class in `engine/pieces`
+takes a `Board` in its constructor. The whole test suite runs in a headless JVM, but the rules can't run without the
+AWT classes and the sprite sheet, because every piece needs them. `ui/board` and `ui/menu` are the only places a
+`JFrame`/`JDialog` gets created.
 
 **Why `BoardState` is separate from `Board`:** `Board` is a `JPanel` — it renders, owns the two clocks, and handles
 coordinate flipping. Before this split, it *also* owned the raw pieces list, the grid, and the en passant tile
@@ -155,10 +156,12 @@ dialog." These two interfaces let `GameController` ask an abstraction instead; `
 `SwingDrawOfferResolver` are the real, dialog-backed answers `Board` supplies, but a test (or any future non-Swing
 front end) can supply its own.
 
-**One remaining crack, flagged rather than hidden:** `engine.pieces.Piece` still takes a `ui.board.Board` in its
-constructor, to read tile size and slice its sprite. That's an upward dependency from `engine` into `ui` that the
-package split doesn't fully remove — decoupling piece rendering from piece construction would close it, but that's
-a bigger, separate change than a folder reorganization.
+**The remaining cracks, flagged rather than hidden:** `engine.pieces.Piece` takes a `ui.board.Board` in its
+constructor to read the square size, and it loads and slices the sprite sheet with `java.awt` and `javax.imageio`.
+`GameController` uses `Board` to put pieces on their pixel positions and keeps a `MoveLogPanel` for the live move
+log. Those are upward dependencies from `engine` into `ui` that the package split doesn't remove. Moving the sprites
+into the UI and giving the rules a position model of their own would close them, but that's a bigger, separate change
+than a folder reorganization.
 
 ---
 
