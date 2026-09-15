@@ -46,6 +46,9 @@ public class Build {
     // entry point of the game, written into the jar manifest
     private static final String MAIN_CLASS = "app.Main";
 
+    // release version for the manifest, pass -Dchess.version=1.2.2 when building a release
+    private static final String VERSION = System.getProperty("chess.version", "dev");
+
 
     // the class file major version is the Java release plus 44, so 61 for Java 17
     private static final int EXPECTED_CLASS_VERSION = Integer.parseInt(RELEASE) + 44;
@@ -277,8 +280,9 @@ public class Build {
      * <p>
      * A release should be one file that starts with java -jar on any OS. I compile first when this
      * run has not compiled yet and check that every class targets Java 17. Then I write a manifest
-     * with app.Main as the main class and add every file below out/classes with forward slash entry
-     * names. Test classes never end up in the jar, because they are compiled into their own folder.
+     * with app.Main as the main class plus the title, version, Java level and the JDK that built
+     * it, and add every file below out/classes with forward slash entry names. Test classes never
+     * end up in the jar, because they are compiled into their own folder.
      * <p>
      * Time complexity: O(b) in the total size of the packaged files.
      * Space complexity: O(f) for the list of f packaged files.
@@ -299,6 +303,12 @@ public class Build {
         // without a manifest version every other attribute is silently ignored
         attributes.put(Attributes.Name.MANIFEST_VERSION, "1.0");
         attributes.put(Attributes.Name.MAIN_CLASS, MAIN_CLASS);
+        // shows which version and Java level a jar was built for
+        attributes.put(Attributes.Name.IMPLEMENTATION_TITLE, "Chess-Game");
+        attributes.put(Attributes.Name.IMPLEMENTATION_VERSION, VERSION);
+        attributes.put(new Attributes.Name("Build-Jdk-Spec"), RELEASE);
+        attributes.put(new Attributes.Name("Created-By"),
+                System.getProperty("java.version") + " (" + System.getProperty("java.vendor") + ")");
 
         Files.createDirectories(OUT);
         try (JarOutputStream jar = new JarOutputStream(Files.newOutputStream(JAR), manifest);
