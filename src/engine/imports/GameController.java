@@ -88,9 +88,27 @@ public class GameController {
         gameOver = false;
     }
 
-    public void flagFall(boolean isWhiteExpired) {
-        String result = isWhiteExpired ? "0-1" : "1-0";
-        String winner = isWhiteExpired ? config.blackName() : config.whiteName();
+    /**
+     * Ends the game because a player's clock ran out.
+     * <p>
+     * Normally the opponent wins on time. FIDE rule 6.9 makes it a draw instead when the opponent
+     * could never checkmate by any series of legal moves. I treat the clear cases as a draw, a side
+     * that has nothing but its king and a position with insufficient material for both sides, and
+     * give the win on time in every other case.
+     * <p>
+     * Time complexity: O(p + m) for the material checks over p pieces and the record of m moves.
+     * Space complexity: O(m) for the game record.
+     *
+     * @param pIsWhiteExpired true if White's clock ran out, false if Black's did
+     */
+    public void flagFall(boolean pIsWhiteExpired) {
+        // FIDE 6.9: a side that could never checkmate doesn't win on time
+        if (onlyKingLeft(!pIsWhiteExpired) || isInsufficientMaterial()) {
+            endGame("1/2-1/2", "Time out — Draw");
+            return;
+        }
+        String result = pIsWhiteExpired ? "0-1" : "1-0";
+        String winner = pIsWhiteExpired ? config.blackName() : config.whiteName();
         endGame(result, winner + " wins on time!");
     }
 
@@ -526,6 +544,27 @@ public class GameController {
         // bishops on a single colour without knights, or one knight without bishops
         return (knights == 0 && !(lightBishop && darkBishop))
                 || (knights == 1 && !lightBishop && !darkBishop);
+    }
+
+    /**
+     * Tells whether one side has nothing left but its king.
+     * <p>
+     * A lone king can never deliver checkmate, which decides the result when the other player runs
+     * out of time. I look for any piece of that colour other than the king.
+     * <p>
+     * Time complexity: O(p) for p pieces. Space complexity: O(1).
+     *
+     * @param pWhite true to look at White's pieces, false for Black's
+     * @return true if that side has only its king
+     */
+    private boolean onlyKingLeft(boolean pWhite) {
+        for (Piece piece : state.getPieces()) {
+            // any other piece of that colour could still help to mate
+            if (piece.isWhite() == pWhite && piece.getType() != PieceType.KING) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void promotePawn(Move m) {
