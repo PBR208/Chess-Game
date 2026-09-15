@@ -605,6 +605,39 @@ public class GameTest {
             checkNotNull(all, "loadAll must never return null");
         });
 
+        test("PgnManager · player names with quotes, backslashes and brackets survive a save and load", () -> {
+            String white = "Magnus \"The Hammer\" \\ " + System.nanoTime();
+            String black = "Bob [Blitz]";
+            PgnManager.save(new GameRecord(white, black, "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4", "e5", "Nf3"), List.of("fen1", "fen2", "fen3")));
+
+            GameRecord found = PgnManager.loadAll().stream()
+                    .filter(r -> r.whiteName.equals(white))
+                    .findFirst().orElse(null);
+
+            checkNotNull(found, "a game with quotes in a player name must still show up in the library");
+            checkEqual(black, found.blackName, "brackets in a player name must survive");
+            checkEqual(List.of("e4", "e5", "Nf3"), found.moves, "the moves must not get mixed up with the tags");
+            cleanupSavedGame(white);
+        });
+
+        test("PgnManager · saved games start with the seven tag roster in order", () -> {
+            String white = "RosterWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(white, "RosterBlack", "0-1", "2026.01.02", "Rapid 10+0",
+                    List.of("d4"), List.of("fen1")));
+
+            File[] files = PgnManager.getGamesDirectory().toFile().listFiles((dir, name) -> name.contains(white));
+            checkNotNull(files, "the games folder must exist after saving");
+            checkEqual(1, files.length, "exactly one file must be saved for the game");
+            List<String> tagNames = Files.readAllLines(files[0].toPath()).stream()
+                    .filter(line -> line.startsWith("["))
+                    .map(line -> line.substring(1, line.indexOf(' ')))
+                    .toList();
+            checkEqual(List.of("Event", "Site", "Date", "Round", "White", "Black", "Result"), tagNames.subList(0, 7),
+                    "the seven tag roster must come first and in order");
+            cleanupSavedGame(white);
+        });
+
         // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── BoardState ───────────────────────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
