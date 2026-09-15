@@ -1,5 +1,15 @@
 package ui.menu;
 
+/*
+ * Purpose: PastGamesPanel is the library of finished games. It lists every saved game, shows the
+ * move log of the selected one and switches to a replay board that steps through its positions. I
+ * load the games through PgnManager, so this screen never deals with files or PGN text itself. The
+ * text uses logical font names, which every platform provides.
+ *
+ * Owner: PBR208 - https://github.com/PBR208/
+ * Version: 1.0
+ */
+
 import engine.model.GameRecord;
 import engine.persistence.PgnManager;
 import app.Main;
@@ -18,6 +28,16 @@ public class PastGamesPanel extends JPanel {
     private final CardLayout rightCards;
     private final JTextArea moveLogArea;
 
+    /**
+     * Builds the library screen with the list of saved games and the move log and replay views.
+     * <p>
+     * Players come here to look at earlier games. I load all saved games, lay out a top bar with the
+     * title and the way back to the menu, the game list on the left, the move log or replay on the
+     * right and the buttons that switch between those two views. Selecting a game fills both views.
+     * <p>
+     * Time complexity: O(g + c) for g saved games with c characters of PGN text to load.
+     * Space complexity: O(g + c) for the loaded records and the list entries.
+     */
     public PastGamesPanel() {
         records = PgnManager.loadAll();
 
@@ -30,7 +50,7 @@ public class PastGamesPanel extends JPanel {
 
         JLabel title = new JLabel("Past Games");
         title.setForeground(Theme.FG);
-        title.setFont(new Font("Arial", Font.BOLD, 20));
+        title.setFont(new Font(Font.SANS_SERIF,Font.BOLD, 20));
 
         JButton backBtn = styledButton("\u2190 Back to Menu");
         backBtn.addActionListener(e -> Main.showMenu());
@@ -49,7 +69,7 @@ public class PastGamesPanel extends JPanel {
         JList<String> gameList = new JList<>(listModel);
         gameList.setBackground(Theme.PANEL_BG);
         gameList.setForeground(Theme.FG);
-        gameList.setFont(new Font("Arial", Font.PLAIN, 13));
+        gameList.setFont(new Font(Font.SANS_SERIF,Font.PLAIN, 13));
         gameList.setSelectionBackground(new Color(60, 60, 70));
         gameList.setSelectionForeground(Theme.FG);
         gameList.setFixedCellHeight(36);
@@ -65,7 +85,7 @@ public class PastGamesPanel extends JPanel {
 
         JLabel placeholder = new JLabel("Select a game from the list", SwingConstants.CENTER);
         placeholder.setForeground(new Color(120, 120, 120));
-        placeholder.setFont(new Font("Arial", Font.ITALIC, 14));
+        placeholder.setFont(new Font(Font.SANS_SERIF,Font.ITALIC, 14));
         rightPanel.add(placeholder, "empty");
 
         moveLogArea = new JTextArea();
@@ -146,7 +166,19 @@ public class PastGamesPanel extends JPanel {
         replayHolder.repaint();
     }
 
-    private JButton styledButton(String text) {
-        return UiComponents.button(text, new Font("Arial", Font.PLAIN, 13), Theme.BUTTON_SECONDARY);
+    /**
+     * Creates a button in the secondary style of this screen.
+     * <p>
+     * The back button and the view toggles all share one look. I style a button with the shared dark
+     * look and a plain logical font.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the button.
+     *
+     * @param pText button text, never null
+     * @return the finished button, never null
+     */
+    private JButton styledButton(String pText) {
+        // logical fonts exist on every platform, Arial doesn't
+        return UiComponents.button(pText, new Font(Font.SANS_SERIF, Font.PLAIN, 13), Theme.BUTTON_SECONDARY);
     }
 }

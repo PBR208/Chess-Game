@@ -1,5 +1,15 @@
 package ui.menu;
 
+/*
+ * Purpose: ReplayPanel steps through a saved game position by position. It draws a small board from
+ * the FEN recorded after every move and shows the move list and the current FEN next to it. I keep
+ * the replay separate from the live board, so looking at an old game can never change a running
+ * one. The text uses logical font names, which every platform provides.
+ *
+ * Owner: PBR208 - https://github.com/PBR208/
+ * Version: 1.0
+ */
+
 import engine.persistence.FenLoader;
 import engine.pieces.Piece;
 import ui.theme.Theme;
@@ -45,9 +55,22 @@ public class ReplayPanel extends JPanel {
     private final JTextArea moveHistoryArea;
     private final JTextArea fenArea;
 
-    public ReplayPanel(List<String> moves, List<String> fens) {
-        this.moves = moves;
-        this.fens = fens;
+    /**
+     * Builds the replay view for one saved game.
+     * <p>
+     * A player wants to click or use the arrow keys through the positions of an old game. I keep the
+     * moves and positions, lay out the board canvas with the navigation buttons below it and the move
+     * list and FEN on the right, bind the left and right arrow keys and show the first position.
+     * <p>
+     * Time complexity: O(m) for filling the move list with m moves.
+     * Space complexity: O(m) for the move list text.
+     *
+     * @param pMoves moves of the game in SAN, never null
+     * @param pFens  FEN after each move, in the same order as the moves; never null, may be empty
+     */
+    public ReplayPanel(List<String> pMoves, List<String> pFens) {
+        this.moves = pMoves;
+        this.fens = pFens;
         setBackground(Theme.BG);
         setLayout(new BorderLayout());
 
@@ -69,7 +92,7 @@ public class ReplayPanel extends JPanel {
 
         moveLabel = new JLabel(moveText(), SwingConstants.CENTER);
         moveLabel.setForeground(Theme.FG);
-        moveLabel.setFont(new Font("Arial", Font.PLAIN, 13));
+        moveLabel.setFont(new Font(Font.SANS_SERIF,Font.PLAIN, 13));
 
         JButton first = navButton("\u21e4");
         first.addActionListener(e -> {
@@ -109,7 +132,7 @@ public class ReplayPanel extends JPanel {
         // Move History
         JLabel moveHistoryHeader = new JLabel("  Move History");
         moveHistoryHeader.setForeground(new Color(140, 140, 140));
-        moveHistoryHeader.setFont(new Font("Arial", Font.BOLD, 12));
+        moveHistoryHeader.setFont(new Font(Font.SANS_SERIF,Font.BOLD, 12));
         moveHistoryHeader.setBackground(new Color(40, 40, 42));
         moveHistoryHeader.setOpaque(true);
         moveHistoryHeader.setPreferredSize(new Dimension(220, 30));
@@ -133,7 +156,7 @@ public class ReplayPanel extends JPanel {
         // FEN Display
         JLabel fenHeader = new JLabel("  Current FEN");
         fenHeader.setForeground(new Color(140, 140, 140));
-        fenHeader.setFont(new Font("Arial", Font.BOLD, 12));
+        fenHeader.setFont(new Font(Font.SANS_SERIF,Font.BOLD, 12));
         fenHeader.setBackground(new Color(40, 40, 42));
         fenHeader.setOpaque(true);
         fenHeader.setPreferredSize(new Dimension(220, 25));
@@ -260,8 +283,20 @@ public class ReplayPanel extends JPanel {
         }
     }
 
-    private JButton navButton(String text) {
-        JButton b = UiComponents.button(text, new Font("Arial", Font.BOLD, 24), Theme.BUTTON_SECONDARY);
+    /**
+     * Creates one of the four navigation buttons below the replay board.
+     * <p>
+     * The first, previous, next and last buttons share size and look. I style a button with the
+     * shared dark look, a large bold logical font for the arrow and a fixed size.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the button.
+     *
+     * @param pText arrow shown on the button, never null
+     * @return the finished button, never null
+     */
+    private JButton navButton(String pText) {
+        // logical fonts exist on every platform, Arial doesn't
+        JButton b = UiComponents.button(pText, new Font(Font.SANS_SERIF, Font.BOLD, 24), Theme.BUTTON_SECONDARY);
         b.setPreferredSize(new Dimension(54, 32));
         return b;
     }

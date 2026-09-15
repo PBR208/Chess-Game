@@ -1,5 +1,15 @@
 package ui.board;
 
+/*
+ * Purpose: MoveLogPanel shows the moves of the running game next to the board, together with the FEN
+ * of the current position. It pairs White's and Black's moves on one line and scrolls to the latest
+ * move. I keep it as a separate panel that only receives updates, so the rules engine never needs
+ * to know how the log is displayed. The text uses logical font names, which every platform provides.
+ *
+ * Owner: PBR208 - https://github.com/PBR208/
+ * Version: 1.0
+ */
+
 import javax.swing.*;
 import java.awt.*;
 import java.util.List;
@@ -9,9 +19,20 @@ public class MoveLogPanel extends JPanel {
     private final JTextArea area = new JTextArea();
     private final JTextArea fenArea = new JTextArea();
 
-    public MoveLogPanel(int boardHeight) {
+    /**
+     * Builds the move log with its move history and current FEN sections.
+     * <p>
+     * The log sits to the right of the board and should be exactly as tall. I lay out a header and a
+     * scrolling text area for the moves above a header and a wrapping text area for the FEN, split so
+     * the moves get most of the height, with headers in a bold logical font and monospaced text.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the Swing components.
+     *
+     * @param pBoardHeight preferred height in pixels, the height of the board panel; greater than 0
+     */
+    public MoveLogPanel(int pBoardHeight) {
         setLayout(new BorderLayout());
-        setPreferredSize(new Dimension(200, boardHeight));
+        setPreferredSize(new Dimension(200, pBoardHeight));
         setBackground(new Color(28, 28, 30));
 
         // Style the move history text area
@@ -24,7 +45,7 @@ public class MoveLogPanel extends JPanel {
         // Header label for moves
         JLabel header = new JLabel("  Move History");
         header.setForeground(new Color(140, 140, 140));
-        header.setFont(new Font("Arial", Font.BOLD, 12));
+        header.setFont(new Font(Font.SANS_SERIF,Font.BOLD, 12));
         header.setBackground(new Color(40, 40, 42));
         header.setOpaque(true);
         header.setPreferredSize(new Dimension(200, 30));
@@ -36,7 +57,7 @@ public class MoveLogPanel extends JPanel {
         // Header label for FEN
         JLabel fenHeader = new JLabel("  Current FEN");
         fenHeader.setForeground(new Color(140, 140, 140));
-        fenHeader.setFont(new Font("Arial", Font.BOLD, 12));
+        fenHeader.setFont(new Font(Font.SANS_SERIF,Font.BOLD, 12));
         fenHeader.setBackground(new Color(40, 40, 42));
         fenHeader.setOpaque(true);
         fenHeader.setPreferredSize(new Dimension(200, 25));
