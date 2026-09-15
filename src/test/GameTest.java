@@ -151,15 +151,29 @@ public class GameTest {
     }
 
     /**
-     * Recursively clicks the first AbstractButton (JButton/JToggleButton) with matching text.
+     * Recursively clicks the first button whose text or component name matches the label.
+     * <p>
+     * Modal dialog tests use this from a timer to press a button while the dialog blocks the test
+     * thread. It walks the component tree depth-first, clicks the first AbstractButton that
+     * matches and stops there. Matching the component name as well covers icon-only buttons such
+     * as the promotion pieces, which have no text at all.
+     * <p>
+     * Time complexity: O(n) where n is the number of components in the tree.
+     * Space complexity: O(d) for the recursion, where d is the nesting depth of the tree.
+     *
+     * @param pContainer container whose component tree is searched, never null
+     * @param pLabel     button text or component name to match, never null
+     * @return true if a matching button was found and clicked, false otherwise
      */
-    private static boolean clickButton(Container c, String label) {
-        for (Component comp : c.getComponents()) {
-            if (comp instanceof AbstractButton btn && label.equals(btn.getText())) {
+    private static boolean clickButton(Container pContainer, String pLabel) {
+        for (Component comp : pContainer.getComponents()) {
+            // press the first button that matches by text or name
+            if (comp instanceof AbstractButton btn && matchesLabel(btn, pLabel)) {
                 btn.doClick();
                 return true;
             }
-            if (comp instanceof Container sub && clickButton(sub, label)) return true;
+            // otherwise keep looking inside nested containers
+            if (comp instanceof Container sub && clickButton(sub, pLabel)) return true;
         }
         return false;
     }
@@ -172,17 +186,47 @@ public class GameTest {
     }
 
     /**
-     * Recursively finds the first AbstractButton with matching text.
+     * Recursively finds the first button whose text or component name matches the label.
+     * <p>
+     * Structural tests use this to check that a screen offers a certain action. It walks the
+     * component tree depth-first and returns the first AbstractButton that matches, looking at
+     * the component name as well so icon-only buttons can be found too.
+     * <p>
+     * Time complexity: O(n) where n is the number of components in the tree.
+     * Space complexity: O(d) for the recursion, where d is the nesting depth of the tree.
+     *
+     * @param pContainer container whose component tree is searched, never null
+     * @param pLabel     button text or component name to match, never null
+     * @return the first matching button, or null when there is none
      */
-    private static AbstractButton findButton(Container c, String label) {
-        for (Component comp : c.getComponents()) {
-            if (comp instanceof AbstractButton btn && label.equals(btn.getText())) return btn;
+    private static AbstractButton findButton(Container pContainer, String pLabel) {
+        for (Component comp : pContainer.getComponents()) {
+            // the first match by text or name wins
+            if (comp instanceof AbstractButton btn && matchesLabel(btn, pLabel)) return btn;
+            // descend into nested panels
             if (comp instanceof Container sub) {
-                AbstractButton found = findButton(sub, label);
+                AbstractButton found = findButton(sub, pLabel);
                 if (found != null) return found;
             }
         }
         return null;
+    }
+
+    /**
+     * Tells whether a button is identified by the given label.
+     * <p>
+     * Buttons with text are matched by their text, and icon-only buttons by the component name the
+     * UI code gives them. It simply compares the label against both values.
+     * <p>
+     * Time complexity: O(k) where k is the label length. Space complexity: O(1).
+     *
+     * @param pButton button to inspect, never null
+     * @param pLabel  expected text or component name, never null
+     * @return true if either the text or the component name equals the label
+     */
+    private static boolean matchesLabel(AbstractButton pButton, String pLabel) {
+        // text for normal buttons, component name for icon-only ones
+        return pLabel.equals(pButton.getText()) || pLabel.equals(pButton.getName());
     }
 
     /**
