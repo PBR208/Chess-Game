@@ -115,7 +115,14 @@ public class PgnManager {
             for (Path file : files) {
                 try {
                     GameRecord r = parse(Files.readString(file));
-                    if (r != null) records.add(r);
+                    if (r != null) {
+                        records.add(r);
+                    } else {
+                        // a file without players or result can't be listed, so say which one it was
+                        // TODO [PBR208]: Show skipped files in the Past Games screen, not only on standard error.
+                        System.err.println("PgnManager: skipping " + file.getFileName()
+                                + " — missing White, Black or Result tag");
+                    }
                 } catch (Exception e) {
                     System.err.println("PgnManager: skipping " + file.getFileName()
                             + " — " + e.getMessage());
@@ -192,16 +199,33 @@ public class PgnManager {
         pBuilder.append('[').append(pName).append(" \"").append(escaped).append("\"]\n");
     }
 
-    private static GameRecord parse(String pgn) {
-        String white = tag(pgn, "White");
-        String black = tag(pgn, "Black");
-        String result = tag(pgn, "Result");
-        String date = tag(pgn, "Date");
-        String timeControl = tag(pgn, "TimeControl");
+    /**
+     * Reads a game record back from PGN text.
+     * <p>
+     * The Past Games library is built from the saved files. I read the player, result, date and time
+     * control tags, whose values may contain escaped quotes, and give up on files without players or
+     * result. Then I remove the complete tag lines, so brackets inside a quoted value can't cut a tag
+     * short, collect the FEN comments for the replay viewer and split what is left into moves,
+     * skipping move numbers and the result token.
+     * <p>
+     * Time complexity: O(c) in the length of the text. Space complexity: O(c) for the intermediate
+     * strings and the record.
+     *
+     * @param pPgn complete PGN text of one game, never null
+     * @return the parsed record, or null when the White, Black or Result tag is missing
+     * @throws NullPointerException if pPgn is null
+     */
+    private static GameRecord parse(String pPgn) {
+        String white = tag(pPgn, "White");
+        String black = tag(pPgn, "Black");
+        String result = tag(pPgn, "Result");
+        String date = tag(pPgn, "Date");
+        String timeControl = tag(pPgn, "TimeControl");
 
         if (white == null || black == null || result == null) return null;
 
-        String moveSection = pgn.replaceAll("\\[.*?\\]\n?", "").trim();
+        // only whole tag lines go, a bracket inside a quoted value stays part of its tag
+        String moveSection = pPgn.replaceAll("(?m)^\\s*\\[\\w+\\s+" + QUOTED_VALUE + "\\]\\s*$", "").trim();
 
         List<String> fens = new ArrayList<>();
         Matcher fenMatcher = Pattern.compile("\\{([^}]+)\\}").matcher(moveSection);
@@ -226,9 +250,28 @@ public class PgnManager {
                 moves, fens);
     }
 
-    private static String tag(String pgn, String name) {
-        Matcher m = Pattern.compile("\\[" + name + " \"([^\"]+)\"\\]").matcher(pgn);
-        return m.find() ? m.group(1) : null;
+    // a tag value is a quoted string in which a backslash escapes quotes and backslashes
+    private static final String QUOTED_VALUE = "\"((?:[^\"\\\\]|\\\\.)*)\"";
+
+    /**
+     * Reads the value of one PGN tag.
+     * <p>
+     * Tag values are quoted strings that may contain escaped quotes and backslashes, and they may also
+     * be empty. The old pattern stopped at the first quote and rejected empty values, which made whole
+     * games disappear from the library. I match the value as a proper quoted string and then undo the
+     * escaping, where a backslash always protects the character after it.
+     * <p>
+     * Time complexity: O(c) in the length of the text. Space complexity: O(n) for the value.
+     *
+     * @param pPgn  complete PGN text, never null
+     * @param pName tag name such as "White", never null
+     * @return the unescaped tag value, possibly empty, or null when the tag is missing
+     * @throws NullPointerException if pPgn or pName is null
+     */
+    private static String tag(String pPgn, String pName) {
+        Matcher m = Pattern.compile("\\[" + Pattern.quote(pName) + "\\s+" + QUOTED_VALUE + "\\]").matcher(pPgn);
+        // a backslash always protects the next character
+        return m.find() ? m.group(1).replaceAll("\\\\(.)", "$1") : null;
     }
 
     private static String sanitize(String s) {
