@@ -1319,7 +1319,9 @@ public class GameTest {
 
         test("UiComponents · addHoverEffect brightens on enter and restores on exit", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    JButton b = UiComponents.button("Hover", new Font("Arial", Font.BOLD, 14), Theme.BUTTON_SECONDARY);
+                    // plain button on purpose, UiComponents.button() already registers the hover effect
+                    JButton b = new JButton("Hover");
+                    b.setBackground(Theme.BUTTON_SECONDARY);
                     UiComponents.addHoverEffect(b);
                     Color original = b.getBackground();
 
