@@ -1225,6 +1225,47 @@ public class GameTest {
                     check(board.isClockRunning(false), "Black's clock must run after White's move");
                 }));
 
+        test("Board: squares shrink so the game screen fits a 1366 by 768 laptop", () -> {
+            // 728 pixels are left once a 40 pixel task bar is gone
+            int tile = Board.tileSizeFor(1366, 728);
+            // eight rows and two clock bars plus the window frame
+            check(tile * 10 + 60 <= 728, "the board and both clocks must fit the screen height, got " + tile + " px squares");
+            check(tile < Board.DEFAULT_TILE_SIZE, "a small screen must get smaller squares than the default, got " + tile);
+        });
+
+        test("Board: squares stay at the default on large screens and at the minimum on tiny ones", () -> {
+            checkEqual(Board.DEFAULT_TILE_SIZE, Board.tileSizeFor(2560, 1400), "a large screen keeps the default squares");
+            checkEqual(Board.MIN_TILE_SIZE, Board.tileSizeFor(320, 240), "a tiny screen never goes below the minimum");
+        });
+
+        test("Board: a board with smaller squares measures itself and its pieces in them", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited(), 60);
+                    checkEqual(60, board.getTileSize(), "the board must use the given square size");
+                    // eight squares wide, eight rows and two clock bars high
+                    checkEqual(new Dimension(480, 600), board.getPreferredSize(), "the panel size must follow the squares");
+                    checkEqual(60, board.getState().getPiece(1, 7).getxPos(), "the b1 knight must sit one small square from the edge");
+                }));
+
+        test("Board: a square size below the minimum is refused", () -> {
+            try {
+                new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE - 1);
+                throw new AssertionError("a board with squares below the minimum must not be built");
+            } catch (IllegalArgumentException expected) {
+                // the size is checked before anything else is created
+            }
+        });
+
+        test("Main: the window size is cut down to the usable screen area", () -> {
+            Rectangle laptop = new Rectangle(0, 0, 1366, 728);
+            checkEqual(new Dimension(1366, 728), app.Main.fitToScreen(new Dimension(1400, 1000), laptop),
+                    "a window larger than the screen must shrink to it");
+            checkEqual(new Dimension(1200, 728), app.Main.fitToScreen(new Dimension(1200, 900), laptop),
+                    "a width that fits must stay while the height shrinks");
+            checkEqual(new Dimension(1400, 1000), app.Main.fitToScreen(new Dimension(1400, 1000), new Rectangle(0, 0, 2560, 1400)),
+                    "a window that fits must keep its size");
+        });
+
         test("Input: a press on the bottom clock bar is ignored", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
@@ -1805,7 +1846,7 @@ public class GameTest {
 
         test("UiComponents: button() applies the shared flat, dark-theme look", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    JButton b = UiComponents.button("Test", new Font("Arial", Font.BOLD, 14), Theme.ACCENT);
+                    JButton b = UiComponents.button("Test", new Font(Font.SANS_SERIF, Font.BOLD, 14), Theme.ACCENT);
                     checkEqual(Theme.ACCENT, b.getBackground(), "background must match the given color");
                     checkEqual(Theme.FG, b.getForeground(), "foreground must always be Theme.FG");
                     check(!b.isBorderPainted(), "border must not be painted");
@@ -1816,9 +1857,29 @@ public class GameTest {
         test("UiComponents: style() applies the same look to a JToggleButton", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     JToggleButton t = new JToggleButton("Preset");
-                    UiComponents.style(t, new Font("Arial", Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
+                    UiComponents.style(t, new Font(Font.SANS_SERIF, Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
                     checkEqual(Theme.BUTTON_SECONDARY, t.getBackground(), "background must apply to toggle buttons too");
                     check(!t.isBorderPainted(), "border must not be painted on a toggle button either");
+                }));
+
+        test("UiComponents: displayable keeps text the font can draw", () -> {
+            Font font = new Font(Font.DIALOG, Font.PLAIN, 12);
+            checkEqual("Move Log", UiComponents.displayable(font, "Move Log", "Log"), "plain letters must be kept");
+        });
+
+        test("UiComponents: displayable falls back to ASCII when a character is missing", () -> {
+            Font font = new Font(Font.DIALOG, Font.PLAIN, 12);
+            // U+FFFF is a noncharacter, so no font can draw it
+            String missing = "Next " + (char) 0xFFFF;
+            checkEqual("Next >", UiComponents.displayable(font, missing, "Next >"), "a missing glyph must switch to the ASCII text");
+        });
+
+        test("UiComponents: a button with an ASCII text shows it when the font lacks a symbol", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    String missing = "Replay " + (char) 0xFFFF;
+                    JButton b = UiComponents.button(missing, "Replay >", new Font(Font.SANS_SERIF, Font.PLAIN, 13), Theme.BUTTON_SECONDARY);
+                    checkEqual("Replay >", b.getText(), "the button must show the ASCII text");
+                    checkEqual(Theme.BUTTON_SECONDARY, b.getBackground(), "the fallback button must keep the shared look");
                 }));
 
         test("UiComponents: addHoverEffect brightens on enter and restores on exit", () ->
