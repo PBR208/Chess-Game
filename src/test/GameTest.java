@@ -1,5 +1,16 @@
 package test;
 
+/*
+ * Purpose: GameTest is the hand-written test runner for the whole project. I keep it free of
+ * external frameworks so the repository stays dependency-free and anyone with a JDK can run it.
+ * It covers the rules engine, persistence, notation and every Swing screen in one place. Engine
+ * and panel tests run in any JVM, while tests that open real dialogs or frames need a display,
+ * so the same suite works on a desktop and on a headless build machine.
+ *
+ * Owner: PBR208 - https://github.com/PBR208/
+ * Version: 1.0
+ */
+
 import engine.imports.*;
 import engine.model.*;
 import engine.persistence.*;
@@ -12,17 +23,23 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Standalone GUI + action test runner — no dependencies required.
  * <p>
  * Run via IntelliJ: right-click GameTest → Run 'GameTest.main()'
- * Run via terminal: java -ea -cp out test.GameTest
+ * Run via terminal: java -cp "out;src" test.GameTest (use ':' instead of ';' on macOS/Linux)
+ * On a headless JVM the engine and panel tests still run and window tests are skipped.
  * <p>
  * Each test() call registers a named check. Results are printed to the console
  * and a summary is shown at the end. A failing assertion does NOT stop the
@@ -59,17 +76,130 @@ public class GameTest {
 
     private static final List<String> passed = new ArrayList<>();
     private static final List<String> failed = new ArrayList<>();
+    private static final List<String> skipped = new ArrayList<>();
 
-    private static void test(String name, TestBody body) {
+    // windows (dialogs, frames) can only be created when the JVM has a display
+    private static final boolean HAS_DISPLAY = !GraphicsEnvironment.isHeadless();
+
+    // a single test may not block the run for longer than this
+    private static final long TEST_TIMEOUT_MS = 15_000;
+
+    // daemon thread that rescues tests stuck behind a modal dialog
+    private static final ScheduledExecutorService WATCHDOG = Executors.newSingleThreadScheduledExecutor(task -> {
+        Thread thread = new Thread(task, "test-watchdog");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    /**
+     * Runs one named test and records whether it passed or failed.
+     * <p>
+     * Every check in this file goes through here so results are counted the same way. I arm a
+     * watchdog before running the body. If the body is still running when the time budget is used
+     * up, the watchdog closes every visible dialog on the event dispatch thread, which releases a
+     * test waiting on a modal nobody clicked, and the test is reported as a timeout instead of
+     * hanging the whole run. Failures are unwrapped first, so an assertion thrown inside
+     * invokeAndWait shows its real message rather than null.
+     * <p>
+     * Time complexity: O(1) plus the cost of the test body.
+     * Space complexity: O(1) per call, plus one list entry for the result.
+     *
+     * @param pName human readable test name printed in the report, never null
+     * @param pBody test body to execute, never null
+     */
+    private static void test(String pName, TestBody pBody) {
+        // set once the watchdog had to close dialogs for this test
+        AtomicBoolean timedOut = new AtomicBoolean(false);
+        ScheduledFuture<?> watchdog = WATCHDOG.schedule(() -> {
+            timedOut.set(true);
+            // closing the dialog lets a blocked invokeAndWait return
+            SwingUtilities.invokeLater(GameTest::disposeOpenDialogs);
+        }, TEST_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         try {
-            body.run();
-            passed.add(name);
-            System.out.println("  PASS  " + name);
+            pBody.run();
+            // a body that only finished because its dialog was force closed still failed
+            if (timedOut.get()) {
+                throw new AssertionError("timed out after " + TEST_TIMEOUT_MS + " ms, open dialogs were closed");
+            }
+            passed.add(pName);
+            System.out.println("  PASS  " + pName);
         } catch (Throwable t) {
-            failed.add(name + " → " + t.getMessage());
-            System.out.println("  FAIL  " + name);
-            System.out.println("        " + t.getMessage());
+            // report the real reason, not the InvocationTargetException wrapper
+            String reason = describeFailure(t);
+            failed.add(pName + " → " + reason);
+            System.out.println("  FAIL  " + pName);
+            System.out.println("        " + reason);
+        } finally {
+            // the test is over, so the watchdog must not fire later
+            watchdog.cancel(false);
         }
+    }
+
+    /**
+     * Closes every visible dialog so a test blocked behind a modal can continue.
+     * <p>
+     * The watchdog calls this on the event dispatch thread when a test runs out of time. I go
+     * through all windows the JVM knows about and dispose each visible Dialog, while frames stay
+     * open so the shared host frame survives for the remaining tests.
+     * <p>
+     * Time complexity: O(w) where w is the number of windows.
+     * Space complexity: O(w) for the array returned by Window.getWindows().
+     */
+    private static void disposeOpenDialogs() {
+        for (Window window : Window.getWindows()) {
+            // only dialogs block the test thread, frames stay untouched
+            if (window instanceof Dialog && window.isVisible()) window.dispose();
+        }
+    }
+
+    /**
+     * Turns a test failure into a readable one-line reason for the report.
+     * <p>
+     * Tests running on the event dispatch thread throw through invokeAndWait, which wraps the real
+     * error in an InvocationTargetException whose own message is null. I unwrap those wrappers,
+     * then use the message of a failed check as is and the full exception text for anything else,
+     * so unexpected exceptions still show their type.
+     * <p>
+     * Time complexity: O(k) where k is the length of the wrapper chain. Space complexity: O(1).
+     *
+     * @param pError error thrown by a test body, never null
+     * @return a description of what went wrong, never null
+     */
+    private static String describeFailure(Throwable pError) {
+        Throwable cause = pError;
+        // peel off the reflection wrappers added by invokeAndWait
+        while (cause instanceof InvocationTargetException && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        // check messages are already written for humans
+        if (cause instanceof AssertionError && cause.getMessage() != null) return cause.getMessage();
+        // anything else keeps its type so the cause is obvious
+        return cause.toString();
+    }
+
+    /**
+     * Registers a test that needs a real window, such as a modal dialog or a JFrame.
+     * <p>
+     * I use this instead of {@link #test} for anything that constructs a java.awt.Window, because
+     * doing that on a headless JVM throws HeadlessException and would show up as a false failure.
+     * With a display the test runs exactly like a normal one. Without a display I record it as
+     * skipped and print a SKIP line, so the summary still shows that it exists.
+     * <p>
+     * Time complexity: O(1), plus the cost of the test body when it runs.
+     * Space complexity: O(1) per call, one list entry when the test is skipped.
+     *
+     * @param pName human readable test name printed in the report, never null
+     * @param pBody test body to execute when a display is available, never null
+     */
+    private static void guiTest(String pName, TestBody pBody) {
+        // no display means no windows, so skip instead of failing
+        if (!HAS_DISPLAY) {
+            skipped.add(pName);
+            System.out.println("  SKIP  " + pName + " (needs a display)");
+            return;
+        }
+        // with a display it behaves like any other test
+        test(pName, pBody);
     }
 
     @FunctionalInterface
@@ -110,15 +240,29 @@ public class GameTest {
     }
 
     /**
-     * Recursively clicks the first AbstractButton (JButton/JToggleButton) with matching text.
+     * Recursively clicks the first button whose text or component name matches the label.
+     * <p>
+     * Modal dialog tests use this from a timer to press a button while the dialog blocks the test
+     * thread. It walks the component tree depth-first, clicks the first AbstractButton that
+     * matches and stops there. Matching the component name as well covers icon-only buttons such
+     * as the promotion pieces, which have no text at all.
+     * <p>
+     * Time complexity: O(n) where n is the number of components in the tree.
+     * Space complexity: O(d) for the recursion, where d is the nesting depth of the tree.
+     *
+     * @param pContainer container whose component tree is searched, never null
+     * @param pLabel     button text or component name to match, never null
+     * @return true if a matching button was found and clicked, false otherwise
      */
-    private static boolean clickButton(Container c, String label) {
-        for (Component comp : c.getComponents()) {
-            if (comp instanceof AbstractButton btn && label.equals(btn.getText())) {
+    private static boolean clickButton(Container pContainer, String pLabel) {
+        for (Component comp : pContainer.getComponents()) {
+            // press the first button that matches by text or name
+            if (comp instanceof AbstractButton btn && matchesLabel(btn, pLabel)) {
                 btn.doClick();
                 return true;
             }
-            if (comp instanceof Container sub && clickButton(sub, label)) return true;
+            // otherwise keep looking inside nested containers
+            if (comp instanceof Container sub && clickButton(sub, pLabel)) return true;
         }
         return false;
     }
@@ -131,17 +275,47 @@ public class GameTest {
     }
 
     /**
-     * Recursively finds the first AbstractButton with matching text.
+     * Recursively finds the first button whose text or component name matches the label.
+     * <p>
+     * Structural tests use this to check that a screen offers a certain action. It walks the
+     * component tree depth-first and returns the first AbstractButton that matches, looking at
+     * the component name as well so icon-only buttons can be found too.
+     * <p>
+     * Time complexity: O(n) where n is the number of components in the tree.
+     * Space complexity: O(d) for the recursion, where d is the nesting depth of the tree.
+     *
+     * @param pContainer container whose component tree is searched, never null
+     * @param pLabel     button text or component name to match, never null
+     * @return the first matching button, or null when there is none
      */
-    private static AbstractButton findButton(Container c, String label) {
-        for (Component comp : c.getComponents()) {
-            if (comp instanceof AbstractButton btn && label.equals(btn.getText())) return btn;
+    private static AbstractButton findButton(Container pContainer, String pLabel) {
+        for (Component comp : pContainer.getComponents()) {
+            // the first match by text or name wins
+            if (comp instanceof AbstractButton btn && matchesLabel(btn, pLabel)) return btn;
+            // descend into nested panels
             if (comp instanceof Container sub) {
-                AbstractButton found = findButton(sub, label);
+                AbstractButton found = findButton(sub, pLabel);
                 if (found != null) return found;
             }
         }
         return null;
+    }
+
+    /**
+     * Tells whether a button is identified by the given label.
+     * <p>
+     * Buttons with text are matched by their text, and icon-only buttons by the component name the
+     * UI code gives them. It simply compares the label against both values.
+     * <p>
+     * Time complexity: O(k) where k is the label length. Space complexity: O(1).
+     *
+     * @param pButton button to inspect, never null
+     * @param pLabel  expected text or component name, never null
+     * @return true if either the text or the component name equals the label
+     */
+    private static boolean matchesLabel(AbstractButton pButton, String pLabel) {
+        // text for normal buttons, component name for icon-only ones
+        return pLabel.equals(pButton.getText()) || pLabel.equals(pButton.getName());
     }
 
     /**
@@ -247,17 +421,41 @@ public class GameTest {
 
     // ── Entry point ───────────────────────────────────────────────────────
 
-    static void main(String[] args) throws Exception {
-        if (GraphicsEnvironment.isHeadless()) {
-            System.out.println("No display available — skipping all GUI tests.");
-            return;
+    /**
+     * Runs every registered test and reports the result.
+     * <p>
+     * This is the single entry point I use for local runs and build scripts. It points saved games
+     * at a temporary folder unless chess.gamesDir is already set, creates the host frame the
+     * dialog tests attach to, executes each test group in order, prints a summary and exits with
+     * status 1 when anything failed. It has to be public because the Java 17 launcher only
+     * accepts a public static main method.
+     * <p>
+     * Time complexity: O(t) where t is the number of registered tests, not counting the work done
+     * inside each test body. Space complexity: O(t) for the passed and failed result lists.
+     *
+     * @param pArgs command line arguments, currently unused; may be empty but never null
+     * @throws Exception if the temporary games folder or the host frame cannot be created
+     */
+    public static void main(String[] pArgs) throws Exception {
+        // keep test games out of the real library unless a folder was given explicitly
+        if (System.getProperty(PgnManager.GAMES_DIR_PROPERTY) == null) {
+            System.setProperty(PgnManager.GAMES_DIR_PROPERTY,
+                    Files.createTempDirectory("chess-game-tests").toString());
+        }
+
+        // engine and panel tests still run headless, only window tests get skipped
+        if (!HAS_DISPLAY) {
+            System.out.println("No display available, skipping tests that open windows.");
         }
 
         JFrame[] frameHolder = {null};
-        SwingUtilities.invokeAndWait(() -> {
-            frameHolder[0] = new JFrame("GameTest host");
-            frameHolder[0].setVisible(true);
-        });
+        // the host frame for dialog tests can only exist with a display
+        if (HAS_DISPLAY) {
+            SwingUtilities.invokeAndWait(() -> {
+                frameHolder[0] = new JFrame("GameTest host");
+                frameHolder[0].setVisible(true);
+            });
+        }
         JFrame frame = frameHolder[0];
 
         // ═════════════════════════════════════════════════════════════════
@@ -849,7 +1047,7 @@ public class GameTest {
         System.out.println("\n── EndScreen ────────────────────────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
 
-        test("EndScreen · size scales with tileSize", () ->
+        guiTest("EndScreen ·size scales with tileSize", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     EndScreen d = new EndScreen(frame, "White wins", TILE_SIZE, () -> {
                     });
@@ -858,7 +1056,7 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        test("EndScreen · label displays passed message", () ->
+        guiTest("EndScreen ·label displays passed message", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     EndScreen d = new EndScreen(frame, "Black wins", TILE_SIZE, () -> {
                     });
@@ -868,7 +1066,7 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        test("EndScreen · contains 'Return to Menu' button", () ->
+        guiTest("EndScreen ·contains 'Return to Menu' button", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     EndScreen d = new EndScreen(frame, "Stalemate - Draw", TILE_SIZE, () -> {
                     });
@@ -876,7 +1074,7 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        test("EndScreen · clicking button closes dialog", () -> {
+        guiTest("EndScreen ·clicking button closes dialog", () -> {
             scheduleClick("Return to Menu");
             boolean[] visible = {true};
             SwingUtilities.invokeAndWait(() -> {
@@ -888,7 +1086,7 @@ public class GameTest {
             check(!visible[0], "Dialog should be closed after clicking Return to Menu");
         });
 
-        test("EndScreen · clicking button invokes onReturn callback", () -> {
+        guiTest("EndScreen ·clicking button invokes onReturn callback", () -> {
             boolean[] callbackFired = {false};
             scheduleClick("Return to Menu");
             SwingUtilities.invokeAndWait(() -> {
@@ -898,7 +1096,7 @@ public class GameTest {
             check(callbackFired[0], "onReturn callback must fire when the button is clicked");
         });
 
-        test("EndScreen · onReturn is NOT called if dialog is disposed programmatically", () -> {
+        guiTest("EndScreen ·onReturn is NOT called if dialog is disposed programmatically", () -> {
             boolean[] callbackFired = {false};
             SwingUtilities.invokeAndWait(() -> {
                 EndScreen d = new EndScreen(frame, "White wins", TILE_SIZE, () -> callbackFired[0] = true);
@@ -911,7 +1109,7 @@ public class GameTest {
         System.out.println("\n── FiftyRuleDraw (optional claim) ──────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
 
-        test("FiftyRuleDraw · size scales with tileSize", () ->
+        guiTest("FiftyRuleDraw ·size scales with tileSize", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     FiftyRuleDraw d = new FiftyRuleDraw(frame, TILE_SIZE, false);
                     checkEqual(TILE_SIZE * 4, d.getWidth(), "width");
@@ -919,7 +1117,7 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        test("FiftyRuleDraw · optional claim has correct buttons", () ->
+        guiTest("FiftyRuleDraw ·optional claim has correct buttons", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     FiftyRuleDraw d = new FiftyRuleDraw(frame, TILE_SIZE, false);
                     check(hasButton(d, "Claim Draw"), "Must have 'Claim Draw'");
@@ -928,7 +1126,7 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        test("FiftyRuleDraw · Claim Draw returns ACCEPTED", () -> {
+        guiTest("FiftyRuleDraw ·Claim Draw returns ACCEPTED", () -> {
             scheduleClick("Claim Draw");
             FiftyRuleDraw.DrawResult[] result = {null};
             SwingUtilities.invokeAndWait(() -> {
@@ -939,7 +1137,7 @@ public class GameTest {
             checkEqual(FiftyRuleDraw.DrawResult.ACCEPTED, result[0], "result");
         });
 
-        test("FiftyRuleDraw · Decline returns DECLINED", () -> {
+        guiTest("FiftyRuleDraw ·Decline returns DECLINED", () -> {
             scheduleClick("Decline");
             FiftyRuleDraw.DrawResult[] result = {null};
             SwingUtilities.invokeAndWait(() -> {
@@ -954,7 +1152,7 @@ public class GameTest {
         System.out.println("\n── FiftyRuleDraw (forced draw) ─────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
 
-        test("FiftyRuleDraw · forced draw has correct buttons", () ->
+        guiTest("FiftyRuleDraw ·forced draw has correct buttons", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     FiftyRuleDraw d = new FiftyRuleDraw(frame, TILE_SIZE, true);
                     check(hasButton(d, "Restart"), "Must have 'Restart'");
@@ -963,7 +1161,7 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        test("FiftyRuleDraw · forced draw Restart closes dialog", () -> {
+        guiTest("FiftyRuleDraw ·forced draw Restart closes dialog", () -> {
             scheduleClick("Restart");
             boolean[] visible = {true};
             SwingUtilities.invokeAndWait(() -> {
@@ -978,7 +1176,7 @@ public class GameTest {
         System.out.println("\n── PromoteGUI ───────────────────────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
 
-        test("PromoteGUI · size scales with tileSize", () ->
+        guiTest("PromoteGUI ·size scales with tileSize", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     PromoteGUI d = new PromoteGUI(frame, TILE_SIZE);
                     checkEqual(TILE_SIZE * 4, d.getWidth(), "width");
@@ -986,7 +1184,7 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        test("PromoteGUI · all four buttons present", () ->
+        guiTest("PromoteGUI ·all four buttons present", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     PromoteGUI d = new PromoteGUI(frame, TILE_SIZE);
                     check(hasButton(d, "Queen"), "Must have 'Queen'");
@@ -996,28 +1194,28 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        test("PromoteGUI · Queen → Choice.QUEEN", () -> {
+        guiTest("PromoteGUI ·Queen → Choice.QUEEN", () -> {
             scheduleClick("Queen");
             PromoteGUI.Choice[] choice = {null};
             SwingUtilities.invokeAndWait(() -> choice[0] = new PromoteGUI(frame, TILE_SIZE).showDialog());
             checkEqual(PromoteGUI.Choice.QUEEN, choice[0], "choice");
         });
 
-        test("PromoteGUI · Rook → Choice.ROOK", () -> {
+        guiTest("PromoteGUI ·Rook → Choice.ROOK", () -> {
             scheduleClick("Rook");
             PromoteGUI.Choice[] choice = {null};
             SwingUtilities.invokeAndWait(() -> choice[0] = new PromoteGUI(frame, TILE_SIZE).showDialog());
             checkEqual(PromoteGUI.Choice.ROOK, choice[0], "choice");
         });
 
-        test("PromoteGUI · Bishop → Choice.BISHOP", () -> {
+        guiTest("PromoteGUI ·Bishop → Choice.BISHOP", () -> {
             scheduleClick("Bishop");
             PromoteGUI.Choice[] choice = {null};
             SwingUtilities.invokeAndWait(() -> choice[0] = new PromoteGUI(frame, TILE_SIZE).showDialog());
             checkEqual(PromoteGUI.Choice.BISHOP, choice[0], "choice");
         });
 
-        test("PromoteGUI · Knight → Choice.KNIGHT", () -> {
+        guiTest("PromoteGUI ·Knight → Choice.KNIGHT", () -> {
             scheduleClick("Knight");
             PromoteGUI.Choice[] choice = {null};
             SwingUtilities.invokeAndWait(() -> choice[0] = new PromoteGUI(frame, TILE_SIZE).showDialog());
@@ -1032,7 +1230,7 @@ public class GameTest {
         // dialog behavior itself is already covered above — these tests only
         // check the translation.
 
-        test("SwingPromotionChooser · Queen selection maps to PieceType.QUEEN", () -> {
+        guiTest("SwingPromotionChooser ·Queen selection maps to PieceType.QUEEN", () -> {
             scheduleClick("Queen");
             PieceType[] result = {null};
             SwingUtilities.invokeAndWait(() -> {
@@ -1046,7 +1244,7 @@ public class GameTest {
             checkEqual(PieceType.QUEEN, result[0], "clicking Queen must resolve to PieceType.QUEEN");
         });
 
-        test("SwingPromotionChooser · Knight selection maps to PieceType.KNIGHT", () -> {
+        guiTest("SwingPromotionChooser ·Knight selection maps to PieceType.KNIGHT", () -> {
             scheduleClick("Knight");
             PieceType[] result = {null};
             SwingUtilities.invokeAndWait(() -> {
@@ -1060,7 +1258,7 @@ public class GameTest {
             checkEqual(PieceType.KNIGHT, result[0], "clicking Knight must resolve to PieceType.KNIGHT");
         });
 
-        test("SwingDrawOfferResolver · Claim Draw resolves offerDraw() to true", () -> {
+        guiTest("SwingDrawOfferResolver ·Claim Draw resolves offerDraw() to true", () -> {
             scheduleClick("Claim Draw");
             boolean[] result = {false};
             SwingUtilities.invokeAndWait(() -> {
@@ -1074,7 +1272,7 @@ public class GameTest {
             check(result[0], "clicking Claim Draw must resolve offerDraw() to true");
         });
 
-        test("SwingDrawOfferResolver · Decline resolves offerDraw() to false", () -> {
+        guiTest("SwingDrawOfferResolver ·Decline resolves offerDraw() to false", () -> {
             scheduleClick("Decline");
             boolean[] result = {true};
             SwingUtilities.invokeAndWait(() -> {
@@ -1088,7 +1286,7 @@ public class GameTest {
             check(!result[0], "clicking Decline must resolve offerDraw() to false");
         });
 
-        test("SwingDrawOfferResolver · notifyForcedDraw shows and dismisses the forced-draw dialog", () -> {
+        guiTest("SwingDrawOfferResolver ·notifyForcedDraw shows and dismisses the forced-draw dialog", () -> {
             scheduleClick("Restart");
             SwingUtilities.invokeAndWait(() -> {
                 JFrame testFrame = new JFrame();
@@ -1294,7 +1492,9 @@ public class GameTest {
 
         test("UiComponents · addHoverEffect brightens on enter and restores on exit", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    JButton b = UiComponents.button("Hover", new Font("Arial", Font.BOLD, 14), Theme.BUTTON_SECONDARY);
+                    // plain button on purpose, UiComponents.button() already registers the hover effect
+                    JButton b = new JButton("Hover");
+                    b.setBackground(Theme.BUTTON_SECONDARY);
                     UiComponents.addHoverEffect(b);
                     Color original = b.getBackground();
 
@@ -1325,7 +1525,7 @@ public class GameTest {
                     check(hasTitle, "Must show the 'CHESS' title label");
                 }));
 
-        test("MainMenu · New Game navigates to NewGamePanel via ancestor frame", () ->
+        guiTest("MainMenu · New Game navigates to NewGamePanel via ancestor frame", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     JFrame testFrame = new JFrame();
                     MainMenu menu = new MainMenu();
@@ -1836,18 +2036,21 @@ public class GameTest {
                 }));
 
         // ── Summary ──────────────────────────────────────────────────────
-        SwingUtilities.invokeAndWait(frame::dispose);
+        // the host frame is null on a headless run
+        if (frame != null) SwingUtilities.invokeAndWait(frame::dispose);
 
         System.out.println("\n════════════════════════════════════════════════════════════════");
-        System.out.printf("  %d passed, %d failed  (total: %d)%n",
-                passed.size(), failed.size(), passed.size() + failed.size());
+        System.out.printf("  %d passed, %d failed, %d skipped  (total: %d)%n",
+                passed.size(), failed.size(), skipped.size(),
+                passed.size() + failed.size() + skipped.size());
         if (!failed.isEmpty()) {
             System.out.println("\nFailed tests:");
             failed.forEach(f -> System.out.println("  ✗ " + f));
         }
         System.out.println("════════════════════════════════════════════════════════════════\n");
 
-        if (!failed.isEmpty()) System.exit(1);
+        // always exit explicitly so scripts get a status code even while Swing threads are alive
+        System.exit(failed.isEmpty() ? 0 : 1);
     }
 
     // ── Test-only helpers ────────────────────────────────────────────────
@@ -1938,17 +2141,30 @@ public class GameTest {
     }
 
     /**
-     * Deletes any saved PGN file(s) created by a test so repeated runs stay clean.
+     * Deletes the PGN files a test saved so repeated runs stay clean.
+     * <p>
+     * Persistence tests write real files, and leftovers would pile up between runs. I look in the
+     * same games directory PgnManager writes to, pick every file whose name contains the sanitized
+     * unique white player name and delete it. Problems are only printed as a warning, because a
+     * failed cleanup should never fail a test that already passed.
+     * <p>
+     * Time complexity: O(f) where f is the number of files in the games directory.
+     * Space complexity: O(f) for the directory listing.
+     *
+     * @param pUniqueWhiteName unique white player name the test saved its game under, never null
      */
-    private static void cleanupSavedGame(String uniqueWhiteName) {
+    private static void cleanupSavedGame(String pUniqueWhiteName) {
         try {
-            File gamesDir = new File(System.getProperty("user.dir"), "games");
+            // same folder PgnManager saved into, so the property override is respected
+            File gamesDir = PgnManager.getGamesDirectory().toFile();
+            // saved file names contain the sanitized player name
             File[] matches = gamesDir.listFiles((dir, name) ->
-                    name.contains(uniqueWhiteName.replaceAll("[^a-zA-Z0-9_-]", "_")));
+                    name.contains(pUniqueWhiteName.replaceAll("[^a-zA-Z0-9_-]", "_")));
             if (matches != null) {
                 for (File f : matches) Files.deleteIfExists(f.toPath());
             }
         } catch (Exception e) {
+            // a cleanup problem must not turn a passing test red
             System.out.println("  (cleanup warning: " + e.getMessage() + ")");
         }
     }
