@@ -178,12 +178,16 @@ public boolean isKingLeftInCheck(Move move) {
     piece.setRow(move.getNewRow());
     if (captured != null) state.removePiece(captured);
 
-    // 2. Scan all opponent pieces
+    // 2. Keep the grid in sync, sliding pieces look up blockers there
+    state.moveOnGrid(piece, oldCol, oldRow);
+
+    // 3. Scan all opponent pieces
     boolean inCheck = isKingInCheckRN(piece.isWhite());
 
-    // 3. Undo — restore original state
+    // 4. Undo, restore the original state
     piece.setCol(oldCol);
     piece.setRow(oldRow);
+    state.moveOnGrid(piece, move.getNewCol(), move.getNewRow());
     if (captured != null) state.addPiece(captured);
 
     return inCheck;
@@ -193,11 +197,11 @@ public boolean isKingLeftInCheck(Move move) {
 Checkmate is declared when the king is in check **and** this simulation returns `true` for every possible move of every
 friendly piece.
 
-> **Known limitation:** this simulate/undo only updates the *moving piece's* own position — it doesn't update
-> `BoardState`'s grid. That's fine for checking a king's own destination square, but it means a *discovered* attack
-> (a sliding piece moving away and exposing its own king to a pin) isn't detected. This is a pre-existing
-> characteristic of `CheckScanner`, not something introduced by the position-data refactor above — flagged here
-> rather than silently worked around.
+Early versions only moved the piece itself during this simulation and left `BoardState`'s grid alone, so a sliding
+piece could still look through the square the moving piece had just left. Moves that blocked a check were rejected,
+and a discovered attack on the moving side's own king went unnoticed. Syncing the grid in step 2 fixed both, and the
+test suite covers blocking a check as well as a discovered check. An en passant capture is simulated the same way,
+with the passed pawn removed before the scan.
 
 ---
 
