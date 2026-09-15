@@ -1150,7 +1150,7 @@ public class GameTest {
                     FiftyRuleDraw d = new FiftyRuleDraw(frame, TILE_SIZE, false);
                     check(hasButton(d, "Claim Draw"), "Must have 'Claim Draw'");
                     check(hasButton(d, "Decline"), "Must have 'Decline'");
-                    check(!hasButton(d, "Restart"), "Must NOT have 'Restart'");
+                    check(!hasButton(d, "OK"), "Must NOT have 'OK'");
                     d.dispose();
                 }));
 
@@ -1183,21 +1183,21 @@ public class GameTest {
         guiTest("FiftyRuleDraw ·forced draw has correct buttons", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     FiftyRuleDraw d = new FiftyRuleDraw(frame, TILE_SIZE, true);
-                    check(hasButton(d, "Restart"), "Must have 'Restart'");
+                    check(hasButton(d, "OK"), "Must have 'OK'");
                     check(!hasButton(d, "Claim Draw"), "Must NOT have 'Claim Draw'");
                     check(!hasButton(d, "Decline"), "Must NOT have 'Decline'");
                     d.dispose();
                 }));
 
-        guiTest("FiftyRuleDraw ·forced draw Restart closes dialog", () -> {
-            scheduleClick("Restart");
+        guiTest("FiftyRuleDraw ·forced draw OK closes dialog", () -> {
+            scheduleClick("OK");
             boolean[] visible = {true};
             SwingUtilities.invokeAndWait(() -> {
                 FiftyRuleDraw d = new FiftyRuleDraw(frame, TILE_SIZE, true);
                 d.setVisible(true);
                 visible[0] = d.isVisible();
             });
-            check(!visible[0], "Forced-draw dialog should close after clicking Restart");
+            check(!visible[0], "Forced-draw dialog should close after clicking OK");
         });
 
         // ═════════════════════════════════════════════════════════════════
@@ -1315,7 +1315,7 @@ public class GameTest {
         });
 
         guiTest("SwingDrawOfferResolver ·notifyForcedDraw shows and dismisses the forced-draw dialog", () -> {
-            scheduleClick("Restart");
+            scheduleClick("OK");
             SwingUtilities.invokeAndWait(() -> {
                 JFrame testFrame = new JFrame();
                 Board board = new Board(GameConfig.unlimited());
