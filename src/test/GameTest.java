@@ -1326,6 +1326,34 @@ public class GameTest {
             });
         });
 
+        guiTest("SwingDrawOfferResolver · repetition claim explains the repetition and resolves to true", () -> {
+            String[] dialogText = {null};
+            // read the message while the dialog is open, before the scheduled click closes it
+            Timer peek = new Timer(20, e -> {
+                for (Window w : Window.getWindows()) {
+                    if (w instanceof JDialog d && d.isVisible() && findLabel(d.getContentPane()) != null) {
+                        dialogText[0] = findLabel(d.getContentPane()).getText();
+                        ((Timer) e.getSource()).stop();
+                    }
+                }
+            });
+            peek.start();
+            scheduleClick("Claim Draw");
+            boolean[] result = {false};
+            SwingUtilities.invokeAndWait(() -> {
+                JFrame testFrame = new JFrame();
+                Board board = new Board(GameConfig.unlimited());
+                testFrame.setContentPane(board);
+                testFrame.pack();
+                result[0] = new SwingDrawOfferResolver(board).offerRepetitionDraw();
+                testFrame.dispose();
+            });
+            peek.stop();
+            check(result[0], "clicking Claim Draw must resolve offerRepetitionDraw() to true");
+            checkNotNull(dialogText[0], "the claim dialog must show a message");
+            check(dialogText[0].contains("three times"), "the message must explain the repetition, got: " + dialogText[0]);
+        });
+
         // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── MoveLogPanel ─────────────────────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
@@ -1932,6 +1960,80 @@ public class GameTest {
                     GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     gc.makeMove(new Move(state, movingQueen, 1, 6)); // Qa1-b2, c1 and a3 could go there too
                     checkEqual("Qa1b2", gc.getMoveLog().get(0), "file and rank are both needed when each is shared");
+                }));
+
+        test("GameController · threefold repetition can be claimed", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(true);
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    String[] ending = {null};
+                    gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
+
+                    // knights out and back twice bring the start position back for the third time
+                    for (int round = 0; round < 2; round++) {
+                        gc.makeMove(new Move(state, state.getPiece(6, 7), 5, 5)); // Ng1-f3
+                        gc.makeMove(new Move(state, state.getPiece(6, 0), 5, 2)); // Ng8-f6
+                        gc.makeMove(new Move(state, state.getPiece(5, 5), 6, 7)); // Nf3-g1
+                        gc.makeMove(new Move(state, state.getPiece(5, 2), 6, 0)); // Nf6-g8
+                    }
+
+                    check(resolver.offerDrawCalled, "the third occurrence must offer a draw claim");
+                    checkEqual(8, gc.getMoveLog().size(), "the claim must come right after the eighth half move");
+                    checkNotNull(ending[0], "accepting the claim must end the game");
+                    check(ending[0].startsWith("1/2-1/2") && ending[0].contains("Threefold"),
+                            "the game must end as a threefold repetition draw, got: " + ending[0]);
+                }));
+
+        test("GameController · fivefold repetition ends the game automatically", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // every claim is declined
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    String[] ending = {null};
+                    gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
+
+                    // four rounds bring the start position back for the fifth time
+                    for (int round = 0; round < 4; round++) {
+                        gc.makeMove(new Move(state, state.getPiece(6, 7), 5, 5)); // Ng1-f3
+                        gc.makeMove(new Move(state, state.getPiece(6, 0), 5, 2)); // Ng8-f6
+                        gc.makeMove(new Move(state, state.getPiece(5, 5), 6, 7)); // Nf3-g1
+                        gc.makeMove(new Move(state, state.getPiece(5, 2), 6, 0)); // Nf6-g8
+                    }
+
+                    checkEqual(16, gc.getMoveLog().size(), "all sixteen half moves must be played");
+                    checkNotNull(ending[0], "the fifth occurrence must end the game without a claim");
+                    check(ending[0].startsWith("1/2-1/2") && ending[0].contains("Fivefold"),
+                            "the game must end as a fivefold repetition draw, got: " + ending[0]);
+                }));
+
+        test("GameController · an en passant square nobody can use does not hide a repetition", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(true);
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    String[] ending = {null};
+                    gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
+
+                    // after 1.e4 the FEN lists e3, but no black pawn can take there
+                    gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // 1. e4
+                    for (int round = 0; round < 2; round++) {
+                        gc.makeMove(new Move(state, state.getPiece(6, 0), 5, 2)); // Ng8-f6
+                        gc.makeMove(new Move(state, state.getPiece(6, 7), 5, 5)); // Ng1-f3
+                        gc.makeMove(new Move(state, state.getPiece(5, 2), 6, 0)); // Nf6-g8
+                        gc.makeMove(new Move(state, state.getPiece(5, 5), 6, 7)); // Nf3-g1
+                    }
+
+                    checkEqual(9, gc.getMoveLog().size(),
+                            "the position after 1.e4 occurs for the third time after nine half moves");
+                    checkNotNull(ending[0], "accepting the claim must end the game");
+                    check(ending[0].contains("Threefold"), "the game must end by threefold repetition, got: " + ending[0]);
                 }));
 
         // ═════════════════════════════════════════════════════════════════
