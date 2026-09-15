@@ -23,11 +23,16 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.lang.reflect.InvocationTargetException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Standalone GUI + action test runner — no dependencies required.
@@ -76,16 +81,100 @@ public class GameTest {
     // windows (dialogs, frames) can only be created when the JVM has a display
     private static final boolean HAS_DISPLAY = !GraphicsEnvironment.isHeadless();
 
-    private static void test(String name, TestBody body) {
+    // a single test may not block the run for longer than this
+    private static final long TEST_TIMEOUT_MS = 15_000;
+
+    // daemon thread that rescues tests stuck behind a modal dialog
+    private static final ScheduledExecutorService WATCHDOG = Executors.newSingleThreadScheduledExecutor(task -> {
+        Thread thread = new Thread(task, "test-watchdog");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    /**
+     * Runs one named test and records whether it passed or failed.
+     * <p>
+     * Every check in this file goes through here so results are counted the same way. I arm a
+     * watchdog before running the body. If the body is still running when the time budget is used
+     * up, the watchdog closes every visible dialog on the event dispatch thread, which releases a
+     * test waiting on a modal nobody clicked, and the test is reported as a timeout instead of
+     * hanging the whole run. Failures are unwrapped first, so an assertion thrown inside
+     * invokeAndWait shows its real message rather than null.
+     * <p>
+     * Time complexity: O(1) plus the cost of the test body.
+     * Space complexity: O(1) per call, plus one list entry for the result.
+     *
+     * @param pName human readable test name printed in the report, never null
+     * @param pBody test body to execute, never null
+     */
+    private static void test(String pName, TestBody pBody) {
+        // set once the watchdog had to close dialogs for this test
+        AtomicBoolean timedOut = new AtomicBoolean(false);
+        ScheduledFuture<?> watchdog = WATCHDOG.schedule(() -> {
+            timedOut.set(true);
+            // closing the dialog lets a blocked invokeAndWait return
+            SwingUtilities.invokeLater(GameTest::disposeOpenDialogs);
+        }, TEST_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         try {
-            body.run();
-            passed.add(name);
-            System.out.println("  PASS  " + name);
+            pBody.run();
+            // a body that only finished because its dialog was force closed still failed
+            if (timedOut.get()) {
+                throw new AssertionError("timed out after " + TEST_TIMEOUT_MS + " ms, open dialogs were closed");
+            }
+            passed.add(pName);
+            System.out.println("  PASS  " + pName);
         } catch (Throwable t) {
-            failed.add(name + " → " + t.getMessage());
-            System.out.println("  FAIL  " + name);
-            System.out.println("        " + t.getMessage());
+            // report the real reason, not the InvocationTargetException wrapper
+            String reason = describeFailure(t);
+            failed.add(pName + " → " + reason);
+            System.out.println("  FAIL  " + pName);
+            System.out.println("        " + reason);
+        } finally {
+            // the test is over, so the watchdog must not fire later
+            watchdog.cancel(false);
         }
+    }
+
+    /**
+     * Closes every visible dialog so a test blocked behind a modal can continue.
+     * <p>
+     * The watchdog calls this on the event dispatch thread when a test runs out of time. I go
+     * through all windows the JVM knows about and dispose each visible Dialog, while frames stay
+     * open so the shared host frame survives for the remaining tests.
+     * <p>
+     * Time complexity: O(w) where w is the number of windows.
+     * Space complexity: O(w) for the array returned by Window.getWindows().
+     */
+    private static void disposeOpenDialogs() {
+        for (Window window : Window.getWindows()) {
+            // only dialogs block the test thread, frames stay untouched
+            if (window instanceof Dialog && window.isVisible()) window.dispose();
+        }
+    }
+
+    /**
+     * Turns a test failure into a readable one-line reason for the report.
+     * <p>
+     * Tests running on the event dispatch thread throw through invokeAndWait, which wraps the real
+     * error in an InvocationTargetException whose own message is null. I unwrap those wrappers,
+     * then use the message of a failed check as is and the full exception text for anything else,
+     * so unexpected exceptions still show their type.
+     * <p>
+     * Time complexity: O(k) where k is the length of the wrapper chain. Space complexity: O(1).
+     *
+     * @param pError error thrown by a test body, never null
+     * @return a description of what went wrong, never null
+     */
+    private static String describeFailure(Throwable pError) {
+        Throwable cause = pError;
+        // peel off the reflection wrappers added by invokeAndWait
+        while (cause instanceof InvocationTargetException && cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        // check messages are already written for humans
+        if (cause instanceof AssertionError && cause.getMessage() != null) return cause.getMessage();
+        // anything else keeps its type so the cause is obvious
+        return cause.toString();
     }
 
     /**
