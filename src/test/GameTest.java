@@ -1731,8 +1731,8 @@ public class GameTest {
         test("ReplayPanel: next button advances position", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
-                    AbstractButton next = findButton(p, "\u2192");
-                    checkNotNull(next, "Must have a '\u2192' next button");
+                    AbstractButton next = findButton(p, "next");
+                    checkNotNull(next, "Must have a next button");
                     next.doClick();
                     JLabel lbl = findMoveLabel(p);
                     check(lbl.getText().contains("2/3"), "Should be at position 2 of 3, got: " + lbl.getText());
@@ -1741,8 +1741,8 @@ public class GameTest {
         test("ReplayPanel: last button jumps to final position", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
-                    AbstractButton last = findButton(p, "\u21e5");
-                    checkNotNull(last, "Must have a '\u21e5' last button");
+                    AbstractButton last = findButton(p, "last");
+                    checkNotNull(last, "Must have a last button");
                     last.doClick();
                     JLabel lbl = findMoveLabel(p);
                     check(lbl.getText().contains("3/3"), "Should be at the final position, got: " + lbl.getText());
@@ -1751,7 +1751,7 @@ public class GameTest {
         test("ReplayPanel: next button does not overrun the list", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
-                    AbstractButton next = findButton(p, "\u2192");
+                    AbstractButton next = findButton(p, "next");
                     for (int i = 0; i < 10; i++) next.doClick(); // click far past the end
                     JLabel lbl = findMoveLabel(p);
                     check(lbl.getText().contains("3/3"), "Cursor must clamp at the last position, got: " + lbl.getText());
@@ -1760,9 +1760,9 @@ public class GameTest {
         test("ReplayPanel: first button returns to position 1", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
-                    findButton(p, "\u21e5").doClick(); // jump to end first
-                    AbstractButton first = findButton(p, "\u21e4");
-                    checkNotNull(first, "Must have a '\u21e4' first button");
+                    findButton(p, "last").doClick(); // jump to end first
+                    AbstractButton first = findButton(p, "first");
+                    checkNotNull(first, "Must have a first button");
                     first.doClick();
                     JLabel lbl = findMoveLabel(p);
                     check(lbl.getText().contains("1/3"), "Should be back at position 1, got: " + lbl.getText());
@@ -1771,7 +1771,7 @@ public class GameTest {
         test("ReplayPanel: prev button does not underrun position 1", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
-                    AbstractButton prev = findButton(p, "\u2190");
+                    AbstractButton prev = findButton(p, "previous");
                     for (int i = 0; i < 5; i++) prev.doClick(); // click before the start
                     JLabel lbl = findMoveLabel(p);
                     check(lbl.getText().contains("1/3"), "Cursor must clamp at the first position, got: " + lbl.getText());
@@ -1928,8 +1928,8 @@ public class GameTest {
         test("NewGamePanel: Back and Start buttons are present", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     NewGamePanel p = new NewGamePanel();
-                    check(hasButton(p, "\u2190 Back"), "Must have a Back button");
-                    check(hasButton(p, "Start \u25b6"), "Must have a Start button");
+                    check(hasButton(p, "back"), "Must have a Back button");
+                    check(hasButton(p, "start"), "Must have a Start button");
                 }));
 
         test("NewGamePanel: presets with an increment pass it on to the game", () ->
@@ -1994,13 +1994,13 @@ public class GameTest {
                 SwingUtilities.invokeAndWait(() -> {
                     PastGamesPanel p = new PastGamesPanel();
                     check(hasButton(p, "Move Log"), "Must have a 'Move Log' toggle button");
-                    check(hasButton(p, "Replay \u25b6"), "Must have a 'Replay \u25b6' toggle button");
+                    check(hasButton(p, "replay"), "Must have a 'Replay' toggle button");
                 }));
 
         test("PastGamesPanel: shows Back to Menu button", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     PastGamesPanel p = new PastGamesPanel();
-                    check(hasButton(p, "\u2190 Back to Menu"), "Must have a Back to Menu button");
+                    check(hasButton(p, "backToMenu"), "Must have a Back to Menu button");
                 }));
 
         test("PastGamesPanel: a saved game appears in the list", () -> {
