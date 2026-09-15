@@ -1,5 +1,16 @@
 package test;
 
+/*
+ * Purpose: GameTest is the hand-written test runner for the whole project. I keep it free of
+ * external frameworks so the repository stays dependency-free and anyone with a JDK can run it.
+ * It covers the rules engine, persistence, notation and every Swing screen in one place. Engine
+ * and panel tests run in any JVM, while tests that open real dialogs or frames need a display,
+ * so the same suite works on a desktop and on a headless build machine.
+ *
+ * Owner: PBR208 - https://github.com/PBR208/
+ * Version: 1.0
+ */
+
 import engine.imports.*;
 import engine.model.*;
 import engine.persistence.*;
@@ -247,7 +258,21 @@ public class GameTest {
 
     // ── Entry point ───────────────────────────────────────────────────────
 
-    static void main(String[] args) throws Exception {
+    /**
+     * Runs every registered test and reports the result.
+     * <p>
+     * This is the single entry point I use for local runs and build scripts. It creates the host
+     * frame the dialog tests attach to, executes each test group in order, prints a summary and
+     * exits with status 1 when anything failed. It has to be public because the Java 17 launcher
+     * only accepts a public static main method.
+     * <p>
+     * Time complexity: O(t) where t is the number of registered tests, not counting the work done
+     * inside each test body. Space complexity: O(t) for the passed and failed result lists.
+     *
+     * @param pArgs command line arguments, currently unused; may be empty but never null
+     * @throws Exception if the host frame cannot be created on the event dispatch thread
+     */
+    public static void main(String[] pArgs) throws Exception {
         if (GraphicsEnvironment.isHeadless()) {
             System.out.println("No display available — skipping all GUI tests.");
             return;
