@@ -32,7 +32,7 @@ public class PastGamesPanel extends JPanel {
         title.setForeground(Theme.FG);
         title.setFont(new Font("Arial", Font.BOLD, 20));
 
-        JButton backBtn = styledButton("← Back to Menu");
+        JButton backBtn = styledButton("\u2190 Back to Menu");
         backBtn.addActionListener(e -> Main.showMenu());
 
         topBar.add(title, BorderLayout.WEST);
@@ -90,7 +90,7 @@ public class PastGamesPanel extends JPanel {
         toggleBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(60, 60, 65)));
 
         JButton showLog = styledButton("Move Log");
-        JButton showReplay = styledButton("Replay ▶");
+        JButton showReplay = styledButton("Replay \u25b6");
         toggleBar.add(showLog);
         toggleBar.add(showReplay);
         showLog.addActionListener(e -> rightCards.show(rightPanel, "log"));

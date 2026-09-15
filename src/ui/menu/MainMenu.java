@@ -23,7 +23,7 @@ public class MainMenu extends JPanel {
         card.setBorder(new EmptyBorder(48, 64, 48, 64));
         card.setMaximumSize(new Dimension(360, Integer.MAX_VALUE));
 
-        JLabel icons = new JLabel("♔  ♚", SwingConstants.CENTER);
+        JLabel icons = new JLabel("\u2654  \u265a", SwingConstants.CENTER);
         icons.setForeground(new Color(180, 180, 190));
         icons.setFont(new Font("Serif", Font.PLAIN, 40));
         icons.setAlignmentX(CENTER_ALIGNMENT);
