@@ -3209,6 +3209,110 @@ public class GameTest {
             checkEqual(position.computeKey(), position.key(), "the key must be correct again");
         });
 
+        // =================================================================
+        System.out.println("\n-- Move generation: attacks -------------------------------------");
+        // =================================================================
+
+        test("MoveGen: a knight reaches two squares from a corner and eight from the centre", () -> {
+            long fromA1 = MoveGen.knightAttacks(Bitboards.squareOf("a1"));
+            checkEqual(2, Bitboards.count(fromA1), "a knight on a1 has two squares");
+            check(Bitboards.contains(fromA1, Bitboards.squareOf("b3")), "a1 reaches b3");
+            check(Bitboards.contains(fromA1, Bitboards.squareOf("c2")), "a1 reaches c2");
+
+            checkEqual(8, Bitboards.count(MoveGen.knightAttacks(Bitboards.squareOf("d4"))),
+                    "a knight in the centre has eight squares");
+            checkEqual(2, Bitboards.count(MoveGen.knightAttacks(Bitboards.squareOf("h8"))),
+                    "a knight on h8 has two squares");
+        });
+
+        test("MoveGen: a king reaches three squares from a corner and eight from the centre", () -> {
+            long fromA1 = MoveGen.kingAttacks(Bitboards.squareOf("a1"));
+            checkEqual(3, Bitboards.count(fromA1), "a king on a1 has three squares");
+            check(Bitboards.contains(fromA1, Bitboards.squareOf("b2")), "a1 reaches b2");
+            check(!Bitboards.contains(fromA1, Bitboards.squareOf("h1")), "a king must not wrap around the board");
+            checkEqual(8, Bitboards.count(MoveGen.kingAttacks(Bitboards.squareOf("e4"))),
+                    "a king in the centre has eight squares");
+        });
+
+        test("MoveGen: pawns attack diagonally forward and never wrap around the board", () -> {
+            long white = MoveGen.pawnAttacks(Pieces.WHITE, Bitboards.squareOf("e4"));
+            checkEqual(2, Bitboards.count(white), "a pawn on e4 attacks two squares");
+            check(Bitboards.contains(white, Bitboards.squareOf("d5")), "e4 attacks d5");
+            check(Bitboards.contains(white, Bitboards.squareOf("f5")), "e4 attacks f5");
+
+            long edge = MoveGen.pawnAttacks(Pieces.WHITE, Bitboards.squareOf("a2"));
+            checkEqual(1, Bitboards.count(edge), "a pawn on the a-file attacks one square");
+            check(Bitboards.contains(edge, Bitboards.squareOf("b3")), "a2 attacks b3");
+
+            long black = MoveGen.pawnAttacks(Pieces.BLACK, Bitboards.squareOf("h7"));
+            checkEqual(1, Bitboards.count(black), "a black pawn on the h-file attacks one square");
+            check(Bitboards.contains(black, Bitboards.squareOf("g6")), "h7 attacks g6");
+        });
+
+        test("MoveGen: a rook stops at the first piece and still attacks it", () -> {
+            long occupancy = Bitboards.bit(Bitboards.squareOf("a1"))
+                    | Bitboards.bit(Bitboards.squareOf("a4"))
+                    | Bitboards.bit(Bitboards.squareOf("d1"));
+            long attacks = MoveGen.rookAttacks(Bitboards.squareOf("a1"), occupancy);
+
+            checkEqual(6, Bitboards.count(attacks), "the rook reaches six squares");
+            check(Bitboards.contains(attacks, Bitboards.squareOf("a4")), "the blocking square can be captured");
+            check(!Bitboards.contains(attacks, Bitboards.squareOf("a5")), "nothing behind the blocker is attacked");
+            check(Bitboards.contains(attacks, Bitboards.squareOf("d1")), "the rook attacks along the rank as well");
+            check(!Bitboards.contains(attacks, Bitboards.squareOf("e1")), "the rank stops at the blocker too");
+        });
+
+        test("MoveGen: a bishop stops on both diagonals", () -> {
+            long occupancy = Bitboards.bit(Bitboards.squareOf("c1"))
+                    | Bitboards.bit(Bitboards.squareOf("a3"))
+                    | Bitboards.bit(Bitboards.squareOf("e3"));
+            long attacks = MoveGen.bishopAttacks(Bitboards.squareOf("c1"), occupancy);
+
+            checkEqual(4, Bitboards.count(attacks), "the bishop reaches four squares");
+            check(Bitboards.contains(attacks, Bitboards.squareOf("b2")), "b2 lies on the way to a3");
+            check(Bitboards.contains(attacks, Bitboards.squareOf("a3")), "the blocking square can be captured");
+            check(Bitboards.contains(attacks, Bitboards.squareOf("e3")), "the other diagonal stops on e3");
+            check(!Bitboards.contains(attacks, Bitboards.squareOf("f4")), "nothing behind the blocker is attacked");
+        });
+
+        test("MoveGen: a queen attacks everything a rook and a bishop would", () -> {
+            long occupancy = Bitboards.bit(Bitboards.squareOf("d4"));
+            int square = Bitboards.squareOf("d4");
+            checkEqual(MoveGen.rookAttacks(square, occupancy) | MoveGen.bishopAttacks(square, occupancy),
+                    MoveGen.queenAttacks(square, occupancy), "a queen is a rook and a bishop together");
+            checkEqual(27, Bitboards.count(MoveGen.queenAttacks(square, occupancy)),
+                    "a queen on d4 covers 27 squares on an empty board");
+        });
+
+        test("MoveGen: attacked squares are found in the starting position", () -> {
+            Position position = Position.startPosition();
+
+            check(MoveGen.isSquareAttacked(position, Bitboards.squareOf("e3"), Pieces.WHITE),
+                    "the d2 and f2 pawns cover e3");
+            check(MoveGen.isSquareAttacked(position, Bitboards.squareOf("a3"), Pieces.WHITE),
+                    "the knight on b1 covers a3");
+            check(!MoveGen.isSquareAttacked(position, Bitboards.squareOf("e6"), Pieces.WHITE),
+                    "White reaches nothing on the sixth rank yet");
+            check(MoveGen.isSquareAttacked(position, Bitboards.squareOf("e6"), Pieces.BLACK),
+                    "the d7 and f7 pawns cover e6");
+            check(!MoveGen.isInCheck(position, Pieces.WHITE), "nobody is in check at the start");
+            check(!MoveGen.isInCheck(position, Pieces.BLACK), "nobody is in check at the start");
+        });
+
+        test("MoveGen: a rook on an open file gives check", () -> {
+            Position position = Position.empty();
+            position.put(Pieces.WHITE_KING, Bitboards.squareOf("e1"));
+            position.put(Pieces.BLACK_KING, Bitboards.squareOf("a8"));
+            position.put(Pieces.BLACK_ROOK, Bitboards.squareOf("e8"));
+
+            check(MoveGen.isInCheck(position, Pieces.WHITE), "the rook on e8 checks the king on e1");
+            check(!MoveGen.isInCheck(position, Pieces.BLACK), "Black is not in check");
+
+            // a pawn in between takes the check away
+            position.put(Pieces.WHITE_PAWN, Bitboards.squareOf("e4"));
+            check(!MoveGen.isInCheck(position, Pieces.WHITE), "a piece in between blocks the check");
+        });
+
         // -- Summary ------------------------------------------------------
         // the host frame is null on a headless run
         if (frame != null) SwingUtilities.invokeAndWait(frame::dispose);
