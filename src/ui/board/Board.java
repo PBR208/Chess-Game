@@ -14,7 +14,9 @@ package ui.board;
 import engine.imports.BoardState;
 import engine.model.GameConfig;
 import engine.imports.GameController;
+import engine.imports.GameView;
 import engine.imports.Move;
+import engine.imports.StartPosition;
 import engine.pieces.*;
 
 import javax.swing.*;
@@ -23,7 +25,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 
-public class Board extends JPanel {
+public class Board extends JPanel implements GameView {
 
     // edge length of one square in pixels when no size is given
     public static final int DEFAULT_TILE_SIZE = 85;
@@ -102,7 +104,7 @@ public class Board extends JPanel {
         this.clockHeight = pTileSize;
         // the board draws the pieces, so it owns their images
         this.sprites = new PieceSprites(pTileSize);
-        this.gc = new GameController(this, pConfig, new SwingPromotionChooser(this), new SwingDrawOfferResolver(this));
+        this.gc = new GameController(this, state, pConfig, new SwingPromotionChooser(this), new SwingDrawOfferResolver(this));
         this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), this::repaint, this::onTimeExpired);
         this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), this::repaint, this::onTimeExpired);
         // the same increment applies to both players
@@ -142,33 +144,19 @@ public class Board extends JPanel {
         return Math.max(MIN_TILE_SIZE, Math.min(DEFAULT_TILE_SIZE, Math.min(byHeight, byWidth)));
     }
 
+    /**
+     * Returns the pieces of a new game.
+     * <p>
+     * The board used to build the 32 starting pieces itself, which made the rules engine call back
+     * into a Swing component whenever a game restarted. I forward to StartPosition, which places them
+     * on this board's position, and keep the method so existing callers and tests stay unchanged.
+     * <p>
+     * Time complexity: O(p) for the p pieces created. Space complexity: O(p) for the returned list.
+     *
+     * @return the pieces of the starting position, never null
+     */
     public ArrayList<Piece> addPieces() {
-
-        ArrayList<Piece> newGame = new ArrayList<>();
-
-        newGame.add(new Rook(state, 0, 0, false));
-        newGame.add(new Rook(state, 7, 0, false));
-        newGame.add(new Knight(state, 1, 0, false));
-        newGame.add(new Knight(state, 6, 0, false));
-        newGame.add(new Bishop(state, 2, 0, false));
-        newGame.add(new Bishop(state, 5, 0, false));
-        newGame.add(new Queen(state, 3, 0, false));
-        newGame.add(new King(state, 4, 0, false));
-
-        newGame.add(new Rook(state, 0, 7, true));
-        newGame.add(new Rook(state, 7, 7, true));
-        newGame.add(new Knight(state, 1, 7, true));
-        newGame.add(new Knight(state, 6, 7, true));
-        newGame.add(new Bishop(state, 2, 7, true));
-        newGame.add(new Bishop(state, 5, 7, true));
-        newGame.add(new Queen(state, 3, 7, true));
-        newGame.add(new King(state, 4, 7, true));
-
-        for (int i = 0; i <= 7; i++) {
-            newGame.add(new Pawn(state, i, 1, false));
-            newGame.add(new Pawn(state, i, 6, true));
-        }
-        return newGame;
+        return StartPosition.create(state);
     }
 
     public void paintComponent(Graphics g) {

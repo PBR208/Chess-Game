@@ -951,7 +951,7 @@ public class GameTest {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     state.removePiece(state.getPiece(5, 7)); // clear f1 so the king can step there
                     Move kingStep = new Move(state, state.getPiece(4, 7), 5, 7);
@@ -970,7 +970,7 @@ public class GameTest {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // e2-e4
 
@@ -2227,7 +2227,7 @@ public class GameTest {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     gc.setGameEndListener((record, message) -> {
                     });
                     gc.flagFall(true); // the game ends on time
@@ -2245,7 +2245,7 @@ public class GameTest {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     GameRecord[] finished = {null};
                     gc.setGameEndListener((record, message) -> finished[0] = record);
 
@@ -2270,7 +2270,7 @@ public class GameTest {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // 1. e4
                     gc.makeMove(new Move(state, state.getPiece(5, 1), 5, 3)); // 1... f5
@@ -2283,7 +2283,7 @@ public class GameTest {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     gc.makeMove(new Move(state, state.getPiece(5, 6), 5, 5)); // 1. f3
                     gc.makeMove(new Move(state, state.getPiece(4, 1), 4, 3)); // 1... e5
@@ -2297,7 +2297,7 @@ public class GameTest {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     gc.makeMove(new Move(state, state.getPiece(6, 7), 5, 5)); // 1. Nf3
                     gc.makeMove(new Move(state, state.getPiece(4, 1), 4, 3)); // 1... e5
@@ -2321,7 +2321,7 @@ public class GameTest {
                     custom.add(new King(board.getState(), 7, 0, false));      // h8
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     gc.makeMove(new Move(state, lowerRook, 0, 5)); // Ra1-a3, the a5 rook could go there too
                     checkEqual("R1a3", gc.getMoveLog().get(0), "rooks on one file are told apart by rank");
                 }));
@@ -2341,7 +2341,7 @@ public class GameTest {
                     custom.add(new King(board.getState(), 3, 0, false));  // d8
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     gc.makeMove(new Move(state, movingQueen, 1, 6)); // Qa1-b2, c1 and a3 could go there too
                     checkEqual("Qa1b2", gc.getMoveLog().get(0), "file and rank are both needed when each is shared");
                 }));
@@ -2352,7 +2352,7 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(true);
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, resolver);
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2377,7 +2377,7 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // every claim is declined
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, resolver);
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2401,7 +2401,7 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(true);
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, resolver);
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2432,7 +2432,7 @@ public class GameTest {
                     custom.add(new Knight(board.getState(), 3, 6, false));       // d2, the last piece besides the kings
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2454,7 +2454,7 @@ public class GameTest {
                     custom.add(new King(board.getState(), 4, 0, false));          // e8
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2477,7 +2477,7 @@ public class GameTest {
                     custom.add(new Bishop(board.getState(), 5, 0, false));       // f8, dark square as well
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2500,7 +2500,7 @@ public class GameTest {
                     custom.add(new Bishop(board.getState(), 2, 0, false));       // c8, light square
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2519,7 +2519,7 @@ public class GameTest {
                     custom.add(new King(board.getState(), 4, 0, false));  // e8, Black has nothing else
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2541,7 +2541,7 @@ public class GameTest {
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // both players decline
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, resolver);
                     shuffleKings(gc, state, 120);
 
                     checkEqual(2, resolver.offerDrawCount,
@@ -2604,7 +2604,7 @@ public class GameTest {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     Piece pawn = state.getPiece(4, 6); // e2
                     Move m = new Move(state, pawn, 4, 4); // e2-e4
@@ -2623,7 +2623,7 @@ public class GameTest {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // e2-e4
                     gc.makeMove(new Move(state, state.getPiece(3, 1), 3, 3)); // d7-d5
@@ -2646,7 +2646,7 @@ public class GameTest {
                     state.removePiece(state.getPiece(5, 7)); // clear f1 (bishop)
                     state.removePiece(state.getPiece(6, 7)); // clear g1 (knight)
 
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     Piece king = state.getPiece(4, 7);
                     Piece rook = state.getPiece(7, 7);
 
@@ -2664,7 +2664,7 @@ public class GameTest {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // e2-e4
                     gc.makeMove(new Move(state, state.getPiece(0, 1), 0, 2)); // a7-a6 (waiting move)
@@ -2716,7 +2716,7 @@ public class GameTest {
                     state.setPieces(custom);
                     state.setEnPassantTile(state.getTileNum(3, 2));    // d6
 
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] endMessage = {null};
                     gc.setGameEndListener((record, msg) -> endMessage[0] = msg);
 
@@ -2749,7 +2749,7 @@ public class GameTest {
                     state.setPieces(custom);
                     state.setEnPassantTile(state.getTileNum(2, 2)); // c6
 
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     Move enPassant = new Move(state, whitePawn, 2, 2); // bxc6
                     check(!gc.isValidMove(enPassant),
                             "bxc6 en passant clears both pawns from the 5th rank and must be illegal");
@@ -2772,7 +2772,7 @@ public class GameTest {
                     state.setPieces(custom);
 
                     boolean[] askedWhite = {false};
-                    GameController gc = new GameController(board, cfg,
+                    GameController gc = new GameController(board, board.getState(), cfg,
                             white -> {
                                 askedWhite[0] = white;
                                 return PieceType.KNIGHT;
@@ -2809,7 +2809,7 @@ public class GameTest {
                     custom.add(rookB);
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] result = {null};
                     String[] message = {null};
                     gc.setGameEndListener((record, msg) -> {
@@ -2842,7 +2842,7 @@ public class GameTest {
                     custom.add(whiteQueen);
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] result = {null};
                     gc.setGameEndListener((record, msg) -> result[0] = record.result);
 
@@ -2859,7 +2859,7 @@ public class GameTest {
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     // White is to move, but both sides have plenty of moves at the start
                     check(!gc.isStalemate(false), "Black can move in the starting position, so it isn't stalemated");
@@ -2880,7 +2880,7 @@ public class GameTest {
                     state.setPieces(custom);
 
                     // a fresh controller has White to move
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     check(gc.isStalemate(false), "Black has no legal move and isn't in check");
                     check(!gc.isStalemate(true), "White still has moves");
                 }));
@@ -2899,7 +2899,7 @@ public class GameTest {
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(true);
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, resolver);
                     String[] result = {null};
                     gc.setGameEndListener((record, msg) -> result[0] = record.result);
 
@@ -2924,7 +2924,7 @@ public class GameTest {
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false);
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, resolver);
                     String[] result = {null};
                     gc.setGameEndListener((record, msg) -> result[0] = record.result);
 
@@ -2948,7 +2948,7 @@ public class GameTest {
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // always decline
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, resolver);
                     String[] result = {null};
                     String[] message = {null};
                     gc.setGameEndListener((record, msg) -> {
@@ -2968,7 +2968,7 @@ public class GameTest {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
-                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4));
 
                     boolean threw = false;

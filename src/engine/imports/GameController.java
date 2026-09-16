@@ -4,17 +4,16 @@ package engine.imports;
  * Purpose: GameController is the referee of a running game. It decides whether a move is legal,
  * applies it to the board state, tracks whose turn it is and detects checkmate, stalemate and the
  * move-count draw rules. I keep these rules here instead of in the Swing board so they can be
- * tested without a window. Promotion choices and draw offers are requested through small
- * interfaces, so no dialog is ever created from inside this class.
+ * tested without a window. Promotion choices, draw offers, the clocks, the repaint and the move log
+ * are all requested through small interfaces, so this class creates no dialog and imports nothing
+ * from the ui package at all, which is what lets the rules run in a JVM without a display.
  *
  * Owner: PBR208 - https://github.com/PBR208/
- * Version: 1.0
+ * Version: 2.0
  */
 
 import engine.model.GameConfig;
 import engine.model.GameRecord;
-import ui.board.Board;
-import ui.board.MoveLogPanel;
 import engine.pieces.*;
 
 import java.util.ArrayList;
@@ -28,7 +27,8 @@ public class GameController {
         void onGameEnd(GameRecord record, String message);
     }
 
-    Board b;
+    // the clocks and the repaint, without knowing what draws them
+    GameView view;
     BoardState state;
     CheckScanner cs;
     MoveHistory history;
@@ -55,14 +55,31 @@ public class GameController {
     private boolean whiteOfferedFiftyMoveClaim = false;
     private boolean blackOfferedFiftyMoveClaim = false;
 
-    public GameController(Board b, GameConfig config,
-                          PromotionChooser promotionChooser, DrawOfferResolver drawOfferResolver) {
-        this.b = b;
-        this.state = b.getState();
+    /**
+     * Creates the referee for one game on a position.
+     * <p>
+     * A game needs a position to play on, the names and times it was configured with, and a way to
+     * ask the players for a promotion piece or a draw. The controller used to take the Swing board
+     * and read the position out of it, which tied the rules to a window. I now take the position
+     * itself and a view that only offers the clocks and a repaint, and build the check simulation
+     * and the move history on that position.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the history that grows with the game.
+     *
+     * @param pView             clocks and repaint of the screen showing this game, never null
+     * @param pState            position the game is played on, never null
+     * @param pConfig           player names, times and increment of this game, never null
+     * @param pPromotionChooser asked which piece a promoting pawn becomes, never null
+     * @param pDrawOfferResolver asked about draw claims and told about forced draws, never null
+     */
+    public GameController(GameView pView, BoardState pState, GameConfig pConfig,
+                          PromotionChooser pPromotionChooser, DrawOfferResolver pDrawOfferResolver) {
+        this.view = pView;
+        this.state = pState;
         this.cs = new CheckScanner(state);
-        this.config = config;
-        this.promotionChooser = promotionChooser;
-        this.drawOfferResolver = drawOfferResolver;
+        this.config = pConfig;
+        this.promotionChooser = pPromotionChooser;
+        this.drawOfferResolver = pDrawOfferResolver;
         this.history = new MoveHistory(state);
     }
 
@@ -79,13 +96,13 @@ public class GameController {
      * cleared from the history. Space complexity: O(p) for the new piece objects.
      */
     public void restartGame() {
-        b.setPieces(b.addPieces());
+        state.setPieces(StartPosition.create(state));
         turnOfWhite = true;
         passedMoves = 0;
         // a new game starts again at move 1
         fullMove = 1;
         state.setEnPassantTile(-1);
-        b.resetClocks();
+        view.resetClocks();
         history.clear();
         // repetitions only count within one game
         positionCounts.clear();
@@ -712,9 +729,9 @@ public class GameController {
     private void flip() {
         // a finished game keeps both clocks stopped
         if (!gameOver) {
-            b.switchClocks(turnOfWhite);
+            view.switchClocks(turnOfWhite);
         }
-        b.repaint();
+        view.repaint();
     }
 
     /**
@@ -764,7 +781,7 @@ public class GameController {
         }
         gameOver = true;
         // a finished game has no running clock
-        b.stopClocks();
+        view.stopClocks();
         GameRecord record = new GameRecord(config, pResult,
                 history.getMoveLog(), history.getFenHistory());
         // the listener saves the game and shows the end screen
@@ -789,16 +806,28 @@ public class GameController {
         this.gameEndListener = l;
     }
 
-    public void setMoveLogPanel(MoveLogPanel panel) {
-        history.setListener(panel == null ? null : new MoveHistory.Listener() {
+    /**
+     * Sends every recorded move to a move log, or to nobody.
+     * <p>
+     * The log beside the board has to show each move as it is played, but the rules must not depend
+     * on a Swing panel for that. I wrap the given log in the history's listener, so the history keeps
+     * reporting the way it always did while the engine only knows the small MoveLogView interface.
+     * Passing null detaches the log, which is what a game without a visible log does.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) for the listener.
+     *
+     * @param pMoveLogView log that receives every update, or null for no log at all
+     */
+    public void setMoveLogView(MoveLogView pMoveLogView) {
+        history.setListener(pMoveLogView == null ? null : new MoveHistory.Listener() {
             @Override
             public void onUpdate(List<String> moveLog, String currentFen) {
-                panel.update(moveLog, currentFen);
+                pMoveLogView.update(moveLog, currentFen);
             }
 
             @Override
             public void onClear() {
-                panel.clear();
+                pMoveLogView.clear();
             }
         });
     }

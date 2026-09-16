@@ -123,7 +123,7 @@ public class Main {
             Rectangle usableArea = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
             Board board = new Board(cfg, Board.tileSizeFor(usableArea.width, usableArea.height));
             MoveLogPanel logPanel = new MoveLogPanel(board.getPreferredSize().height);
-            board.getGameController().setMoveLogPanel(logPanel);
+            board.getGameController().setMoveLogView(logPanel);
 
             board.getGameController().setGameEndListener((record, displayMessage) -> {
                 // a game that couldn't be written must not disappear without a word

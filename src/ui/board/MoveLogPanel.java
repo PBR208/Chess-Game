@@ -10,11 +10,13 @@ package ui.board;
  * Version: 1.0
  */
 
+import engine.imports.MoveLogView;
+
 import javax.swing.*;
 import java.awt.*;
 import java.util.List;
 
-public class MoveLogPanel extends JPanel {
+public class MoveLogPanel extends JPanel implements MoveLogView {
 
     private final JTextArea area = new JTextArea();
     private final JTextArea fenArea = new JTextArea();
@@ -108,6 +110,7 @@ public class MoveLogPanel extends JPanel {
      * 2.  Nf3       Nc6
      * 3.  O-O       ...
      */
+    @Override
     public void update(List<String> log, String currentFen) {
         StringBuilder sb = new StringBuilder();
 
@@ -129,6 +132,7 @@ public class MoveLogPanel extends JPanel {
         fenArea.setCaretPosition(0);
     }
 
+    @Override
     public void clear() {
         area.setText("");
         fenArea.setText("");
