@@ -2757,6 +2757,36 @@ public class GameTest {
                     check(gc.isStalemate(false), "Black must have no legal moves");
                 }));
 
+        test("GameController: mate and stalemate checks don't depend on whose turn it is", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+
+                    // White is to move, but both sides have plenty of moves at the start
+                    check(!gc.isStalemate(false), "Black can move in the starting position, so it isn't stalemated");
+                    check(!gc.isCheckmate(false), "Black isn't mated in the starting position");
+                    check(!gc.isStalemate(true), "White can move in the starting position");
+                    check(!gc.isCheckmate(true), "White isn't mated in the starting position");
+                }));
+
+        test("GameController: a stalemated side is recognised even when it isn't its turn", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    custom.add(new King(board, 5, 1, true));    // f7
+                    custom.add(new Queen(board, 6, 2, true));   // g6
+                    custom.add(new King(board, 7, 0, false));   // h8, no legal move but not in check
+                    state.setPieces(custom);
+
+                    // a fresh controller has White to move
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    check(gc.isStalemate(false), "Black has no legal move and isn't in check");
+                    check(!gc.isStalemate(true), "White still has moves");
+                }));
+
         test("GameController: 50-move rule offers a draw at half-move 100; accepting ends the game", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
