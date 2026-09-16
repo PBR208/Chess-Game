@@ -1083,6 +1083,40 @@ public class GameTest {
             check(false, "loading a missing sprite sheet must throw IllegalStateException");
         });
 
+        test("PieceSprites: every sprite is scaled to the board's square size", () -> {
+            PieceSprites sprites = new PieceSprites(64);
+            BufferedImage knight = sprites.spriteFor(PieceType.KNIGHT, true);
+            checkEqual(64, knight.getWidth(), "a sprite must be as wide as one square");
+            checkEqual(64, knight.getHeight(), "a sprite must be as high as one square");
+        });
+
+        test("PieceSprites: the same piece and colour comes back from the cache", () -> {
+            PieceSprites sprites = new PieceSprites(40);
+            BufferedImage first = sprites.spriteFor(PieceType.QUEEN, false);
+            BufferedImage second = sprites.spriteFor(PieceType.QUEEN, false);
+            check(first == second, "a repaint must reuse the scaled sprite instead of scaling it again");
+            check(first != sprites.spriteFor(PieceType.QUEEN, true), "black and white must not share a sprite");
+        });
+
+        test("PieceSprites: every piece type has its own column in the sheet", () -> {
+            java.util.Set<Integer> columns = new java.util.HashSet<>();
+            for (PieceType type : PieceType.values()) {
+                int column = PieceSprites.spriteColumn(type);
+                check(column >= 0 && column < 6, "the column of " + type + " must lie in the sheet, got " + column);
+                check(columns.add(column), "two piece types must not share the sprite column " + column);
+            }
+            checkEqual(6, columns.size(), "all six piece types must have a column");
+        });
+
+        test("PieceSprites: a square size of zero or less is refused", () -> {
+            try {
+                new PieceSprites(0);
+                throw new AssertionError("a sprite source without pixels must not be built");
+            } catch (IllegalArgumentException expected) {
+                // the size is checked before anything is scaled
+            }
+        });
+
         // =================================================================
         System.out.println("\n-- ChessClock ---------------------------------------------------");
         // =================================================================
@@ -2116,6 +2150,82 @@ public class GameTest {
             });
 
             cleanupSavedGame(uniqueWhite);
+        });
+
+        // =================================================================
+        System.out.println("\n-- Engine without a display -------------------------------------");
+        // =================================================================
+
+        test("StartPosition: builds the 32 pieces of a new game on their home squares", () -> {
+            BoardState state = new BoardState();
+            state.setPieces(StartPosition.create(state));
+
+            checkEqual(32, state.getPieces().size(), "a new game starts with 32 pieces");
+            checkEqual(PieceType.KING, state.getPiece(4, 7).getType(), "the white king stands on e1");
+            checkEqual(PieceType.KING, state.getPiece(4, 0).getType(), "the black king stands on e8");
+            check(state.getPiece(0, 6) instanceof Pawn, "a white pawn stands on a2");
+            check(state.getPiece(0, 1) instanceof Pawn, "a black pawn stands on a7");
+            check(state.getPiece(4, 4) == null, "the middle of the board starts empty");
+        });
+
+        test("GameController: plays a move without a board, a window or any Swing class", () -> {
+            // counts what the rules ask of the screen, without being a screen
+            int[] clockSwitches = {0};
+            int[] repaints = {0};
+            boolean[] handedTo = {true};
+            GameView view = new GameView() {
+                @Override
+                public void switchClocks(boolean pWhiteToMove) {
+                    clockSwitches[0]++;
+                    handedTo[0] = pWhiteToMove;
+                }
+
+                @Override
+                public void stopClocks() {
+                }
+
+                @Override
+                public void resetClocks() {
+                }
+
+                @Override
+                public void repaint() {
+                    repaints[0]++;
+                }
+            };
+
+            List<String> loggedMoves = new ArrayList<>();
+            MoveLogView log = new MoveLogView() {
+                @Override
+                public void update(List<String> pMoveLog, String pCurrentFen) {
+                    loggedMoves.clear();
+                    loggedMoves.addAll(pMoveLog);
+                }
+
+                @Override
+                public void clear() {
+                    loggedMoves.clear();
+                }
+            };
+
+            BoardState state = new BoardState();
+            state.setPieces(StartPosition.create(state));
+            GameController gc = new GameController(view, state, GameConfig.unlimited(),
+                    w -> PieceType.QUEEN, noOpDrawResolver());
+            gc.setMoveLogView(log);
+
+            Move e2e4 = new Move(state, state.getPiece(4, 6), 4, 4);
+            check(gc.isValidMove(e2e4), "e2-e4 must be legal in the starting position");
+            gc.makeMove(e2e4);
+
+            checkNotNull(state.getPiece(4, 4), "the pawn must stand on e4 after the move");
+            check(state.getPiece(4, 6) == null, "e2 must be empty after the move");
+            check(!gc.isTurnOfWhite(), "Black must be to move after White's first move");
+            checkEqual(1, clockSwitches[0], "the rules must hand the clock over exactly once");
+            check(!handedTo[0], "the clock must be handed to Black");
+            check(repaints[0] >= 1, "the rules must ask for a repaint after the move");
+            checkEqual(1, loggedMoves.size(), "the move log must receive exactly one move");
+            checkEqual("e4", loggedMoves.get(0), "the logged move must read e4");
         });
 
         // =================================================================
