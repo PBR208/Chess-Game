@@ -3313,6 +3313,89 @@ public class GameTest {
             check(!MoveGen.isInCheck(position, Pieces.WHITE), "a piece in between blocks the check");
         });
 
+        // =================================================================
+        System.out.println("\n-- Move generation: legal moves and perft ------------------------");
+        // =================================================================
+
+        test("MoveGen: the starting position has twenty legal moves", () -> {
+            int[] moves = new int[MoveGen.MAX_MOVES];
+            checkEqual(20, MoveGen.generateLegal(Position.startPosition(), moves, 0),
+                    "sixteen pawn moves and four knight moves");
+        });
+
+        test("MoveGen: a pinned piece may not step off the pin", () -> {
+            // the knight on e2 shields the king on e1 from the rook on e8
+            Position position = PerftTest.fromFen("4r2k/8/8/8/8/8/4N3/4K3 w - - 0 1");
+            int[] moves = new int[MoveGen.MAX_MOVES];
+            int count = MoveGen.generateLegal(position, moves, 0);
+
+            for (int index = 0; index < count; index++) {
+                check(Moves.from(moves[index]) != Bitboards.squareOf("e2"),
+                        "the pinned knight must not move, got " + Moves.toUci(moves[index]));
+            }
+            checkEqual(4, count, "only the king may move, to d1, d2, f1 and f2");
+        });
+
+        test("MoveGen: a king may not castle across an attacked square", () -> {
+            int[] moves = new int[MoveGen.MAX_MOVES];
+
+            // the rook on f8 covers f1, the square the king would cross
+            Position crossing = PerftTest.fromFen("5r1k/8/8/8/8/8/8/4K2R w K - 0 1");
+            int count = MoveGen.generateLegal(crossing, moves, 0);
+            for (int index = 0; index < count; index++) {
+                check(!Moves.isCastling(moves[index]), "castling across an attacked square must not be offered");
+            }
+
+            // with nothing covering the way the same castling is fine
+            Position allowed = PerftTest.fromFen("7k/8/8/8/8/8/8/4K2R w K - 0 1");
+            count = MoveGen.generateLegal(allowed, moves, 0);
+            boolean castles = false;
+            for (int index = 0; index < count; index++) {
+                castles |= Moves.isCastling(moves[index]);
+            }
+            check(castles, "castling must be offered when nothing attacks the way");
+        });
+
+        test("MoveGen: an en passant capture is generated after a double push", () -> {
+            Position position = PerftTest.fromFen("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1");
+            int[] moves = new int[MoveGen.MAX_MOVES];
+            int count = MoveGen.generateLegal(position, moves, 0);
+
+            boolean found = false;
+            for (int index = 0; index < count; index++) {
+                found |= Moves.isEnPassant(moves[index]) && "e5d6".equals(Moves.toUci(moves[index]));
+            }
+            check(found, "exd6 en passant must be among the legal moves");
+        });
+
+        test("Perft: the starting position matches its known node counts", () -> {
+            Perft perft = new Perft();
+            Position position = Position.startPosition();
+            long keyBefore = position.key();
+
+            checkEqual(20L, perft.count(position, 1), "twenty positions after one move");
+            checkEqual(400L, perft.count(position, 2), "four hundred after two");
+            checkEqual(8902L, perft.count(position, 3), "8902 after three");
+            checkEqual(197281L, perft.count(position, 4), "197281 after four");
+            checkEqual(keyBefore, position.key(), "counting must leave the position exactly as it was");
+        });
+
+        test("Perft: the four other standard positions match as well", () -> {
+            Perft perft = new Perft();
+            checkEqual(97862L, perft.count(PerftTest.fromFen(
+                    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1"), 3),
+                    "kiwipete at depth three");
+            checkEqual(43238L, perft.count(PerftTest.fromFen(
+                    "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1"), 4),
+                    "position three at depth four");
+            checkEqual(9467L, perft.count(PerftTest.fromFen(
+                    "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1"), 3),
+                    "position four at depth three");
+            checkEqual(62379L, perft.count(PerftTest.fromFen(
+                    "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 0 1"), 3),
+                    "position five at depth three");
+        });
+
         // -- Summary ------------------------------------------------------
         // the host frame is null on a headless run
         if (frame != null) SwingUtilities.invokeAndWait(frame::dispose);
