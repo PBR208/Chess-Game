@@ -36,7 +36,8 @@ public class Main {
      * <p>
      * This is what runs for java -jar and for the IDE launch. Without a graphical display no window
      * can open, so I print what went wrong and exit with code 2 before touching any window class.
-     * Otherwise I build the window on the event thread and show the menu. If building the window
+     * Otherwise I build the window on the event thread, sized to fit the usable part of the screen,
+     * and show the menu. If building the window
      * throws, I print the problem and exit with code 1, instead of leaving a process behind that
      * failed silently.
      * <p>
@@ -57,8 +58,10 @@ public class Main {
                 frame = new JFrame("Chess");
                 frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
                 frame.getContentPane().setBackground(new Color(28, 28, 30));
-                frame.setSize(1400, 1000);
-                frame.setMinimumSize(new Dimension(1200, 900));
+                // never larger than the usable part of the screen, small laptop screens included
+                Rectangle usableArea = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+                frame.setSize(fitToScreen(new Dimension(1400, 1000), usableArea));
+                frame.setMinimumSize(fitToScreen(new Dimension(1200, 900), usableArea));
                 frame.setLocationRelativeTo(null);
                 frame.setVisible(true);
 
@@ -70,6 +73,24 @@ public class Main {
                 System.exit(EXIT_STARTUP_FAILED);
             }
         });
+    }
+
+    /**
+     * Shrinks a window size so it fits into the usable screen area.
+     * <p>
+     * A fixed 1400 by 1000 window with a 1200 by 900 minimum is taller than many laptop screens, so
+     * part of the board and the bottom clock ended up below the screen edge. I keep the preferred
+     * width and height where they fit and cut each one down to the screen area where they don't.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pPreferred size the window would like to have, never null
+     * @param pScreen    usable screen area without task bars, never null
+     * @return a size that is no larger than the screen area in either direction, never null
+     * @throws NullPointerException if one of the arguments is null
+     */
+    public static Dimension fitToScreen(Dimension pPreferred, Rectangle pScreen) {
+        return new Dimension(Math.min(pPreferred.width, pScreen.width), Math.min(pPreferred.height, pScreen.height));
     }
 
     public static void showMenu() {
@@ -84,9 +105,10 @@ public class Main {
      * Opens the game screen for a new game.
      * <p>
      * After the New Game screen the board, the move log and the end of game handling have to be set
-     * up together. I fall back to an unlimited game without a configuration, build the board and the
-     * move log panel, and register what happens when the game ends: the game is saved, a warning
-     * appears when that failed, and the end screen leads back to the menu.
+     * up together. I fall back to an unlimited game without a configuration, build the board with
+     * squares that fit the screen and the move log panel, and register what happens when the game
+     * ends: the game is saved, a warning appears when that failed, and the end screen leads back to
+     * the menu.
      * <p>
      * Time complexity: O(p) for the starting pieces. Space complexity: O(p) for the new board.
      *
@@ -97,7 +119,9 @@ public class Main {
         final GameConfig cfg = pConfig == null ? GameConfig.unlimited() : pConfig;
 
         SwingUtilities.invokeLater(() -> {
-            Board board = new Board(cfg);
+            // squares small enough for the whole game screen to fit on this screen
+            Rectangle usableArea = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+            Board board = new Board(cfg, Board.tileSizeFor(usableArea.width, usableArea.height));
             MoveLogPanel logPanel = new MoveLogPanel(board.getPreferredSize().height);
             board.getGameController().setMoveLogPanel(logPanel);
 

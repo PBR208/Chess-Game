@@ -199,42 +199,57 @@ public class ChessClock {
         return Math.max(0, bankedMs - elapsedMs);
     }
 
-    public void draw(Graphics2D g2d, int yOffset, int width, int height) {
-        int pad = height / 6;
+    /**
+     * Paints this player's clock bar.
+     * <p>
+     * Each player needs to see their remaining time, whose turn it is and which colour they play. I
+     * fill the bar, mark a running clock with a green edge, draw a thin separator towards the board,
+     * a colour swatch, the player label and the remaining time, which turns red below 30 seconds. The
+     * text uses the logical sans serif font, which every platform has, unlike Arial.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the two font objects.
+     *
+     * @param pG2d     graphics context of the board panel, never null
+     * @param pYOffset top edge of the clock bar in panel pixels
+     * @param pWidth   width of the bar in pixels, greater than 0
+     * @param pHeight  height of the bar in pixels, greater than 0
+     */
+    public void draw(Graphics2D pG2d, int pYOffset, int pWidth, int pHeight) {
+        int pad = pHeight / 6;
 
         //Background
-        g2d.setColor(running ? new Color(45, 45, 48) : new Color(28, 28, 30));
-        g2d.fillRect(0, yOffset, width, height);
+        pG2d.setColor(running ? new Color(45, 45, 48) : new Color(28, 28, 30));
+        pG2d.fillRect(0, pYOffset, pWidth, pHeight);
 
         //Green left border on the active clock
         if (running) {
-            g2d.setColor(ACTIVE_BANNER_COLOR);
-            g2d.fillRect(0, yOffset, 4, height);
+            pG2d.setColor(ACTIVE_BANNER_COLOR);
+            pG2d.fillRect(0, pYOffset, 4, pHeight);
         }
 
         //Thin separator between clock and board edge
-        g2d.setColor(SEPERATOR_COLOR);
-        g2d.fillRect(0, running ? yOffset + height - 1 : yOffset, width, 1);
+        pG2d.setColor(SEPERATOR_COLOR);
+        pG2d.fillRect(0, running ? pYOffset + pHeight - 1 : pYOffset, pWidth, 1);
 
         //Player colour swatch (small filled square)
-        int swatchSize = height / 4;
+        int swatchSize = pHeight / 4;
         int swatchX = pad + 4; // clear of the green active border
-        int swatchY = yOffset + (height - swatchSize) / 2;
+        int swatchY = pYOffset + (pHeight - swatchSize) / 2;
 
-        g2d.setColor(isWhite ? PLAYER_WHITE_COLOR : PLAYER_BLACK_COLOR);
-        g2d.fillRect(swatchX, swatchY, swatchSize, swatchSize);
-        g2d.setColor(CLOCK_COLOR);
-        g2d.drawRect(swatchX, swatchY, swatchSize, swatchSize);
+        pG2d.setColor(isWhite ? PLAYER_WHITE_COLOR : PLAYER_BLACK_COLOR);
+        pG2d.fillRect(swatchX, swatchY, swatchSize, swatchSize);
+        pG2d.setColor(CLOCK_COLOR);
+        pG2d.drawRect(swatchX, swatchY, swatchSize, swatchSize);
 
-        //Player label
-        g2d.setFont(new Font("Arial", Font.BOLD, height / 5));
-        g2d.setColor(running ? Color.WHITE : PLAYER_NAME_COLOR);
+        //Player label, logical fonts exist on every platform
+        pG2d.setFont(new Font(Font.SANS_SERIF, Font.BOLD, pHeight / 5));
+        pG2d.setColor(running ? Color.WHITE : PLAYER_NAME_COLOR);
 
-        FontMetrics fmLabel = g2d.getFontMetrics();
+        FontMetrics fmLabel = pG2d.getFontMetrics();
         String label = isWhite ? "WHITE" : "BLACK";
         int labelX = swatchX + swatchSize + pad / 2;
-        int labelY = yOffset + (height + fmLabel.getAscent() - fmLabel.getDescent()) / 2;
-        g2d.drawString(label, labelX, labelY);
+        int labelY = pYOffset + (pHeight + fmLabel.getAscent() - fmLabel.getDescent()) / 2;
+        pG2d.drawString(label, labelX, labelY);
 
         //Time display
         long totalSec = timeMs / 1000;
@@ -245,13 +260,13 @@ public class ChessClock {
         else if (timeMs < LOW_TIME_MS) timeColor = ALARM_COLOR; // red under 30 s
         else timeColor = Color.WHITE;
 
-        g2d.setFont(new Font("Arial", Font.BOLD, height / 2));
-        g2d.setColor(timeColor);
+        pG2d.setFont(new Font(Font.SANS_SERIF, Font.BOLD, pHeight / 2));
+        pG2d.setColor(timeColor);
 
-        FontMetrics fmTime = g2d.getFontMetrics();
-        int timeX = width - pad - fmTime.stringWidth(timeText);
-        int timeY = yOffset + (height + fmTime.getAscent() - fmTime.getDescent()) / 2;
-        g2d.drawString(timeText, timeX, timeY);
+        FontMetrics fmTime = pG2d.getFontMetrics();
+        int timeX = pWidth - pad - fmTime.stringWidth(timeText);
+        int timeY = pYOffset + (pHeight + fmTime.getAscent() - fmTime.getDescent()) / 2;
+        pG2d.drawString(timeText, timeX, timeY);
     }
 
     //GETTER

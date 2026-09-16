@@ -1,5 +1,15 @@
 package ui.menu;
 
+/*
+ * Purpose: ReplayPanel steps through a saved game position by position. It draws a small board from
+ * the FEN recorded after every move and shows the move list and the current FEN next to it. I keep
+ * the replay separate from the live board, so looking at an old game can never change a running
+ * one. The text uses logical font names, which every platform provides.
+ *
+ * Owner: PBR208 - https://github.com/PBR208/
+ * Version: 1.0
+ */
+
 import engine.persistence.FenLoader;
 import engine.pieces.Piece;
 import ui.theme.Theme;
@@ -45,9 +55,22 @@ public class ReplayPanel extends JPanel {
     private final JTextArea moveHistoryArea;
     private final JTextArea fenArea;
 
-    public ReplayPanel(List<String> moves, List<String> fens) {
-        this.moves = moves;
-        this.fens = fens;
+    /**
+     * Builds the replay view for one saved game.
+     * <p>
+     * A player wants to click or use the arrow keys through the positions of an old game. I keep the
+     * moves and positions, lay out the board canvas with the navigation buttons below it and the move
+     * list and FEN on the right, bind the left and right arrow keys and show the first position.
+     * <p>
+     * Time complexity: O(m) for filling the move list with m moves.
+     * Space complexity: O(m) for the move list text.
+     *
+     * @param pMoves moves of the game in SAN, never null
+     * @param pFens  FEN after each move, in the same order as the moves; never null, may be empty
+     */
+    public ReplayPanel(List<String> pMoves, List<String> pFens) {
+        this.moves = pMoves;
+        this.fens = pFens;
         setBackground(Theme.BG);
         setLayout(new BorderLayout());
 
@@ -69,24 +92,24 @@ public class ReplayPanel extends JPanel {
 
         moveLabel = new JLabel(moveText(), SwingConstants.CENTER);
         moveLabel.setForeground(Theme.FG);
-        moveLabel.setFont(new Font("Arial", Font.PLAIN, 13));
+        moveLabel.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
 
-        JButton first = navButton("\u21e4");
+        JButton first = navButton("\u21e4", "|<", "first");
         first.addActionListener(e -> {
             cursor = 0;
             refresh(boardCanvas);
         });
-        JButton prev = navButton("\u2190");
+        JButton prev = navButton("\u2190", "<", "previous");
         prev.addActionListener(e -> {
             if (cursor > 0) cursor--;
             refresh(boardCanvas);
         });
-        JButton next = navButton("\u2192");
+        JButton next = navButton("\u2192", ">", "next");
         next.addActionListener(e -> {
             if (cursor < fens.size() - 1) cursor++;
             refresh(boardCanvas);
         });
-        JButton last = navButton("\u21e5");
+        JButton last = navButton("\u21e5", ">|", "last");
         last.addActionListener(e -> {
             cursor = fens.size() - 1;
             refresh(boardCanvas);
@@ -109,7 +132,7 @@ public class ReplayPanel extends JPanel {
         // Move History
         JLabel moveHistoryHeader = new JLabel("  Move History");
         moveHistoryHeader.setForeground(new Color(140, 140, 140));
-        moveHistoryHeader.setFont(new Font("Arial", Font.BOLD, 12));
+        moveHistoryHeader.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
         moveHistoryHeader.setBackground(new Color(40, 40, 42));
         moveHistoryHeader.setOpaque(true);
         moveHistoryHeader.setPreferredSize(new Dimension(220, 30));
@@ -118,7 +141,7 @@ public class ReplayPanel extends JPanel {
         moveHistoryArea.setEditable(false);
         moveHistoryArea.setBackground(new Color(28, 28, 30));
         moveHistoryArea.setForeground(new Color(210, 210, 210));
-        moveHistoryArea.setFont(new Font("Monospaced", Font.PLAIN, 13));
+        moveHistoryArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         moveHistoryArea.setMargin(new Insets(8, 8, 8, 8));
 
         JScrollPane moveScroll = new JScrollPane(moveHistoryArea);
@@ -133,7 +156,7 @@ public class ReplayPanel extends JPanel {
         // FEN Display
         JLabel fenHeader = new JLabel("  Current FEN");
         fenHeader.setForeground(new Color(140, 140, 140));
-        fenHeader.setFont(new Font("Arial", Font.BOLD, 12));
+        fenHeader.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
         fenHeader.setBackground(new Color(40, 40, 42));
         fenHeader.setOpaque(true);
         fenHeader.setPreferredSize(new Dimension(220, 25));
@@ -142,7 +165,7 @@ public class ReplayPanel extends JPanel {
         fenArea.setEditable(false);
         fenArea.setBackground(new Color(28, 28, 30));
         fenArea.setForeground(new Color(210, 210, 210));
-        fenArea.setFont(new Font("Monospaced", Font.PLAIN, 10));
+        fenArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 10));
         fenArea.setMargin(new Insets(6, 8, 6, 8));
         fenArea.setLineWrap(true);
         fenArea.setWrapStyleWord(true);
@@ -260,8 +283,25 @@ public class ReplayPanel extends JPanel {
         }
     }
 
-    private JButton navButton(String text) {
-        JButton b = UiComponents.button(text, new Font("Arial", Font.BOLD, 24), Theme.BUTTON_SECONDARY);
+    /**
+     * Creates one of the four navigation buttons below the replay board.
+     * <p>
+     * The first, previous, next and last buttons share size and look. Their arrows are missing from
+     * some fonts, so each button also carries an ASCII arrow and a component name that stays the same
+     * whichever text is shown. I style a button with the shared dark look, a large bold logical font
+     * for the arrow and a fixed size.
+     * <p>
+     * Time complexity: O(n) for the n characters of pText. Space complexity: O(1) apart from the button.
+     *
+     * @param pText      arrow shown on the button, never null
+     * @param pAsciiText plain ASCII arrow for fonts without the symbol, never null
+     * @param pName      component name that identifies the button, never null
+     * @return the finished button, never null
+     */
+    private JButton navButton(String pText, String pAsciiText, String pName) {
+        // logical fonts exist on every platform, Arial doesn't
+        JButton b = UiComponents.button(pText, pAsciiText, new Font(Font.SANS_SERIF, Font.BOLD, 24), Theme.BUTTON_SECONDARY);
+        b.setName(pName);
         b.setPreferredSize(new Dimension(54, 32));
         return b;
     }

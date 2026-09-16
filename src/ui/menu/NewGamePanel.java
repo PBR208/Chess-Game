@@ -77,7 +77,7 @@ public class NewGamePanel extends JPanel {
 
         JLabel title = new JLabel("New Game");
         title.setForeground(Theme.FG);
-        title.setFont(new Font("Arial", Font.BOLD, 26));
+        title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 26));
         title.setAlignmentX(CENTER_ALIGNMENT);
         card.add(title);
         card.add(Box.createVerticalStrut(28));
@@ -105,7 +105,7 @@ public class NewGamePanel extends JPanel {
 
         for (Object[] p : PRESETS) {
             JToggleButton btn = new JToggleButton((String) p[0]);
-            UiComponents.style(btn, new Font("Arial", Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
+            UiComponents.style(btn, new Font(Font.SANS_SERIF, Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
 
             long wMs = (long) p[2];
             long bMs = (long) p[3];
@@ -135,7 +135,7 @@ public class NewGamePanel extends JPanel {
         JPanel customRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         customRow.setBackground(Theme.PANEL_BG);
 
-        UiComponents.style(customBtn, new Font("Arial", Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
+        UiComponents.style(customBtn, new Font(Font.SANS_SERIF, Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
         group.add(customBtn);
 
         styleField(customMin);
@@ -161,7 +161,7 @@ public class NewGamePanel extends JPanel {
 
         // tells the player why a custom time can't be used
         customError.setForeground(new Color(210, 90, 90));
-        customError.setFont(new Font("Arial", Font.PLAIN, 12));
+        customError.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
         customError.setAlignmentX(LEFT_ALIGNMENT);
         card.add(customError);
         card.add(Box.createVerticalStrut(24));
@@ -169,8 +169,8 @@ public class NewGamePanel extends JPanel {
         JPanel buttons = new JPanel(new GridLayout(1, 2, 12, 0));
         buttons.setBackground(Theme.PANEL_BG);
 
-        JButton backBtn = actionButton("\u2190 Back", false);
-        JButton startBtn = actionButton("Start \u25b6", true);
+        JButton backBtn = actionButton("\u2190 Back", "< Back", "back", false);
+        JButton startBtn = actionButton("Start \u25b6", "Start >", "start", true);
 
         backBtn.addActionListener(e -> Main.showMenu());
         // start the game with everything selected on this screen, unless the custom time is unusable
@@ -287,34 +287,85 @@ public class NewGamePanel extends JPanel {
                 incrementMs);
     }
 
-    private JLabel sectionLabel(String text) {
-        JLabel l = new JLabel(text);
+    /**
+     * Creates the small heading above a group of settings.
+     * <p>
+     * The screen is split into player names and time control, and each group gets a heading. I make
+     * a left aligned label in the muted heading colour with a bold logical font.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the label.
+     *
+     * @param pText heading text, never null
+     * @return the heading label, never null
+     */
+    private JLabel sectionLabel(String pText) {
+        JLabel l = new JLabel(pText);
         l.setForeground(new Color(160, 160, 170));
-        l.setFont(new Font("Arial", Font.BOLD, 12));
+        // logical fonts exist on every platform, Arial doesn't
+        l.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
         l.setAlignmentX(LEFT_ALIGNMENT);
         return l;
     }
 
-    private JLabel fieldLabel(String text) {
-        JLabel l = new JLabel(text);
+    /**
+     * Creates a small label that names an input, such as White, min or sec.
+     * <p>
+     * Inputs on this screen need short captions in the muted colour. I make a label with the given
+     * text and a plain logical font.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the label.
+     *
+     * @param pText caption text, never null
+     * @return the caption label, never null
+     */
+    private JLabel fieldLabel(String pText) {
+        JLabel l = new JLabel(pText);
         l.setForeground(new Color(160, 160, 170));
-        l.setFont(new Font("Arial", Font.PLAIN, 12));
+        l.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
         return l;
     }
 
-    private void styleField(JTextField f) {
-        f.setBackground(new Color(50, 50, 55));
-        f.setForeground(Theme.FG);
-        f.setCaretColor(Theme.FG);
-        f.setBorder(BorderFactory.createCompoundBorder(
+    /**
+     * Gives a text field the dark look of this screen.
+     * <p>
+     * The name and custom time fields should match the dark theme instead of the default light
+     * look. I set the dark background, light text and caret, a thin border with some padding and a
+     * plain logical font.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pField text field to style, never null
+     */
+    private void styleField(JTextField pField) {
+        pField.setBackground(new Color(50, 50, 55));
+        pField.setForeground(Theme.FG);
+        pField.setCaretColor(Theme.FG);
+        pField.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(new Color(70, 70, 75)),
                 new EmptyBorder(4, 8, 4, 8)));
-        f.setFont(new Font("Arial", Font.PLAIN, 13));
+        pField.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
     }
 
-    private JButton actionButton(String text, boolean primary) {
-        JButton b = UiComponents.button(text, new Font("Arial", Font.BOLD, 14),
-                primary ? Theme.ACCENT : Theme.BUTTON_SECONDARY);
+    /**
+     * Creates one of the two large buttons at the bottom of the screen, Back or Start.
+     * <p>
+     * Both buttons share size and font, and the primary one stands out in the accent colour. Their
+     * arrow symbols are missing from some fonts, so each button also carries an ASCII text and a
+     * component name that stays the same whichever text is shown. I style a button with the shared
+     * look, a bold logical font and a fixed height.
+     * <p>
+     * Time complexity: O(n) for the n characters of pText. Space complexity: O(1) apart from the button.
+     *
+     * @param pText      button text with its arrow symbol, never null
+     * @param pAsciiText plain ASCII text for fonts without the symbol, never null
+     * @param pName      component name that identifies the button, never null
+     * @param pPrimary   true for the accent coloured main action, false for a secondary one
+     * @return the finished button, never null
+     */
+    private JButton actionButton(String pText, String pAsciiText, String pName, boolean pPrimary) {
+        JButton b = UiComponents.button(pText, pAsciiText, new Font(Font.SANS_SERIF, Font.BOLD, 14),
+                pPrimary ? Theme.ACCENT : Theme.BUTTON_SECONDARY);
+        b.setName(pName);
         b.setPreferredSize(new Dimension(0, 44));
         return b;
     }

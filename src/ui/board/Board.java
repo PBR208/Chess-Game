@@ -25,10 +25,20 @@ import java.util.List;
 
 public class Board extends JPanel {
 
-    private final int tileSize = 85;
+    // edge length of one square in pixels when no size is given
+    public static final int DEFAULT_TILE_SIZE = 85;
+    // smallest square that still shows the pieces clearly
+    public static final int MIN_TILE_SIZE = 40;
+    // room the window frame and title bar take away from the screen
+    private static final int WINDOW_FRAME_PX = 60;
+    // width of the move log next to the board
+    private static final int MOVE_LOG_WIDTH_PX = 200;
+
+    private final int tileSize;
     private final int rows = 8;
     private final int cols = 8;
-    private final int clockHeight = tileSize;
+    // each clock bar is as high as one square
+    private final int clockHeight;
 
     private final BoardState state = new BoardState();
     private Piece selectedPiece;
@@ -46,12 +56,10 @@ public class Board extends JPanel {
     private final Color HINT_COLOR = new Color(81, 168, 0, 200);
 
     /**
-     * Builds the game board for a new game.
+     * Builds the game board for a new game with squares of the default size.
      * <p>
-     * A game needs its rules controller, two clocks, mouse input and the starting position. I create
-     * the controller with the Swing dialogs, both clocks with the configured times, remember the
-     * increment, size the panel for the board and the two clock bars, hook up the mouse, place the
-     * pieces and start White's clock.
+     * Tests and callers that don't care about the screen keep the size the board always had. I
+     * forward to the full constructor with 85 pixel squares.
      * <p>
      * Time complexity: O(p) for placing the p starting pieces. Space complexity: O(p).
      *
@@ -59,6 +67,33 @@ public class Board extends JPanel {
      * @throws NullPointerException if pConfig is null
      */
     public Board(GameConfig pConfig) {
+        this(pConfig, DEFAULT_TILE_SIZE);
+    }
+
+    /**
+     * Builds the game board for a new game with squares of a given size.
+     * <p>
+     * A game needs its rules controller, two clocks, mouse input and the starting position, and it
+     * has to fit on the player's screen. I store the square size first, since everything else is
+     * measured in squares, then create the controller with the Swing dialogs, both clocks with the
+     * configured times, remember the increment, size the panel for the board and the two clock bars,
+     * hook up the mouse, place the pieces scaled to the square size and start White's clock.
+     * <p>
+     * Time complexity: O(p * s^2) for the p starting pieces and their sprites scaled to squares of s
+     * pixels. Space complexity: O(p * s^2) for the scaled sprites.
+     *
+     * @param pConfig   names, times and increment of the new game, never null
+     * @param pTileSize edge length of one square in pixels, at least MIN_TILE_SIZE
+     * @throws NullPointerException     if pConfig is null
+     * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
+     */
+    public Board(GameConfig pConfig, int pTileSize) {
+        // pieces this small would be hard to see and click
+        if (pTileSize < MIN_TILE_SIZE) {
+            throw new IllegalArgumentException("tile size " + pTileSize + " is below " + MIN_TILE_SIZE);
+        }
+        this.tileSize = pTileSize;
+        this.clockHeight = pTileSize;
         this.gc = new GameController(this, pConfig, new SwingPromotionChooser(this), new SwingDrawOfferResolver(this));
         this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), this::repaint, this::onTimeExpired);
         this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), this::repaint, this::onTimeExpired);
@@ -74,6 +109,29 @@ public class Board extends JPanel {
         state.setPieces(addPieces());
 
         whiteClock.start();
+    }
+
+    /**
+     * Picks the largest square size that lets the game screen fit into a screen area.
+     * <p>
+     * The board used fixed 85 pixel squares with a clock bar above and below, 850 pixels in total,
+     * which doesn't fit on a 1366 by 768 laptop once the window frame and the task bar take their
+     * share. The game screen needs ten squares of height for the board and both clock bars plus the
+     * window frame, and eight squares of width plus the move log. I take the largest square that
+     * fits in both directions, but never more than the default size and never less than the minimum.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pAvailableWidth  usable screen width in pixels
+     * @param pAvailableHeight usable screen height in pixels
+     * @return square size in pixels, between MIN_TILE_SIZE and DEFAULT_TILE_SIZE
+     */
+    public static int tileSizeFor(int pAvailableWidth, int pAvailableHeight) {
+        // ten squares high: eight rows and two clock bars, plus the window frame
+        int byHeight = (pAvailableHeight - WINDOW_FRAME_PX) / 10;
+        // eight squares wide next to the move log, plus the window frame
+        int byWidth = (pAvailableWidth - MOVE_LOG_WIDTH_PX - WINDOW_FRAME_PX) / 8;
+        return Math.max(MIN_TILE_SIZE, Math.min(DEFAULT_TILE_SIZE, Math.min(byHeight, byWidth)));
     }
 
     public ArrayList<Piece> addPieces() {
