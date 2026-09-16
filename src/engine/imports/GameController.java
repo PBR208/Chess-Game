@@ -112,7 +112,7 @@ public class GameController {
     public void flagFall(boolean pIsWhiteExpired) {
         // FIDE 6.9: a side that could never checkmate doesn't win on time
         if (onlyKingLeft(!pIsWhiteExpired) || isInsufficientMaterial()) {
-            endGame("1/2-1/2", "Time out — Draw");
+            endGame("1/2-1/2", "Time out \u2014 Draw");
             return;
         }
         String result = pIsWhiteExpired ? "0-1" : "1-0";
@@ -154,31 +154,31 @@ public class GameController {
 
         // no legal reply without check is stalemate
         if (!pOpponentCanMove) {
-            endGame("1/2-1/2", "Stalemate — Draw");
+            endGame("1/2-1/2", "Stalemate \u2014 Draw");
             return;
         }
 
         // a position where nobody can ever checkmate is a draw right away
         if (isInsufficientMaterial()) {
-            endGame("1/2-1/2", "Insufficient material — Draw");
+            endGame("1/2-1/2", "Insufficient material \u2014 Draw");
             return;
         }
 
         // the fifth occurrence of a position ends the game automatically
         if (pRepetitions >= 5) {
-            endGame("1/2-1/2", "Fivefold repetition — Draw");
+            endGame("1/2-1/2", "Fivefold repetition \u2014 Draw");
             return;
         }
 
         if (passedMoves >= 150) {
             drawOfferResolver.notifyForcedDraw();
-            endGame("1/2-1/2", "75-move rule — Draw");
+            endGame("1/2-1/2", "75-move rule \u2014 Draw");
             return;
         }
 
         // a third or fourth occurrence lets the player to move claim the draw
         if (pRepetitions >= 3 && drawOfferResolver.offerRepetitionDraw()) {
-            endGame("1/2-1/2", "Threefold repetition — Draw");
+            endGame("1/2-1/2", "Threefold repetition \u2014 Draw");
             return;
         }
 

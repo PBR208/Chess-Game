@@ -71,22 +71,22 @@ public class ReplayPanel extends JPanel {
         moveLabel.setForeground(Theme.FG);
         moveLabel.setFont(new Font("Arial", Font.PLAIN, 13));
 
-        JButton first = navButton("⇤");
+        JButton first = navButton("\u21e4");
         first.addActionListener(e -> {
             cursor = 0;
             refresh(boardCanvas);
         });
-        JButton prev = navButton("←");
+        JButton prev = navButton("\u2190");
         prev.addActionListener(e -> {
             if (cursor > 0) cursor--;
             refresh(boardCanvas);
         });
-        JButton next = navButton("→");
+        JButton next = navButton("\u2192");
         next.addActionListener(e -> {
             if (cursor < fens.size() - 1) cursor++;
             refresh(boardCanvas);
         });
-        JButton last = navButton("⇥");
+        JButton last = navButton("\u21e5");
         last.addActionListener(e -> {
             cursor = fens.size() - 1;
             refresh(boardCanvas);
@@ -222,7 +222,7 @@ public class ReplayPanel extends JPanel {
         if (fens.isEmpty()) return "No moves";
         int move = cursor / 2 + 1;
         String who = cursor % 2 == 0 ? "White" : "Black";
-        return "After move " + move + " (" + who + ") — position " + (cursor + 1) + "/" + fens.size();
+        return "After move " + move + " (" + who + ") \u2014 position " + (cursor + 1) + "/" + fens.size();
     }
 
     private void drawPosition(Graphics2D g2d, int width, int height) {

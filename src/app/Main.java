@@ -1,5 +1,16 @@
 package app;
 
+/*
+ * Purpose: Main is the entry point of the chess application. It owns the single application window
+ * and swaps the menu, the game screen and the Past Games library in and out of it. Because the whole
+ * game is a Swing application, I check at startup that a graphical display is available, since a
+ * headless Java runtime used to crash quietly on the event thread and still exit with code 0. Startup
+ * problems now end the process with a clear message and a non-zero exit code that scripts can detect.
+ *
+ * Owner: PBR208 - https://github.com/PBR208/
+ * Version: 1.0
+ */
+
 import engine.model.GameConfig;
 import engine.persistence.PgnManager;
 import ui.board.Board;
@@ -13,19 +24,51 @@ import java.awt.*;
 
 public class Main {
 
+    // exit code when the application is started without a graphical display
+    public static final int EXIT_NO_DISPLAY = 2;
+    // exit code when building the window fails for any other reason
+    public static final int EXIT_STARTUP_FAILED = 1;
+
     private static JFrame frame;
 
-    public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> {
-            frame = new JFrame("Chess");
-            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-            frame.getContentPane().setBackground(new Color(28, 28, 30));
-            frame.setSize(1400, 1000);
-            frame.setMinimumSize(new Dimension(1200, 900));
-            frame.setLocationRelativeTo(null);
-            frame.setVisible(true);
+    /**
+     * Starts the application window with the main menu.
+     * <p>
+     * This is what runs for java -jar and for the IDE launch. Without a graphical display no window
+     * can open, so I print what went wrong and exit with code 2 before touching any window class.
+     * Otherwise I build the window on the event thread and show the menu. If building the window
+     * throws, I print the problem and exit with code 1, instead of leaving a process behind that
+     * failed silently.
+     * <p>
+     * Time complexity: O(1) apart from building the menu. Space complexity: O(1).
+     *
+     * @param pArgs command line arguments, currently unused; may be empty but never null
+     */
+    public static void main(String[] pArgs) {
+        // no display means no window, so explain it instead of crashing on the event thread
+        if (GraphicsEnvironment.isHeadless()) {
+            System.err.println("Chess needs a graphical display, but this Java runtime is headless.");
+            System.err.println("Start it from a desktop session and without -Djava.awt.headless=true.");
+            System.exit(EXIT_NO_DISPLAY);
+        }
 
-            showMenu();
+        SwingUtilities.invokeLater(() -> {
+            try {
+                frame = new JFrame("Chess");
+                frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+                frame.getContentPane().setBackground(new Color(28, 28, 30));
+                frame.setSize(1400, 1000);
+                frame.setMinimumSize(new Dimension(1200, 900));
+                frame.setLocationRelativeTo(null);
+                frame.setVisible(true);
+
+                showMenu();
+            } catch (RuntimeException | Error e) {
+                // a window that can't be built must not leave a silent process behind
+                System.err.println("Chess could not start: " + e);
+                e.printStackTrace();
+                System.exit(EXIT_STARTUP_FAILED);
+            }
         });
     }
 

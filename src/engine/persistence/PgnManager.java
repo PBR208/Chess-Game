@@ -74,7 +74,7 @@ public class PgnManager {
 
             Files.writeString(file, buildPgn(pRecord));
         } catch (IOException e) {
-            System.err.println("PgnManager: failed to save — " + e.getMessage());
+            System.err.println("PgnManager: failed to save: " + e.getMessage());
         }
     }
 
@@ -121,15 +121,15 @@ public class PgnManager {
                         // a file without players or result can't be listed, so say which one it was
                         // TODO [PBR208]: Show skipped files in the Past Games screen, not only on standard error.
                         System.err.println("PgnManager: skipping " + file.getFileName()
-                                + " — missing White, Black or Result tag");
+                                + ": missing White, Black or Result tag");
                     }
                 } catch (Exception e) {
                     System.err.println("PgnManager: skipping " + file.getFileName()
-                            + " — " + e.getMessage());
+                            + ": " + e.getMessage());
                 }
             }
         } catch (IOException e) {
-            System.err.println("PgnManager: failed to list games — " + e.getMessage());
+            System.err.println("PgnManager: failed to list games: " + e.getMessage());
         }
         return records;
     }

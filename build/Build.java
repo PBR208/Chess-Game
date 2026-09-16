@@ -115,9 +115,9 @@ public class Build {
      * <p>
      * A plain javac call neither copies resources nor separates game and test classes, which is why
      * the documented command used to produce a game that crashed on its first piece. I start from
-     * empty output folders, compile everything under src except the tests into out/classes, copy the
-     * resources folder next to those classes, and then compile the tests into out/test-classes
-     * against the game classes.
+     * empty output folders and make sure every source file is plain ASCII. Then I compile everything
+     * under src except the tests into out/classes, copy the resources folder next to those classes,
+     * and compile the tests into out/test-classes against the game classes.
      * <p>
      * Time complexity: O(n + r) where n is the total size of the sources and r the size of the
      * resources. Space complexity: O(k) for the list of k source paths.
@@ -129,18 +129,53 @@ public class Build {
         deleteRecursively(MAIN_CLASSES);
         deleteRecursively(TEST_CLASSES);
 
-        // the game first, the tests are compiled against it
         List<Path> mainSources = javaSources(SOURCE_ROOT, TEST_SOURCES);
+        List<Path> testSources = javaSources(TEST_SOURCES, null);
+        // ASCII sources compile the same way whatever encoding a compiler assumes
+        verifyAsciiSources(mainSources);
+        verifyAsciiSources(testSources);
+
+        // the game first, the tests are compiled against it
         runJavac(mainSources, MAIN_CLASSES, null);
         copyResources();
 
-        List<Path> testSources = javaSources(TEST_SOURCES, null);
         runJavac(testSources, TEST_CLASSES, MAIN_CLASSES);
         // later targets in the same run can use these classes
         compiled = true;
 
         System.out.println("compiled " + mainSources.size() + " game sources and "
                 + testSources.size() + " test sources for Java " + RELEASE);
+    }
+
+    /**
+     * Stops the build when a source file contains anything but ASCII.
+     * <p>
+     * A JDK 17 compiler on Windows reads sources as windows-1252 unless it is told otherwise, and
+     * with characters like arrows or dashes it either garbles the text or refuses to compile at all.
+     * Sources that only contain ASCII compile the same with every encoding, so I read every file as
+     * bytes and fail with the file and line of the first byte above 127. Special characters belong in
+     * Unicode escapes inside strings.
+     * <p>
+     * Time complexity: O(b) in the total number of source bytes.
+     * Space complexity: O(f) for the bytes of the largest file.
+     *
+     * @param pSources source files to check, never null
+     * @throws IOException if a source file cannot be read
+     */
+    private static void verifyAsciiSources(List<Path> pSources) throws IOException {
+        for (Path source : pSources) {
+            int line = 1;
+            for (byte value : Files.readAllBytes(source)) {
+                // bytes of non-ASCII characters are negative as signed Java bytes
+                if (value < 0) {
+                    fail(source + " line " + line + " contains a non-ASCII character,"
+                            + " use a Unicode escape in strings and plain ASCII in comments");
+                }
+                if (value == '\n') {
+                    line++;
+                }
+            }
+        }
     }
 
     /**

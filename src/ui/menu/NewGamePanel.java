@@ -155,8 +155,8 @@ public class NewGamePanel extends JPanel {
         JPanel buttons = new JPanel(new GridLayout(1, 2, 12, 0));
         buttons.setBackground(Theme.PANEL_BG);
 
-        JButton backBtn = actionButton("← Back", false);
-        JButton startBtn = actionButton("Start ▶", true);
+        JButton backBtn = actionButton("\u2190 Back", false);
+        JButton startBtn = actionButton("Start \u25b6", true);
 
         backBtn.addActionListener(e -> Main.showMenu());
         // start the game with everything selected on this screen

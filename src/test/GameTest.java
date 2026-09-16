@@ -35,9 +35,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Standalone GUI + action test runner — no dependencies required.
+ * Standalone GUI + action test runner - no dependencies required.
  * <p>
- * Run via IntelliJ: right-click GameTest → Run 'GameTest.main()'
+ * Run via IntelliJ: right-click GameTest -> Run 'GameTest.main()'
  * Run via terminal: java -cp "out;src" test.GameTest (use ':' instead of ';' on macOS/Linux)
  * On a headless JVM the engine and panel tests still run and window tests are skipped.
  * <p>
@@ -53,7 +53,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * Non-modal panels (MainMenu, NewGamePanel, PastGamesPanel, ReplayPanel) are
  * tested structurally and via direct doClick() calls, since they aren't
  * blocking. Navigation that depends on Main's static frame (Main.showMenu(),
- * Main.startGame()) is intentionally NOT exercised here — those two methods
+ * Main.startGame()) is intentionally NOT exercised here - those two methods
  * are trivial pass-throughs and testing them would require booting the real
  * application frame. MainMenu's "New Game" button is the one exception: its
  * handler uses SwingUtilities.getWindowAncestor(this) rather than Main's
@@ -66,13 +66,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public class GameTest {
 
-    // ── Constants ─────────────────────────────────────────────────────────
+    // -- Constants ---------------------------------------------------------
 
     private static final int TILE_SIZE = 85;
     private static final int BOARD_HEIGHT = TILE_SIZE * 8;
     private static final int CLICK_DELAY = 200;
 
-    // ── Mini test framework ───────────────────────────────────────────────
+    // -- Mini test framework -----------------------------------------------
 
     private static final List<String> passed = new ArrayList<>();
     private static final List<String> failed = new ArrayList<>();
@@ -126,7 +126,7 @@ public class GameTest {
         } catch (Throwable t) {
             // report the real reason, not the InvocationTargetException wrapper
             String reason = describeFailure(t);
-            failed.add(pName + " → " + reason);
+            failed.add(pName + " -> " + reason);
             System.out.println("  FAIL  " + pName);
             System.out.println("        " + reason);
         } finally {
@@ -213,7 +213,7 @@ public class GameTest {
 
     private static void checkEqual(Object expected, Object actual, String message) {
         if (!expected.equals(actual))
-            throw new AssertionError(message + " — expected: " + expected + ", got: " + actual);
+            throw new AssertionError(message + " - expected: " + expected + ", got: " + actual);
     }
 
     private static void checkNotNull(Object obj, String message) {
@@ -224,7 +224,7 @@ public class GameTest {
         check(condition, message);
     }
 
-    // ── Swing helpers ─────────────────────────────────────────────────────
+    // -- Swing helpers -----------------------------------------------------
 
     /**
      * Schedules doClick() on the first visible JButton whose text equals label. Used for MODAL dialogs.
@@ -419,7 +419,7 @@ public class GameTest {
         return count;
     }
 
-    // ── Entry point ───────────────────────────────────────────────────────
+    // -- Entry point -------------------------------------------------------
 
     /**
      * Runs every registered test and reports the result.
@@ -458,11 +458,11 @@ public class GameTest {
         }
         JFrame frame = frameHolder[0];
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── GameConfig ──────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- GameConfig --------------------------------------------------");
+        // =================================================================
 
-        test("GameConfig · stores all fields as given", () -> {
+        test("GameConfig: stores all fields as given", () -> {
             GameConfig cfg = new GameConfig("Alice", "Bob", 300_000, 300_000, "Blitz 5+0");
             checkEqual("Alice", cfg.whiteName(), "whiteName");
             checkEqual("Bob", cfg.blackName(), "blackName");
@@ -471,37 +471,37 @@ public class GameTest {
             checkEqual("Blitz 5+0", cfg.timeLabel(), "timeLabel");
         });
 
-        test("GameConfig · blank names default to White/Black", () -> {
+        test("GameConfig: blank names default to White/Black", () -> {
             GameConfig cfg = new GameConfig("  ", "", 0, 0, "Unlimited");
             checkEqual("White", cfg.whiteName(), "whiteName default");
             checkEqual("Black", cfg.blackName(), "blackName default");
         });
 
-        test("GameConfig · names are trimmed", () -> {
+        test("GameConfig: names are trimmed", () -> {
             GameConfig cfg = new GameConfig("  Alice  ", " Bob ", 0, 0, "Unlimited");
             checkEqual("Alice", cfg.whiteName(), "trimmed whiteName");
             checkEqual("Bob", cfg.blackName(), "trimmed blackName");
         });
 
-        test("GameConfig · unlimited() factory has zero time", () -> {
+        test("GameConfig: unlimited() factory has zero time", () -> {
             GameConfig cfg = GameConfig.unlimited();
             checkEqual(0L, cfg.whiteTimeMs(), "whiteTimeMs");
             checkEqual(0L, cfg.blackTimeMs(), "blackTimeMs");
             checkEqual("Unlimited", cfg.timeLabel(), "timeLabel");
         });
 
-        test("GameConfig · increment defaults to zero and is kept when given", () -> {
+        test("GameConfig: increment defaults to zero and is kept when given", () -> {
             checkEqual(0L, new GameConfig("A", "B", 60_000, 60_000, "Bullet 1+0").incrementMs(),
                     "a configuration without increment must add nothing");
             checkEqual(1_000L, new GameConfig("A", "B", 120_000, 120_000, "Bullet 2+1", 1_000).incrementMs(),
                     "the given increment must be kept");
         });
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── GameRecord ──────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- GameRecord --------------------------------------------------");
+        // =================================================================
 
-        test("GameRecord · built from GameConfig captures fields", () -> {
+        test("GameRecord: built from GameConfig captures fields", () -> {
             GameConfig cfg = new GameConfig("Alice", "Bob", 300_000, 300_000, "Blitz 5+0");
             GameRecord r = new GameRecord(cfg, "1-0",
                     List.of("e4", "e5"), List.of("fen1", "fen2"));
@@ -513,21 +513,21 @@ public class GameTest {
             checkNotNull(r.date, "date should be auto-populated");
         });
 
-        test("GameRecord · loaded-from-file constructor preserves given date", () -> {
+        test("GameRecord: loaded-from-file constructor preserves given date", () -> {
             GameRecord r = new GameRecord("Alice", "Bob", "0-1",
                     "2026.01.15", "Rapid 10+0", List.of("d4"), List.of("fen1"));
             checkEqual("2026.01.15", r.date, "date");
             checkEqual("Rapid 10+0", r.timeControl, "timeControl");
         });
 
-        test("GameRecord · move/fen lists are immutable copies", () -> {
+        test("GameRecord: move/fen lists are immutable copies", () -> {
             List<String> moves = new ArrayList<>(List.of("e4"));
             GameRecord r = new GameRecord("A", "B", "1-0", "2026.01.01", "Blitz", moves, List.of());
             moves.add("e5"); // mutate original after construction
             checkEqual(1, r.moves.size(), "GameRecord.moves must not reflect later mutation");
         });
 
-        test("GameRecord · getDisplayTitle formats correctly", () -> {
+        test("GameRecord: getDisplayTitle formats correctly", () -> {
             GameRecord r = new GameRecord("Alice", "Bob", "1-0",
                     "2026.07.03", "Blitz 5+0", List.of(), List.of());
             String title = r.getDisplayTitle();
@@ -537,11 +537,11 @@ public class GameTest {
             check(title.contains("Blitz 5+0"), "title must contain time control");
         });
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── FenLoader ────────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- FenLoader ----------------------------------------------------");
+        // =================================================================
 
-        test("FenLoader · parses starting position correctly", () -> {
+        test("FenLoader: parses starting position correctly", () -> {
             String startFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
             char[][] grid = FenLoader.parse(startFen);
             checkEqual('r', grid[0][0], "black rook at a8");
@@ -552,12 +552,12 @@ public class GameTest {
             checkEqual('P', grid[6][3], "white pawn at d2");
         });
 
-        test("FenLoader · empty squares parsed as null-char", () -> {
+        test("FenLoader: empty squares parsed as null-char", () -> {
             char[][] grid = FenLoader.parse("8/8/8/8/8/8/8/8 w - - 0 1");
             checkEqual('\0', grid[3][3], "empty square should be '\\0'");
         });
 
-        test("FenLoader · mixed digit-and-piece rank parses correctly", () -> {
+        test("FenLoader: mixed digit-and-piece rank parses correctly", () -> {
             // rank: 4 empties, White King, 3 empties
             char[][] grid = FenLoader.parse("8/8/8/8/4K3/8/8/8 w - - 0 1");
             checkEqual('K', grid[4][4], "King should be at col 4 on this rank");
@@ -565,16 +565,16 @@ public class GameTest {
             checkEqual('\0', grid[4][7], "col 7 should be empty");
         });
 
-        test("FenLoader · isWhiteTurn reads active colour field", () -> {
+        test("FenLoader: isWhiteTurn reads active colour field", () -> {
             check(FenLoader.isWhiteTurn("8/8/8/8/8/8/8/8 w - - 0 1"), "'w' should mean White's turn");
             check(!FenLoader.isWhiteTurn("8/8/8/8/8/8/8/8 b - - 0 1"), "'b' should mean Black's turn");
         });
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── PgnManager ───────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- PgnManager ---------------------------------------------------");
+        // =================================================================
 
-        test("PgnManager · save then loadAll round-trips a game", () -> {
+        test("PgnManager: save then loadAll round-trips a game", () -> {
             String uniqueWhite = "TestWhite" + System.nanoTime();
             GameRecord original = new GameRecord(uniqueWhite, "TestBlack", "1-0",
                     "2026.01.01", "Blitz 5+0",
@@ -598,14 +598,14 @@ public class GameTest {
             cleanupSavedGame(uniqueWhite);
         });
 
-        test("PgnManager · loadAll returns newest-first ordering", () -> {
+        test("PgnManager: loadAll returns newest-first ordering", () -> {
             List<GameRecord> all = PgnManager.loadAll();
-            // Not asserting exact order details beyond "no exception and a list is returned" —
+            // Not asserting exact order details beyond "no exception and a list is returned" -
             // ordering depends on filesystem state, which this test does not control globally.
             checkNotNull(all, "loadAll must never return null");
         });
 
-        test("PgnManager · player names with quotes, backslashes and brackets survive a save and load", () -> {
+        test("PgnManager: player names with quotes, backslashes and brackets survive a save and load", () -> {
             String white = "Magnus \"The Hammer\" \\ " + System.nanoTime();
             String black = "Bob [Blitz]";
             PgnManager.save(new GameRecord(white, black, "1-0", "2026.01.01", "Blitz 5+0",
@@ -621,7 +621,7 @@ public class GameTest {
             cleanupSavedGame(white);
         });
 
-        test("PgnManager · saved games start with the seven tag roster in order", () -> {
+        test("PgnManager: saved games start with the seven tag roster in order", () -> {
             String white = "RosterWhite" + System.nanoTime();
             PgnManager.save(new GameRecord(white, "RosterBlack", "0-1", "2026.01.02", "Rapid 10+0",
                     List.of("d4"), List.of("fen1")));
@@ -638,15 +638,15 @@ public class GameTest {
             cleanupSavedGame(white);
         });
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── BoardState ───────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- BoardState ---------------------------------------------------");
+        // =================================================================
         // BoardState holds the position data that used to live directly on
         // Board (pieces list + grid + en passant tile). None of these tests
-        // need a visible window — only Piece construction needs a Board
+        // need a visible window - only Piece construction needs a Board
         // reference at all (for tile size / sprite slicing).
 
-        test("BoardState · getPiece reflects the starting position", () ->
+        test("BoardState: getPiece reflects the starting position", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -657,7 +657,7 @@ public class GameTest {
                     check(state.getPiece(4, 4) == null, "e4 must be empty at game start");
                 }));
 
-        test("BoardState · getPieces returns an unmodifiable view", () ->
+        test("BoardState: getPieces returns an unmodifiable view", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     List<Piece> pieces = board.getState().getPieces();
@@ -670,7 +670,7 @@ public class GameTest {
                     check(threw, "BoardState.getPieces() must return an unmodifiable list");
                 }));
 
-        test("BoardState · removePiece clears both the list and the grid cell", () ->
+        test("BoardState: removePiece clears both the list and the grid cell", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -680,7 +680,7 @@ public class GameTest {
                     check(!state.getPieces().contains(pawn), "piece list must not contain the removed piece");
                 }));
 
-        test("BoardState · addPiece places a piece into both the list and the grid", () ->
+        test("BoardState: addPiece places a piece into both the list and the grid", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -690,7 +690,7 @@ public class GameTest {
                     check(state.getPieces().contains(extraQueen), "piece list must contain the newly added piece");
                 }));
 
-        test("BoardState · moveOnGrid vacates the old square and occupies the new one", () ->
+        test("BoardState: moveOnGrid vacates the old square and occupies the new one", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -701,7 +701,7 @@ public class GameTest {
                     checkEqual(pawn, state.getPiece(0, 4), "new square must hold the piece");
                 }));
 
-        test("BoardState · getTileNum/getEnPassantTile round-trip", () ->
+        test("BoardState: getTileNum/getEnPassantTile round-trip", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -709,7 +709,7 @@ public class GameTest {
                     checkEqual(state.getTileNum(3, 2), state.getEnPassantTile(), "round trip through getTileNum");
                 }));
 
-        test("BoardState · setPieces replaces the entire position at once", () ->
+        test("BoardState: setPieces replaces the entire position at once", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -724,11 +724,11 @@ public class GameTest {
                     check(state.getPiece(4, 7) == null, "old positions must be cleared by setPieces");
                 }));
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── Move & CheckScanner ──────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- Move & CheckScanner ------------------------------------------");
+        // =================================================================
 
-        test("Move · capture resolves directly from BoardState when the destination is occupied", () ->
+        test("Move: capture resolves directly from BoardState when the destination is occupied", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -738,7 +738,7 @@ public class GameTest {
                     checkEqual(blackPawn, m.getCapture(), "Move must resolve capture from BoardState at construction");
                 }));
 
-        test("Move · destination square with no piece has a null capture", () ->
+        test("Move: destination square with no piece has a null capture", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -747,7 +747,7 @@ public class GameTest {
                     check(m.getCapture() == null, "empty destination square must mean no capture");
                 }));
 
-        test("CheckScanner · neither king is in check at game start", () ->
+        test("CheckScanner: neither king is in check at game start", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     CheckScanner cs = new CheckScanner(board.getState());
@@ -755,7 +755,7 @@ public class GameTest {
                     check(!cs.isKingInCheckRN(false), "Black king must not be in check at game start");
                 }));
 
-        test("CheckScanner · detects check from an unobstructed rook", () ->
+        test("CheckScanner: detects check from an unobstructed rook", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -771,7 +771,7 @@ public class GameTest {
                     check(cs.isKingInCheckRN(true), "White king on an open file facing a rook must be in check");
                 }));
 
-        test("CheckScanner · isKingLeftInCheck rejects a king move into an attacked square", () ->
+        test("CheckScanner: isKingLeftInCheck rejects a king move into an attacked square", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -792,7 +792,7 @@ public class GameTest {
                     check(!cs.isKingLeftInCheck(awayFromCheck), "stepping off the attacked rank must be safe");
                 }));
 
-        test("CheckScanner · isKingLeftInCheck detects a discovered check from a third piece", () ->
+        test("CheckScanner: isKingLeftInCheck detects a discovered check from a third piece", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -815,11 +815,11 @@ public class GameTest {
                             "moving the blocking rook off the file must expose the king to the rook on e8");
                 }));
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── NotationHelper ───────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- NotationHelper -----------------------------------------------");
+        // =================================================================
 
-        test("NotationHelper · simple pawn push has no piece letter or capture marker", () ->
+        test("NotationHelper: simple pawn push has no piece letter or capture marker", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -827,7 +827,7 @@ public class GameTest {
                     checkEqual("e4", new NotationHelper().toNotation(m, 4, 6), "pawn push e2-e4 must be notated 'e4'");
                 }));
 
-        test("NotationHelper · pawn capture is notated with the origin file", () ->
+        test("NotationHelper: pawn capture is notated with the origin file", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -836,7 +836,7 @@ public class GameTest {
                             "pawn capture must be notated with the origin file, e.g. 'exd7'");
                 }));
 
-        test("NotationHelper · knight move uses 'N' (K is reserved for King)", () ->
+        test("NotationHelper: knight move uses 'N' (K is reserved for King)", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -844,7 +844,7 @@ public class GameTest {
                     checkEqual("Nc3", new NotationHelper().toNotation(m, 1, 7), "knight move must be notated with 'N'");
                 }));
 
-        test("NotationHelper · castling is notated O-O / O-O-O", () ->
+        test("NotationHelper: castling is notated O-O / O-O-O", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -858,11 +858,11 @@ public class GameTest {
                     checkEqual("O-O-O", nh.toNotation(queenside, 4, 7), "queenside castle notation");
                 }));
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── FenGenerator ─────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- FenGenerator -------------------------------------------------");
+        // =================================================================
 
-        test("FenGenerator · starting position matches the standard FEN placement field", () ->
+        test("FenGenerator: starting position matches the standard FEN placement field", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     String fen = new FenGenerator(board.getState()).generate(true, 0, 1);
@@ -870,7 +870,7 @@ public class GameTest {
                             "placement field must match the standard starting position, got: " + fen);
                 }));
 
-        test("FenGenerator · active colour field reflects isWhiteTurn", () ->
+        test("FenGenerator: active colour field reflects isWhiteTurn", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     FenGenerator fg = new FenGenerator(board.getState());
@@ -878,14 +878,14 @@ public class GameTest {
                     check(fg.generate(false, 0, 1).contains(" b "), "black to move must produce ' b '");
                 }));
 
-        test("FenGenerator · starting position has all four castling rights", () ->
+        test("FenGenerator: starting position has all four castling rights", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     String fen = new FenGenerator(board.getState()).generate(true, 0, 1);
                     checkEqual("KQkq", fen.split(" ")[2], "all four castling rights must be present at game start");
                 }));
 
-        test("FenGenerator · a moved king removes both of that side's castling rights", () ->
+        test("FenGenerator: a moved king removes both of that side's castling rights", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -904,7 +904,7 @@ public class GameTest {
                             "Black's castling rights must be unaffected, got: " + castling);
                 }));
 
-        test("FenGenerator · en passant target square appears after a double pawn push", () ->
+        test("FenGenerator: en passant target square appears after a double pawn push", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -917,11 +917,11 @@ public class GameTest {
                     checkEqual("e3", epField, "en passant target square after e2-e4 must be e3");
                 }));
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── MoveHistory ──────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- MoveHistory --------------------------------------------------");
+        // =================================================================
 
-        test("MoveHistory · record adds one entry to both moveLog and fenHistory", () ->
+        test("MoveHistory: record adds one entry to both moveLog and fenHistory", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -935,7 +935,7 @@ public class GameTest {
                     checkEqual(1, history.getFenHistory().size(), "fenHistory must contain exactly one entry");
                 }));
 
-        test("MoveHistory · clear empties both lists", () ->
+        test("MoveHistory: clear empties both lists", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -946,7 +946,7 @@ public class GameTest {
                     checkEqual(0, history.getFenHistory().size(), "fenHistory must be empty after clear()");
                 }));
 
-        test("MoveHistory · getMoveLog/getFenHistory return unmodifiable views", () ->
+        test("MoveHistory: getMoveLog/getFenHistory return unmodifiable views", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     MoveHistory history = new MoveHistory(board.getState());
@@ -965,7 +965,7 @@ public class GameTest {
                     check(threwOnFenHistory, "getFenHistory() must not allow external mutation");
                 }));
 
-        test("MoveHistory · listener receives updates on record() and clear()", () ->
+        test("MoveHistory: listener receives updates on record() and clear()", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -990,11 +990,11 @@ public class GameTest {
                     check(clearedFlag[0], "listener must be notified on clear()");
                 }));
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── PieceType ────────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- PieceType ----------------------------------------------------");
+        // =================================================================
 
-        test("PieceType · has exactly six values with correct display names", () -> {
+        test("PieceType: has exactly six values with correct display names", () -> {
             checkEqual(6, PieceType.values().length, "there must be exactly six piece types");
             checkEqual("King", PieceType.KING.getDisplayName(), "King display name");
             checkEqual("Queen", PieceType.QUEEN.getDisplayName(), "Queen display name");
@@ -1004,14 +1004,14 @@ public class GameTest {
             checkEqual("Pawn", PieceType.PAWN.getDisplayName(), "Pawn display name");
         });
 
-        test("Piece · sprite sheet loads from the classpath with six piece columns", () -> {
+        test("Piece: sprite sheet loads from the classpath with six piece columns", () -> {
             BufferedImage sheet = Piece.loadSpriteSheet(Piece.SPRITE_SHEET_PATH);
             checkNotNull(sheet, "the bundled sprite sheet must load");
             checkEqual(0, sheet.getWidth() % 6, "the sheet width must split into six piece columns");
             check(sheet.getHeight() >= sheet.getWidth() / 6 * 2, "the sheet must hold a white and a black row");
         });
 
-        test("Piece · a missing sprite sheet fails with a message naming the resource", () -> {
+        test("Piece: a missing sprite sheet fails with a message naming the resource", () -> {
             String missing = "/resources/does-not-exist.png";
             try {
                 Piece.loadSpriteSheet(missing);
@@ -1022,11 +1022,11 @@ public class GameTest {
             check(false, "loading a missing sprite sheet must throw IllegalStateException");
         });
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── ChessClock ───────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- ChessClock ---------------------------------------------------");
+        // =================================================================
 
-        test("ChessClock · starts stopped with configured time", () -> {
+        test("ChessClock: starts stopped with configured time", () -> {
             ChessClock clock = new ChessClock(true, 60_000, () -> {
             }, (w) -> {
             });
@@ -1034,7 +1034,7 @@ public class GameTest {
             check(!clock.isRunning(), "clock should not be running until start() is called");
         });
 
-        test("ChessClock · start()/stop() toggles running state", () -> {
+        test("ChessClock: start()/stop() toggles running state", () -> {
             ChessClock clock = new ChessClock(true, 60_000, () -> {
             }, (w) -> {
             });
@@ -1044,7 +1044,7 @@ public class GameTest {
             check(!clock.isRunning(), "should not be running after stop()");
         });
 
-        test("ChessClock · reset() restores start time and stops", () -> {
+        test("ChessClock: reset() restores start time and stops", () -> {
             ChessClock clock = new ChessClock(true, 60_000, () -> {
             }, (w) -> {
             });
@@ -1054,7 +1054,7 @@ public class GameTest {
             check(!clock.isRunning(), "should not be running after reset()");
         });
 
-        test("ChessClock · draw() does not throw for a normal clock", () ->
+        test("ChessClock: draw() does not throw for a normal clock", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ChessClock clock = new ChessClock(true, 60_000, () -> {
                     }, (w) -> {
@@ -1065,7 +1065,7 @@ public class GameTest {
                     g2d.dispose();
                 }));
 
-        test("ChessClock · draw() does not throw for unlimited (0ms) clock", () ->
+        test("ChessClock: draw() does not throw for unlimited (0ms) clock", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ChessClock clock = new ChessClock(false, 0, () -> {
                     }, (w) -> {
@@ -1076,7 +1076,7 @@ public class GameTest {
                     g2d.dispose();
                 }));
 
-        test("ChessClock · unlimited clock never fires onExpired", () -> {
+        test("ChessClock: unlimited clock never fires onExpired", () -> {
             CountDownLatch expired = new CountDownLatch(1);
             ChessClock clock = new ChessClock(true, 0, () -> {
             }, (w) -> expired.countDown());
@@ -1086,7 +1086,7 @@ public class GameTest {
             check(!firedTooEarly, "unlimited (0ms) clock must never expire");
         });
 
-        test("ChessClock · running clock counts down and fires onExpired at zero", () -> {
+        test("ChessClock: running clock counts down and fires onExpired at zero", () -> {
             CountDownLatch expired = new CountDownLatch(1);
             boolean[] expiredWhite = {false};
             ChessClock clock = new ChessClock(true, 150, () -> {
@@ -1101,7 +1101,7 @@ public class GameTest {
             check(!clock.isRunning(), "clock must stop itself after expiring");
         });
 
-        test("ChessClock · keeps counting while the event thread is busy", () -> {
+        test("ChessClock: keeps counting while the event thread is busy", () -> {
             ChessClock clock = new ChessClock(true, 60_000, () -> {
             }, (w) -> {
             });
@@ -1118,7 +1118,7 @@ public class GameTest {
             check(used >= 1_400, "a busy event thread must not hand out free time, only " + used + " ms were counted");
         });
 
-        test("ChessClock · addTime adds an increment, but not to an unlimited clock", () -> {
+        test("ChessClock: addTime adds an increment, but not to an unlimited clock", () -> {
             ChessClock timed = new ChessClock(true, 60_000, () -> {
             }, (w) -> {
             });
@@ -1132,7 +1132,7 @@ public class GameTest {
             checkEqual(0L, unlimited.getTimeMs(), "an unlimited clock must stay unlimited");
         });
 
-        test("ChessClock · the refresh timer only runs while the clock runs", () -> {
+        test("ChessClock: the refresh timer only runs while the clock runs", () -> {
             ChessClock clock = new ChessClock(true, 60_000, () -> {
             }, (w) -> {
             });
@@ -1143,7 +1143,7 @@ public class GameTest {
             check(!clock.isTicking(), "a stopped clock must stop its timer");
         });
 
-        test("Board · a board whose clocks are stopped can be garbage collected", () -> {
+        test("Board: a board whose clocks are stopped can be garbage collected", () -> {
             java.lang.ref.WeakReference<Board> ref = boardWithStoppedClocks();
             // give the collector a few chances, a live timer would keep the board reachable forever
             for (int i = 0; i < 20 && ref.get() != null; i++) {
@@ -1153,7 +1153,7 @@ public class GameTest {
             check(ref.get() == null, "no clock timer may keep a board alive after its clocks are stopped");
         });
 
-        test("Board · the player who just moved gets the increment", () ->
+        test("Board: the player who just moved gets the increment", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(new GameConfig("Alice", "Bob", 120_000, 120_000, "Bullet 2+1", 1_000));
                     BoardState state = board.getState();
@@ -1164,7 +1164,7 @@ public class GameTest {
                     check(board.isClockRunning(false), "Black's clock must run after White's move");
                 }));
 
-        test("Input · a press on the bottom clock bar is ignored", () ->
+        test("Input: a press on the bottom clock bar is ignored", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     Input input = new Input(board, board.getGameController());
@@ -1174,7 +1174,7 @@ public class GameTest {
                     check(board.getSelectedPiece() == null, "nothing may be selected from the clock bar");
                 }));
 
-        test("Input · a press on the top clock bar doesn't pick up a piece", () ->
+        test("Input: a press on the top clock bar doesn't pick up a piece", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     Input input = new Input(board, board.getGameController());
@@ -1184,7 +1184,7 @@ public class GameTest {
                     check(board.getSelectedPiece() == null, "the a8 rook must not be picked up from the clock bar");
                 }));
 
-        test("Input · releasing a piece left of the board cancels the move", () ->
+        test("Input: releasing a piece left of the board cancels the move", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
@@ -1203,11 +1203,33 @@ public class GameTest {
                     check(board.getGameController().getMoveLog().isEmpty(), "no move may be played");
                 }));
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── EndScreen ────────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        test("Main: a headless start explains the problem and exits with code 2", () -> {
+            String javaExe = java.nio.file.Paths.get(System.getProperty("java.home"), "bin", "java").toString();
+            File output = Files.createTempFile("chess-headless-start", ".log").toFile();
+            // start the real entry point in its own JVM, the way a server or a container would
+            Process process = new ProcessBuilder(javaExe, "-Djava.awt.headless=true",
+                    "-cp", System.getProperty("java.class.path"), "app.Main")
+                    .redirectErrorStream(true)
+                    .redirectOutput(output)
+                    .start();
+            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+            }
+            String text = Files.readString(output.toPath());
+            Files.deleteIfExists(output.toPath());
 
-        guiTest("EndScreen ·size scales with tileSize", () ->
+            check(finished, "a headless start must end on its own");
+            // 2 is the exit code Main uses for a missing display
+            checkEqual(2, process.exitValue(), "a headless start must report a failure, output: " + text);
+            check(text.contains("graphical display"), "the output must explain that a display is missing, got: " + text);
+        });
+
+        // =================================================================
+        System.out.println("\n-- EndScreen ----------------------------------------------------");
+        // =================================================================
+
+        guiTest("EndScreen: size scales with tileSize", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     EndScreen d = new EndScreen(frame, "White wins", TILE_SIZE, () -> {
                     });
@@ -1216,7 +1238,7 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        guiTest("EndScreen ·label displays passed message", () ->
+        guiTest("EndScreen: label displays passed message", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     EndScreen d = new EndScreen(frame, "Black wins", TILE_SIZE, () -> {
                     });
@@ -1226,7 +1248,7 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        guiTest("EndScreen ·contains 'Return to Menu' button", () ->
+        guiTest("EndScreen: contains 'Return to Menu' button", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     EndScreen d = new EndScreen(frame, "Stalemate - Draw", TILE_SIZE, () -> {
                     });
@@ -1234,7 +1256,7 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        guiTest("EndScreen ·clicking button closes dialog", () -> {
+        guiTest("EndScreen: clicking button closes dialog", () -> {
             scheduleClick("Return to Menu");
             boolean[] visible = {true};
             SwingUtilities.invokeAndWait(() -> {
@@ -1246,7 +1268,7 @@ public class GameTest {
             check(!visible[0], "Dialog should be closed after clicking Return to Menu");
         });
 
-        guiTest("EndScreen ·clicking button invokes onReturn callback", () -> {
+        guiTest("EndScreen: clicking button invokes onReturn callback", () -> {
             boolean[] callbackFired = {false};
             scheduleClick("Return to Menu");
             SwingUtilities.invokeAndWait(() -> {
@@ -1256,7 +1278,7 @@ public class GameTest {
             check(callbackFired[0], "onReturn callback must fire when the button is clicked");
         });
 
-        guiTest("EndScreen ·onReturn is NOT called if dialog is disposed programmatically", () -> {
+        guiTest("EndScreen: onReturn is NOT called if dialog is disposed programmatically", () -> {
             boolean[] callbackFired = {false};
             SwingUtilities.invokeAndWait(() -> {
                 EndScreen d = new EndScreen(frame, "White wins", TILE_SIZE, () -> callbackFired[0] = true);
@@ -1265,7 +1287,7 @@ public class GameTest {
             check(!callbackFired[0], "onReturn must only fire from the button click, not from dispose()");
         });
 
-        guiTest("EndScreen · closing the window also invokes onReturn", () -> {
+        guiTest("EndScreen: closing the window also invokes onReturn", () -> {
             boolean[] callbackFired = {false};
             SwingUtilities.invokeAndWait(() -> {
                 EndScreen d = new EndScreen(frame, "White wins", TILE_SIZE, () -> callbackFired[0] = true);
@@ -1275,11 +1297,11 @@ public class GameTest {
             check(callbackFired[0], "closing the end screen window must return to the menu as well");
         });
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── FiftyRuleDraw (optional claim) ──────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- FiftyRuleDraw (optional claim) ------------------------------");
+        // =================================================================
 
-        guiTest("FiftyRuleDraw ·size scales with tileSize", () ->
+        guiTest("FiftyRuleDraw: size scales with tileSize", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     FiftyRuleDraw d = new FiftyRuleDraw(frame, TILE_SIZE, false);
                     checkEqual(TILE_SIZE * 4, d.getWidth(), "width");
@@ -1287,7 +1309,7 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        guiTest("FiftyRuleDraw ·optional claim has correct buttons", () ->
+        guiTest("FiftyRuleDraw: optional claim has correct buttons", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     FiftyRuleDraw d = new FiftyRuleDraw(frame, TILE_SIZE, false);
                     check(hasButton(d, "Claim Draw"), "Must have 'Claim Draw'");
@@ -1296,7 +1318,7 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        guiTest("FiftyRuleDraw ·Claim Draw returns ACCEPTED", () -> {
+        guiTest("FiftyRuleDraw: Claim Draw returns ACCEPTED", () -> {
             scheduleClick("Claim Draw");
             FiftyRuleDraw.DrawResult[] result = {null};
             SwingUtilities.invokeAndWait(() -> {
@@ -1307,7 +1329,7 @@ public class GameTest {
             checkEqual(FiftyRuleDraw.DrawResult.ACCEPTED, result[0], "result");
         });
 
-        guiTest("FiftyRuleDraw ·Decline returns DECLINED", () -> {
+        guiTest("FiftyRuleDraw: Decline returns DECLINED", () -> {
             scheduleClick("Decline");
             FiftyRuleDraw.DrawResult[] result = {null};
             SwingUtilities.invokeAndWait(() -> {
@@ -1318,11 +1340,11 @@ public class GameTest {
             checkEqual(FiftyRuleDraw.DrawResult.DECLINED, result[0], "result");
         });
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── FiftyRuleDraw (forced draw) ─────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- FiftyRuleDraw (forced draw) ---------------------------------");
+        // =================================================================
 
-        guiTest("FiftyRuleDraw ·forced draw has correct buttons", () ->
+        guiTest("FiftyRuleDraw: forced draw has correct buttons", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     FiftyRuleDraw d = new FiftyRuleDraw(frame, TILE_SIZE, true);
                     check(hasButton(d, "OK"), "Must have 'OK'");
@@ -1331,7 +1353,7 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        guiTest("FiftyRuleDraw ·forced draw OK closes dialog", () -> {
+        guiTest("FiftyRuleDraw: forced draw OK closes dialog", () -> {
             scheduleClick("OK");
             boolean[] visible = {true};
             SwingUtilities.invokeAndWait(() -> {
@@ -1342,11 +1364,11 @@ public class GameTest {
             check(!visible[0], "Forced-draw dialog should close after clicking OK");
         });
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── PromoteGUI ───────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- PromoteGUI ---------------------------------------------------");
+        // =================================================================
 
-        guiTest("PromoteGUI ·size scales with tileSize", () ->
+        guiTest("PromoteGUI: size scales with tileSize", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     PromoteGUI d = new PromoteGUI(frame, TILE_SIZE);
                     checkEqual(TILE_SIZE * 4, d.getWidth(), "width");
@@ -1354,7 +1376,7 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        guiTest("PromoteGUI ·all four buttons present", () ->
+        guiTest("PromoteGUI: all four buttons present", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     PromoteGUI d = new PromoteGUI(frame, TILE_SIZE);
                     check(hasButton(d, "Queen"), "Must have 'Queen'");
@@ -1364,43 +1386,43 @@ public class GameTest {
                     d.dispose();
                 }));
 
-        guiTest("PromoteGUI ·Queen → Choice.QUEEN", () -> {
+        guiTest("PromoteGUI: Queen -> Choice.QUEEN", () -> {
             scheduleClick("Queen");
             PromoteGUI.Choice[] choice = {null};
             SwingUtilities.invokeAndWait(() -> choice[0] = new PromoteGUI(frame, TILE_SIZE).showDialog());
             checkEqual(PromoteGUI.Choice.QUEEN, choice[0], "choice");
         });
 
-        guiTest("PromoteGUI ·Rook → Choice.ROOK", () -> {
+        guiTest("PromoteGUI: Rook -> Choice.ROOK", () -> {
             scheduleClick("Rook");
             PromoteGUI.Choice[] choice = {null};
             SwingUtilities.invokeAndWait(() -> choice[0] = new PromoteGUI(frame, TILE_SIZE).showDialog());
             checkEqual(PromoteGUI.Choice.ROOK, choice[0], "choice");
         });
 
-        guiTest("PromoteGUI ·Bishop → Choice.BISHOP", () -> {
+        guiTest("PromoteGUI: Bishop -> Choice.BISHOP", () -> {
             scheduleClick("Bishop");
             PromoteGUI.Choice[] choice = {null};
             SwingUtilities.invokeAndWait(() -> choice[0] = new PromoteGUI(frame, TILE_SIZE).showDialog());
             checkEqual(PromoteGUI.Choice.BISHOP, choice[0], "choice");
         });
 
-        guiTest("PromoteGUI ·Knight → Choice.KNIGHT", () -> {
+        guiTest("PromoteGUI: Knight -> Choice.KNIGHT", () -> {
             scheduleClick("Knight");
             PromoteGUI.Choice[] choice = {null};
             SwingUtilities.invokeAndWait(() -> choice[0] = new PromoteGUI(frame, TILE_SIZE).showDialog());
             checkEqual(PromoteGUI.Choice.KNIGHT, choice[0], "choice");
         });
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── SwingPromotionChooser & SwingDrawOfferResolver ───────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- SwingPromotionChooser & SwingDrawOfferResolver ---------------");
+        // =================================================================
         // These wrap PromoteGUI/FiftyRuleDraw and translate their results into
         // the engine-side PromotionChooser/DrawOfferResolver contract. The
-        // dialog behavior itself is already covered above — these tests only
+        // dialog behavior itself is already covered above - these tests only
         // check the translation.
 
-        guiTest("SwingPromotionChooser ·Queen selection maps to PieceType.QUEEN", () -> {
+        guiTest("SwingPromotionChooser: Queen selection maps to PieceType.QUEEN", () -> {
             scheduleClick("Queen");
             PieceType[] result = {null};
             SwingUtilities.invokeAndWait(() -> {
@@ -1414,7 +1436,7 @@ public class GameTest {
             checkEqual(PieceType.QUEEN, result[0], "clicking Queen must resolve to PieceType.QUEEN");
         });
 
-        guiTest("SwingPromotionChooser ·Knight selection maps to PieceType.KNIGHT", () -> {
+        guiTest("SwingPromotionChooser: Knight selection maps to PieceType.KNIGHT", () -> {
             scheduleClick("Knight");
             PieceType[] result = {null};
             SwingUtilities.invokeAndWait(() -> {
@@ -1428,7 +1450,7 @@ public class GameTest {
             checkEqual(PieceType.KNIGHT, result[0], "clicking Knight must resolve to PieceType.KNIGHT");
         });
 
-        guiTest("SwingDrawOfferResolver ·Claim Draw resolves offerDraw() to true", () -> {
+        guiTest("SwingDrawOfferResolver: Claim Draw resolves offerDraw() to true", () -> {
             scheduleClick("Claim Draw");
             boolean[] result = {false};
             SwingUtilities.invokeAndWait(() -> {
@@ -1442,7 +1464,7 @@ public class GameTest {
             check(result[0], "clicking Claim Draw must resolve offerDraw() to true");
         });
 
-        guiTest("SwingDrawOfferResolver ·Decline resolves offerDraw() to false", () -> {
+        guiTest("SwingDrawOfferResolver: Decline resolves offerDraw() to false", () -> {
             scheduleClick("Decline");
             boolean[] result = {true};
             SwingUtilities.invokeAndWait(() -> {
@@ -1456,7 +1478,7 @@ public class GameTest {
             check(!result[0], "clicking Decline must resolve offerDraw() to false");
         });
 
-        guiTest("SwingDrawOfferResolver ·notifyForcedDraw shows and dismisses the forced-draw dialog", () -> {
+        guiTest("SwingDrawOfferResolver: notifyForcedDraw shows and dismisses the forced-draw dialog", () -> {
             scheduleClick("OK");
             SwingUtilities.invokeAndWait(() -> {
                 JFrame testFrame = new JFrame();
@@ -1468,7 +1490,7 @@ public class GameTest {
             });
         });
 
-        guiTest("SwingDrawOfferResolver · repetition claim explains the repetition and resolves to true", () -> {
+        guiTest("SwingDrawOfferResolver: repetition claim explains the repetition and resolves to true", () -> {
             String[] dialogText = {null};
             // read the message while the dialog is open, before the scheduled click closes it
             Timer peek = new Timer(20, e -> {
@@ -1496,18 +1518,18 @@ public class GameTest {
             check(dialogText[0].contains("three times"), "the message must explain the repetition, got: " + dialogText[0]);
         });
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── MoveLogPanel ─────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- MoveLogPanel -------------------------------------------------");
+        // =================================================================
 
-        test("MoveLogPanel · preferred size matches board height", () ->
+        test("MoveLogPanel: preferred size matches board height", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
                     checkEqual(200, p.getPreferredSize().width, "preferred width");
                     checkEqual(BOARD_HEIGHT, p.getPreferredSize().height, "preferred height");
                 }));
 
-        test("MoveLogPanel · header label contains 'Move History'", () ->
+        test("MoveLogPanel: header label contains 'Move History'", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
                     JLabel lbl = findLabel(p);
@@ -1516,13 +1538,13 @@ public class GameTest {
                             "Header label must contain 'Move History', got: " + lbl.getText());
                 }));
 
-        test("MoveLogPanel · contains a JTextArea", () ->
+        test("MoveLogPanel: contains a JTextArea", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
                     checkNotNull(findTextArea(p), "MoveLogPanel must contain a JTextArea");
                 }));
 
-        test("MoveLogPanel · update with empty log clears text", () ->
+        test("MoveLogPanel: update with empty log clears text", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
                     p.update(List.of(), "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
@@ -1531,7 +1553,7 @@ public class GameTest {
                     checkEqual("", ta.getText(), "text area should be empty after update with []");
                 }));
 
-        test("MoveLogPanel · update renders full move pairs", () ->
+        test("MoveLogPanel: update renders full move pairs", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
                     p.update(List.of("e4", "e5", "Nf3", "Nc6"), "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
@@ -1544,7 +1566,7 @@ public class GameTest {
                     check(text.contains("Nc6"), "Must contain black's second move 'Nc6'");
                 }));
 
-        test("MoveLogPanel · update shows '...' when black has not moved yet", () ->
+        test("MoveLogPanel: update shows '...' when black has not moved yet", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
                     p.update(List.of("e4", "e5", "Nf3"), "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
@@ -1553,7 +1575,7 @@ public class GameTest {
                     check(text.contains("..."), "Must show '...' for black's pending reply");
                 }));
 
-        test("MoveLogPanel · repeated update replaces content, no duplication", () ->
+        test("MoveLogPanel: repeated update replaces content, no duplication", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
                     p.update(List.of("e4"), "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
@@ -1567,7 +1589,7 @@ public class GameTest {
                     checkEqual(1, count, "Move number '1.' must appear exactly once after two updates");
                 }));
 
-        test("MoveLogPanel · clear empties the text area", () ->
+        test("MoveLogPanel: clear empties the text area", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     MoveLogPanel p = new MoveLogPanel(BOARD_HEIGHT);
                     p.update(List.of("e4", "e5", "Nf3", "Nc6"), "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
@@ -1576,9 +1598,9 @@ public class GameTest {
                     checkEqual("", ta.getText(), "text area must be empty after clear()");
                 }));
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── ReplayPanel ──────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- ReplayPanel --------------------------------------------------");
+        // =================================================================
 
         List<String> sampleMoves = List.of("e4", "e5", "Nf3");
         List<String> sampleFens = List.of(
@@ -1587,7 +1609,7 @@ public class GameTest {
                 "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2"
         );
 
-        test("ReplayPanel · displays first position's move label on construction", () ->
+        test("ReplayPanel: displays first position's move label on construction", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
                     JLabel lbl = findMoveLabel(p);
@@ -1595,56 +1617,56 @@ public class GameTest {
                     check(lbl.getText().contains("1/3"), "Should start at position 1 of 3, got: " + lbl.getText());
                 }));
 
-        test("ReplayPanel · next button advances position", () ->
+        test("ReplayPanel: next button advances position", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
-                    AbstractButton next = findButton(p, "→");
-                    checkNotNull(next, "Must have a '→' next button");
+                    AbstractButton next = findButton(p, "\u2192");
+                    checkNotNull(next, "Must have a '\u2192' next button");
                     next.doClick();
                     JLabel lbl = findMoveLabel(p);
                     check(lbl.getText().contains("2/3"), "Should be at position 2 of 3, got: " + lbl.getText());
                 }));
 
-        test("ReplayPanel · last button jumps to final position", () ->
+        test("ReplayPanel: last button jumps to final position", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
-                    AbstractButton last = findButton(p, "⇥");
-                    checkNotNull(last, "Must have a '⇥' last button");
+                    AbstractButton last = findButton(p, "\u21e5");
+                    checkNotNull(last, "Must have a '\u21e5' last button");
                     last.doClick();
                     JLabel lbl = findMoveLabel(p);
                     check(lbl.getText().contains("3/3"), "Should be at the final position, got: " + lbl.getText());
                 }));
 
-        test("ReplayPanel · next button does not overrun the list", () ->
+        test("ReplayPanel: next button does not overrun the list", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
-                    AbstractButton next = findButton(p, "→");
+                    AbstractButton next = findButton(p, "\u2192");
                     for (int i = 0; i < 10; i++) next.doClick(); // click far past the end
                     JLabel lbl = findMoveLabel(p);
                     check(lbl.getText().contains("3/3"), "Cursor must clamp at the last position, got: " + lbl.getText());
                 }));
 
-        test("ReplayPanel · first button returns to position 1", () ->
+        test("ReplayPanel: first button returns to position 1", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
-                    findButton(p, "⇥").doClick(); // jump to end first
-                    AbstractButton first = findButton(p, "⇤");
-                    checkNotNull(first, "Must have a '⇤' first button");
+                    findButton(p, "\u21e5").doClick(); // jump to end first
+                    AbstractButton first = findButton(p, "\u21e4");
+                    checkNotNull(first, "Must have a '\u21e4' first button");
                     first.doClick();
                     JLabel lbl = findMoveLabel(p);
                     check(lbl.getText().contains("1/3"), "Should be back at position 1, got: " + lbl.getText());
                 }));
 
-        test("ReplayPanel · prev button does not underrun position 1", () ->
+        test("ReplayPanel: prev button does not underrun position 1", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
-                    AbstractButton prev = findButton(p, "←");
+                    AbstractButton prev = findButton(p, "\u2190");
                     for (int i = 0; i < 5; i++) prev.doClick(); // click before the start
                     JLabel lbl = findMoveLabel(p);
                     check(lbl.getText().contains("1/3"), "Cursor must clamp at the first position, got: " + lbl.getText());
                 }));
 
-        test("ReplayPanel · empty FEN list shows 'No moves' without throwing", () ->
+        test("ReplayPanel: empty FEN list shows 'No moves' without throwing", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(List.of(), List.of());
                     JLabel lbl = findMoveLabel(p);
@@ -1655,11 +1677,11 @@ public class GameTest {
                     p.paint(img.createGraphics());
                 }));
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── Theme & UiComponents ─────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- Theme & UiComponents -----------------------------------------");
+        // =================================================================
 
-        test("Theme · palette constants are all defined and visually distinct", () -> {
+        test("Theme: palette constants are all defined and visually distinct", () -> {
             checkNotNull(Theme.BG, "BG must be defined");
             checkNotNull(Theme.PANEL_BG, "PANEL_BG must be defined");
             checkNotNull(Theme.FG, "FG must be defined");
@@ -1670,7 +1692,7 @@ public class GameTest {
             check(!Theme.ACCENT.equals(Theme.BUTTON_SECONDARY), "ACCENT and BUTTON_SECONDARY must be visually distinct");
         });
 
-        test("UiComponents · button() applies the shared flat, dark-theme look", () ->
+        test("UiComponents: button() applies the shared flat, dark-theme look", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     JButton b = UiComponents.button("Test", new Font("Arial", Font.BOLD, 14), Theme.ACCENT);
                     checkEqual(Theme.ACCENT, b.getBackground(), "background must match the given color");
@@ -1680,7 +1702,7 @@ public class GameTest {
                     checkEqual(Cursor.HAND_CURSOR, b.getCursor().getType(), "cursor must be the hand cursor");
                 }));
 
-        test("UiComponents · style() applies the same look to a JToggleButton", () ->
+        test("UiComponents: style() applies the same look to a JToggleButton", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     JToggleButton t = new JToggleButton("Preset");
                     UiComponents.style(t, new Font("Arial", Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
@@ -1688,7 +1710,7 @@ public class GameTest {
                     check(!t.isBorderPainted(), "border must not be painted on a toggle button either");
                 }));
 
-        test("UiComponents · addHoverEffect brightens on enter and restores on exit", () ->
+        test("UiComponents: addHoverEffect brightens on enter and restores on exit", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     // plain button on purpose, UiComponents.button() already registers the hover effect
                     JButton b = new JButton("Hover");
@@ -1696,7 +1718,7 @@ public class GameTest {
                     UiComponents.addHoverEffect(b);
                     Color original = b.getBackground();
 
-                    // A real MouseEvent is required here — JButton's own look-and-feel
+                    // A real MouseEvent is required here - JButton's own look-and-feel
                     // listener is also registered and will NPE on a null event.
                     java.awt.event.MouseEvent enter = new java.awt.event.MouseEvent(
                             b, java.awt.event.MouseEvent.MOUSE_ENTERED, System.currentTimeMillis(), 0, 0, 0, 0, false);
@@ -1709,11 +1731,11 @@ public class GameTest {
                     checkEqual(original, b.getBackground(), "background must be restored after the mouse exits");
                 }));
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── MainMenu ─────────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- MainMenu -----------------------------------------------------");
+        // =================================================================
 
-        test("MainMenu · shows title and both navigation buttons", () ->
+        test("MainMenu: shows title and both navigation buttons", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     MainMenu menu = new MainMenu();
                     check(hasButton(menu, "New Game"), "Must have a 'New Game' button");
@@ -1723,7 +1745,7 @@ public class GameTest {
                     check(hasTitle, "Must show the 'CHESS' title label");
                 }));
 
-        guiTest("MainMenu · New Game navigates to NewGamePanel via ancestor frame", () ->
+        guiTest("MainMenu: New Game navigates to NewGamePanel via ancestor frame", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     JFrame testFrame = new JFrame();
                     MainMenu menu = new MainMenu();
@@ -1739,11 +1761,11 @@ public class GameTest {
                     testFrame.dispose();
                 }));
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── NewGamePanel ─────────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- NewGamePanel -------------------------------------------------");
+        // =================================================================
 
-        test("NewGamePanel · shows player name fields defaulting to White/Black", () ->
+        test("NewGamePanel: shows player name fields defaulting to White/Black", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     NewGamePanel p = new NewGamePanel();
                     List<JTextField> fields = findAllTextFields(p);
@@ -1753,7 +1775,7 @@ public class GameTest {
                     checkEqual("Black", fields.get(1).getText(), "black name field default");
                 }));
 
-        test("NewGamePanel · custom time fields default to 10 min / 0 sec", () ->
+        test("NewGamePanel: custom time fields default to 10 min / 0 sec", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     NewGamePanel p = new NewGamePanel();
                     List<JTextField> fields = findAllTextFields(p);
@@ -1762,7 +1784,7 @@ public class GameTest {
                     checkEqual("0", fields.get(3).getText(), "custom seconds default");
                 }));
 
-        test("NewGamePanel · all preset buttons are present", () ->
+        test("NewGamePanel: all preset buttons are present", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     NewGamePanel p = new NewGamePanel();
                     String[] expectedPresets = {
@@ -1774,7 +1796,7 @@ public class GameTest {
                     }
                 }));
 
-        test("NewGamePanel · Rapid 10+0 is selected by default", () ->
+        test("NewGamePanel: Rapid 10+0 is selected by default", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     NewGamePanel p = new NewGamePanel();
                     AbstractButton rapidBtn = findButton(p, "Rapid 10+0");
@@ -1782,7 +1804,7 @@ public class GameTest {
                     check(rapidBtn.isSelected(), "Rapid 10+0 must be selected by default");
                 }));
 
-        test("NewGamePanel · selecting a different preset deselects the previous one", () ->
+        test("NewGamePanel: selecting a different preset deselects the previous one", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     NewGamePanel p = new NewGamePanel();
                     AbstractButton rapidBtn = findButton(p, "Rapid 10+0");
@@ -1792,14 +1814,14 @@ public class GameTest {
                     check(!rapidBtn.isSelected(), "Rapid 10+0 must be deselected (ButtonGroup enforces exclusivity)");
                 }));
 
-        test("NewGamePanel · Back and Start buttons are present", () ->
+        test("NewGamePanel: Back and Start buttons are present", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     NewGamePanel p = new NewGamePanel();
-                    check(hasButton(p, "← Back"), "Must have a Back button");
-                    check(hasButton(p, "Start ▶"), "Must have a Start button");
+                    check(hasButton(p, "\u2190 Back"), "Must have a Back button");
+                    check(hasButton(p, "Start \u25b6"), "Must have a Start button");
                 }));
 
-        test("NewGamePanel · presets with an increment pass it on to the game", () ->
+        test("NewGamePanel: presets with an increment pass it on to the game", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     NewGamePanel p = new NewGamePanel();
                     findButton(p, "Bullet 2+1").doClick();
@@ -1810,31 +1832,31 @@ public class GameTest {
                     checkEqual(0L, p.createConfig().incrementMs(), "Blitz 5+0 has no increment");
                 }));
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── PastGamesPanel ───────────────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- PastGamesPanel -----------------------------------------------");
+        // =================================================================
 
-        test("PastGamesPanel · constructs without throwing and shows a game list", () ->
+        test("PastGamesPanel: constructs without throwing and shows a game list", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     PastGamesPanel p = new PastGamesPanel();
                     JList<String> list = findList(p);
                     checkNotNull(list, "PastGamesPanel must contain a JList");
                 }));
 
-        test("PastGamesPanel · shows Move Log and Replay toggle buttons", () ->
+        test("PastGamesPanel: shows Move Log and Replay toggle buttons", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     PastGamesPanel p = new PastGamesPanel();
                     check(hasButton(p, "Move Log"), "Must have a 'Move Log' toggle button");
-                    check(hasButton(p, "Replay ▶"), "Must have a 'Replay ▶' toggle button");
+                    check(hasButton(p, "Replay \u25b6"), "Must have a 'Replay \u25b6' toggle button");
                 }));
 
-        test("PastGamesPanel · shows Back to Menu button", () ->
+        test("PastGamesPanel: shows Back to Menu button", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     PastGamesPanel p = new PastGamesPanel();
-                    check(hasButton(p, "← Back to Menu"), "Must have a Back to Menu button");
+                    check(hasButton(p, "\u2190 Back to Menu"), "Must have a Back to Menu button");
                 }));
 
-        test("PastGamesPanel · a saved game appears in the list", () -> {
+        test("PastGamesPanel: a saved game appears in the list", () -> {
             String uniqueWhite = "PanelTestWhite" + System.nanoTime();
             GameRecord record = new GameRecord(uniqueWhite, "PanelTestBlack", "1-0",
                     "2026.01.01", "Blitz 5+0", List.of("e4", "e5"), List.of("fenA", "fenB"));
@@ -1858,7 +1880,7 @@ public class GameTest {
             cleanupSavedGame(uniqueWhite);
         });
 
-        test("PastGamesPanel · selecting a game populates the move log", () -> {
+        test("PastGamesPanel: selecting a game populates the move log", () -> {
             String uniqueWhite = "SelectTestWhite" + System.nanoTime();
             GameRecord record = new GameRecord(uniqueWhite, "SelectTestBlack", "0-1",
                     "2026.01.01", "Rapid 10+0", List.of("d4", "d5", "c4"), List.of("f1", "f2", "f3"));
@@ -1887,17 +1909,17 @@ public class GameTest {
             cleanupSavedGame(uniqueWhite);
         });
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── GameController · actions ────────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- GameController: actions ------------------------------------");
+        // =================================================================
 
-        test("GameController · new game starts with White to move", () ->
+        test("GameController: new game starts with White to move", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     check(board.getGameController().isTurnOfWhite(), "White must move first");
                 }));
 
-        test("GameController · flagFall(true) reports Black wins on time (0-1)", () ->
+        test("GameController: flagFall(true) reports Black wins on time (0-1)", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = new GameConfig("Alice", "Bob", 100, 100, "Bullet");
                     Board board = new Board(cfg);
@@ -1914,7 +1936,7 @@ public class GameTest {
                     check(captured[1].contains("time"), "message must mention winning on time");
                 }));
 
-        test("GameController · flagFall(false) reports White wins on time (1-0)", () ->
+        test("GameController: flagFall(false) reports White wins on time (1-0)", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = new GameConfig("Alice", "Bob", 100, 100, "Bullet");
                     Board board = new Board(cfg);
@@ -1930,7 +1952,7 @@ public class GameTest {
                     check(captured[1].contains("Alice"), "message must name the winner (Alice)");
                 }));
 
-        test("GameController · flagFall stops both clocks", () ->
+        test("GameController: flagFall stops both clocks", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = new GameConfig("Alice", "Bob", 100, 100, "Bullet");
                     Board board = new Board(cfg);
@@ -1938,12 +1960,12 @@ public class GameTest {
                     });
                     board.getGameController().flagFall(true);
                     // stopClocks() has no direct getter, so this is verified indirectly:
-                    // no exception thrown and game state is consistent — a repaint after
+                    // no exception thrown and game state is consistent - a repaint after
                     // game-end must not throw due to a running clock referencing stale state.
                     board.repaint();
                 }));
 
-        test("GameController · endGame fires listener exactly once per call", () ->
+        test("GameController: endGame fires listener exactly once per call", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = new GameConfig("Alice", "Bob", 100, 100, "Bullet");
                     Board board = new Board(cfg);
@@ -1953,7 +1975,7 @@ public class GameTest {
                     checkEqual(1, callCount[0], "listener must fire exactly once");
                 }));
 
-        test("GameController · a second end condition after the game is over is ignored", () ->
+        test("GameController: a second end condition after the game is over is ignored", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = new GameConfig("Alice", "Bob", 100, 100, "Bullet");
                     Board board = new Board(cfg);
@@ -1965,7 +1987,7 @@ public class GameTest {
                     checkEqual(List.of("0-1"), results, "only the first result may be reported");
                 }));
 
-        test("GameController · checkmate leaves both clocks stopped so no flag can fall later", () -> {
+        test("GameController: checkmate leaves both clocks stopped so no flag can fall later", () -> {
             GameConfig cfg = new GameConfig("Alice", "Bob", 400, 400, "Bullet");
             List<String> endMessages = new java.util.concurrent.CopyOnWriteArrayList<>();
             Board[] boardHolder = {null};
@@ -1991,7 +2013,7 @@ public class GameTest {
             check(endMessages.get(0).contains("checkmate"), "the single result must be the checkmate");
         });
 
-        test("GameController · no move is accepted after the game is over", () ->
+        test("GameController: no move is accepted after the game is over", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2009,7 +2031,7 @@ public class GameTest {
                     check(gc.getMoveLog().isEmpty(), "no move may be recorded after the game ended");
                 }));
 
-        test("GameController · FEN full-move number grows after every Black move", () ->
+        test("GameController: FEN full-move number grows after every Black move", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2034,7 +2056,7 @@ public class GameTest {
                     checkEqual(expected, finished[0].fenHistory, "every recorded FEN must carry the right counters");
                 }));
 
-        test("GameController · SAN marks a check with +", () ->
+        test("GameController: SAN marks a check with +", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2047,7 +2069,7 @@ public class GameTest {
                     checkEqual(List.of("e4", "f5", "Qh5+"), gc.getMoveLog(), "a checking move must end with +");
                 }));
 
-        test("GameController · SAN marks checkmate with #", () ->
+        test("GameController: SAN marks checkmate with #", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2061,7 +2083,7 @@ public class GameTest {
                     checkEqual(List.of("f3", "e5", "g4", "Qh4#"), gc.getMoveLog(), "the mating move must end with #");
                 }));
 
-        test("GameController · SAN adds the origin file when two knights can reach the square", () ->
+        test("GameController: SAN adds the origin file when two knights can reach the square", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2076,7 +2098,7 @@ public class GameTest {
                     checkEqual("Nbd2", gc.getMoveLog().get(4), "knights on different files are told apart by file");
                 }));
 
-        test("GameController · SAN adds the origin rank when the rivals share the file", () ->
+        test("GameController: SAN adds the origin rank when the rivals share the file", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2095,7 +2117,7 @@ public class GameTest {
                     checkEqual("R1a3", gc.getMoveLog().get(0), "rooks on one file are told apart by rank");
                 }));
 
-        test("GameController · SAN adds file and rank when neither alone is unique", () ->
+        test("GameController: SAN adds file and rank when neither alone is unique", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2115,7 +2137,7 @@ public class GameTest {
                     checkEqual("Qa1b2", gc.getMoveLog().get(0), "file and rank are both needed when each is shared");
                 }));
 
-        test("GameController · threefold repetition can be claimed", () ->
+        test("GameController: threefold repetition can be claimed", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2140,7 +2162,7 @@ public class GameTest {
                             "the game must end as a threefold repetition draw, got: " + ending[0]);
                 }));
 
-        test("GameController · fivefold repetition ends the game automatically", () ->
+        test("GameController: fivefold repetition ends the game automatically", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2164,7 +2186,7 @@ public class GameTest {
                             "the game must end as a fivefold repetition draw, got: " + ending[0]);
                 }));
 
-        test("GameController · an en passant square nobody can use does not hide a repetition", () ->
+        test("GameController: an en passant square nobody can use does not hide a repetition", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2189,7 +2211,7 @@ public class GameTest {
                     check(ending[0].contains("Threefold"), "the game must end by threefold repetition, got: " + ending[0]);
                 }));
 
-        test("GameController · king against king is an immediate draw", () ->
+        test("GameController: king against king is an immediate draw", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2211,7 +2233,7 @@ public class GameTest {
                             "the game must end as a draw by insufficient material, got: " + ending[0]);
                 }));
 
-        test("GameController · king and knight against king is a draw", () ->
+        test("GameController: king and knight against king is a draw", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2233,7 +2255,7 @@ public class GameTest {
                             "the game must end as a draw by insufficient material, got: " + ending[0]);
                 }));
 
-        test("GameController · bishops on the same colour can't mate, so the game is drawn", () ->
+        test("GameController: bishops on the same colour can't mate, so the game is drawn", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2256,7 +2278,7 @@ public class GameTest {
                             "the game must end as a draw by insufficient material, got: " + ending[0]);
                 }));
 
-        test("GameController · bishops on opposite colours keep the game going", () ->
+        test("GameController: bishops on opposite colours keep the game going", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2277,7 +2299,7 @@ public class GameTest {
                     check(ending[0] == null, "opposite coloured bishops can still mate, got: " + ending[0]);
                 }));
 
-        test("GameController · running out of time against a lone king is a draw", () ->
+        test("GameController: running out of time against a lone king is a draw", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2297,7 +2319,7 @@ public class GameTest {
                     check(ending[0].startsWith("1/2-1/2"), "a lone king can't win on time, got: " + ending[0]);
                 }));
 
-        test("GameController · the 50-move claim is offered once to each player, not after every move", () ->
+        test("GameController: the 50-move claim is offered once to each player, not after every move", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2317,7 +2339,7 @@ public class GameTest {
                             "White and Black must each be asked once, not after all 21 moves past the limit");
                 }));
 
-        guiTest("GameController · the 50-move claim runs on the claiming player's clock", () -> {
+        guiTest("GameController: the 50-move claim runs on the claiming player's clock", () -> {
             boolean[] clocks = {false, false, false}; // claim seen, white running, black running
             Board[] boardHolder = {null};
             // read both clocks while the claim dialog is on screen, then decline it
@@ -2355,12 +2377,12 @@ public class GameTest {
             check(!clocks[2], "Black already moved, so Black's clock must be stopped");
         });
 
-        // ═════════════════════════════════════════════════════════════════
-        System.out.println("\n── GameController · rules engine ────────────────────────────────");
-        // ═════════════════════════════════════════════════════════════════
+        // =================================================================
+        System.out.println("\n-- GameController: rules engine --------------------------------");
+        // =================================================================
         // GameController now depends on PromotionChooser/DrawOfferResolver
         // interfaces instead of creating PromoteGUI/FiftyRuleDraw directly, so
-        // these scenarios are driven with fake, headless implementations —
+        // these scenarios are driven with fake, headless implementations -
         // no dialog-clicking Timer tricks needed for any of the tests below.
         // Each test builds its own GameController sharing the test Board's
         // BoardState (rather than using board.getGameController(), which is
@@ -2368,7 +2390,7 @@ public class GameTest {
         // plumbing (repaint/clocks/piece construction) stays real while the
         // two dialog seams are swapped for test doubles.
 
-        test("GameController · makeMove executes a simple pawn push", () ->
+        test("GameController: makeMove executes a simple pawn push", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2387,7 +2409,7 @@ public class GameTest {
                     checkEqual("e4", gc.getMoveLog().get(0), "move must be recorded in algebraic notation");
                 }));
 
-        test("GameController · makeMove captures an enemy piece", () ->
+        test("GameController: makeMove captures an enemy piece", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2406,7 +2428,7 @@ public class GameTest {
                     check(!state.getPieces().contains(blackPawn), "captured pawn must be removed from the board");
                 }));
 
-        test("GameController · kingside castling moves both king and rook", () ->
+        test("GameController: kingside castling moves both king and rook", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2428,7 +2450,7 @@ public class GameTest {
                     checkEqual("O-O", gc.getMoveLog().get(0), "castling must be recorded as O-O");
                 }));
 
-        test("GameController · en passant capture removes the passed pawn", () ->
+        test("GameController: en passant capture removes the passed pawn", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2445,7 +2467,7 @@ public class GameTest {
                     Move enPassant = new Move(state, whitePawn, 3, 2); // exd6 en passant
 
                     // At construction, the destination square (d6) is empty, so Move
-                    // resolves capture=null here — en passant capture is only attached
+                    // resolves capture=null here - en passant capture is only attached
                     // once GameController.movePawn() commits the move. This reflects
                     // the current (unmodified) two-step capture resolution, not a bug
                     // introduced by this test.
@@ -2461,7 +2483,7 @@ public class GameTest {
                     check(state.getPiece(3, 3) == null, "the passed pawn's original square must be empty");
                 }));
 
-        test("GameController · en passant that captures the checking pawn is legal, not checkmate", () ->
+        test("GameController: en passant that captures the checking pawn is legal, not checkmate", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2499,7 +2521,7 @@ public class GameTest {
                     check(endMessage[0] == null, "the game must go on after exd6");
                 }));
 
-        test("GameController · en passant that exposes the own king along the rank is illegal", () ->
+        test("GameController: en passant that exposes the own king along the rank is illegal", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2525,7 +2547,7 @@ public class GameTest {
                     check(state.getPiece(2, 3) != null, "the check simulation must put the c5 pawn back");
                 }));
 
-        test("GameController · pawn promotion asks the PromotionChooser and replaces the piece", () ->
+        test("GameController: pawn promotion asks the PromotionChooser and replaces the piece", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2559,7 +2581,7 @@ public class GameTest {
                     checkEqual("a8=N", gc.getMoveLog().get(0), "promotion must be recorded with the '=N' suffix");
                 }));
 
-        test("GameController · detects checkmate and fires the end-of-game listener", () ->
+        test("GameController: detects checkmate and fires the end-of-game listener", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2595,7 +2617,7 @@ public class GameTest {
                     check(gc.isCheckmate(false), "Black must now be in checkmate");
                 }));
 
-        test("GameController · detects stalemate (no legal moves, king not in check)", () ->
+        test("GameController: detects stalemate (no legal moves, king not in check)", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2624,7 +2646,7 @@ public class GameTest {
                     check(gc.isStalemate(false), "Black must have no legal moves");
                 }));
 
-        test("GameController · 50-move rule offers a draw at half-move 100; accepting ends the game", () ->
+        test("GameController: 50-move rule offers a draw at half-move 100; accepting ends the game", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2649,7 +2671,7 @@ public class GameTest {
                     checkEqual("1/2-1/2", result[0], "accepting the offer must end the game as a draw");
                 }));
 
-        test("GameController · 50-move rule offer can be declined, letting the game continue", () ->
+        test("GameController: 50-move rule offer can be declined, letting the game continue", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2673,7 +2695,7 @@ public class GameTest {
                     check(result[0] == null, "declining the offer must NOT end the game");
                 }));
 
-        test("GameController · 75-move rule forces a draw even if declined all along", () ->
+        test("GameController: 75-move rule forces a draw even if declined all along", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2702,7 +2724,7 @@ public class GameTest {
                     check(message[0].contains("75-move"), "message must mention the 75-move rule");
                 }));
 
-        test("GameController · getMoveLog returns an unmodifiable view", () ->
+        test("GameController: getMoveLog returns an unmodifiable view", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
                     Board board = new Board(cfg);
@@ -2719,25 +2741,25 @@ public class GameTest {
                     check(threw, "getMoveLog() must not allow external mutation of the recorded move history");
                 }));
 
-        // ── Summary ──────────────────────────────────────────────────────
+        // -- Summary ------------------------------------------------------
         // the host frame is null on a headless run
         if (frame != null) SwingUtilities.invokeAndWait(frame::dispose);
 
-        System.out.println("\n════════════════════════════════════════════════════════════════");
+        System.out.println("\n================================================================");
         System.out.printf("  %d passed, %d failed, %d skipped  (total: %d)%n",
                 passed.size(), failed.size(), skipped.size(),
                 passed.size() + failed.size() + skipped.size());
         if (!failed.isEmpty()) {
             System.out.println("\nFailed tests:");
-            failed.forEach(f -> System.out.println("  ✗ " + f));
+            failed.forEach(f -> System.out.println("  x " + f));
         }
-        System.out.println("════════════════════════════════════════════════════════════════\n");
+        System.out.println("================================================================\n");
 
         // always exit explicitly so scripts get a status code even while Swing threads are alive
         System.exit(failed.isEmpty() ? 0 : 1);
     }
 
-    // ── Test-only helpers ────────────────────────────────────────────────
+    // -- Test-only helpers ------------------------------------------------
 
     /**
      * Creates a timed board on the event thread, stops its clocks and keeps only a weak reference.
@@ -2765,7 +2787,7 @@ public class GameTest {
     }
 
     /**
-     * A DrawOfferResolver that never offers/accepts anything — used by tests
+     * A DrawOfferResolver that never offers/accepts anything - used by tests
      * that exercise move mechanics and don't care about the draw-offer path.
      */
     private static DrawOfferResolver noOpDrawResolver() {

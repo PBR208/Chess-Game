@@ -156,14 +156,14 @@ public class NotationHelper {
     //COORDINATE HELPER
 
     /**
-     * Column 0–7 -> file letter a–h
+     * Column 0-7 -> file letter a-h
      */
     private static String file(int col) {
         return String.valueOf((char) ('a' + col));
     }
 
     /**
-     * Row 0–7 (top = 0) -> chess rank 8–1
+     * Row 0-7 (top = 0) -> chess rank 8-1
      */
     private static int rank(int row) {
         return 8 - row;
