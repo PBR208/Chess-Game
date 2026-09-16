@@ -3636,6 +3636,263 @@ public class GameTest {
                     Bitboards.squareOf("e5"), Bitboards.squareOf("d6"))), "en passant is written as exd6");
         });
 
+        // =================================================================
+        System.out.println("\n-- Game session on the core -------------------------------------");
+        // =================================================================
+
+        test("GameSession: a new game starts from the standard position with nothing played", () -> {
+            GameSession session = new GameSession();
+            checkEqual(GameResult.ONGOING, session.result(), "a new game is still running");
+            check(session.termination() == null, "a running game has no reason to have ended");
+            check(session.isWhiteToMove(), "White moves first");
+            checkEqual(0, session.getMoveLog().size(), "no move has been played yet");
+            checkEqual(Fen.START_POSITION, Fen.write(session.position()), "the board is the standard one");
+        });
+
+        test("GameSession: playing a move records it, hands the clock over and asks for a repaint", () -> {
+            int[] switches = {0};
+            int[] repaints = {0};
+            boolean[] handedTo = {true};
+            GameSession session = new GameSession();
+            session.setView(new GameSession.View() {
+                @Override
+                public void switchClocks(boolean pWhiteToMove) {
+                    switches[0]++;
+                    handedTo[0] = pWhiteToMove;
+                }
+
+                @Override
+                public void stopClocks() {
+                }
+
+                @Override
+                public void resetClocks() {
+                }
+
+                @Override
+                public void repaint() {
+                    repaints[0]++;
+                }
+            });
+
+            check(session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4"))),
+                    "e2e4 must be accepted in the starting position");
+            checkEqual(1, session.getMoveLog().size(), "the move is written down");
+            checkEqual("e4", session.getMoveLog().get(0), "and written in algebraic notation");
+            checkEqual(1, session.getFenHistory().size(), "the position after the move is recorded");
+            checkEqual(1, switches[0], "the clock changes hands exactly once");
+            check(!handedTo[0], "the clock goes to Black");
+            check(repaints[0] >= 1, "the board is asked to repaint");
+            check(!session.isWhiteToMove(), "Black is to move now");
+        });
+
+        test("GameSession: illegal moves and moves after the end are refused", () -> {
+            GameSession session = new GameSession();
+            check(!session.play(Moves.encode(Bitboards.squareOf("e2"), Bitboards.squareOf("e5"))),
+                    "a pawn cannot jump three squares");
+            checkEqual(Moves.NONE, session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e5")),
+                    "no legal move connects those squares");
+            checkEqual(0, session.getMoveLog().size(), "a refused move is not written down");
+
+            session.resign(Pieces.WHITE);
+            check(!session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4"))),
+                    "a finished game accepts no more moves");
+        });
+
+        test("GameSession: the fastest mate ends the game with Black winning", () -> {
+            GameResult[] reported = {null};
+            Termination[] reason = {null};
+            int[] stops = {0};
+            GameSession session = new GameSession();
+            session.setEndListener((pResult, pTermination) -> {
+                reported[0] = pResult;
+                reason[0] = pTermination;
+            });
+            session.setView(new GameSession.View() {
+                @Override
+                public void switchClocks(boolean pWhiteToMove) {
+                }
+
+                @Override
+                public void stopClocks() {
+                    stops[0]++;
+                }
+
+                @Override
+                public void resetClocks() {
+                }
+
+                @Override
+                public void repaint() {
+                }
+            });
+
+            // 1. f3 e5 2. g4 Qh4 mate
+            session.play(session.moveFor(Bitboards.squareOf("f2"), Bitboards.squareOf("f3")));
+            session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+            session.play(session.moveFor(Bitboards.squareOf("g2"), Bitboards.squareOf("g4")));
+            session.play(session.moveFor(Bitboards.squareOf("d8"), Bitboards.squareOf("h4")));
+
+            checkEqual(GameResult.BLACK_WINS, session.result(), "Black wins the fastest mate");
+            checkEqual(Termination.CHECKMATE, session.termination(), "and the reason is mate");
+            checkEqual("0-1", session.result().pgnToken(), "the PGN token matches the result");
+            checkEqual("Qh4#", session.getMoveLog().get(3), "the mating move is marked with a hash");
+            checkEqual(1, stops[0], "the clocks are stopped exactly once");
+        });
+
+        test("GameSession: a move that leaves the opponent without a reply is stalemate", () -> {
+            GameSession session = new GameSession(Fen.parse("7k/5Q2/8/6K1/8/8/8/8 w - - 0 1"));
+            session.play(session.moveFor(Bitboards.squareOf("g5"), Bitboards.squareOf("g6")));
+
+            checkEqual(GameResult.DRAW, session.result(), "stalemate is a draw");
+            checkEqual(Termination.STALEMATE, session.termination(), "and says so");
+        });
+
+        test("GameSession: a capture that leaves two bare kings draws at once", () -> {
+            GameSession session = new GameSession(Fen.parse("4k3/8/8/8/8/8/4n3/4K3 w - - 0 1"));
+            session.play(session.moveFor(Bitboards.squareOf("e1"), Bitboards.squareOf("e2")));
+
+            checkEqual(GameResult.DRAW, session.result(), "two kings can never mate");
+            checkEqual(Termination.INSUFFICIENT_MATERIAL, session.termination(), "and the reason says why");
+        });
+
+        test("GameSession: a flag fall is a win, unless the other side cannot mate", () -> {
+            GameSession winning = new GameSession(Fen.parse("4k3/8/8/8/8/8/8/3QK3 b - - 0 1"));
+            winning.flagFall(Pieces.BLACK);
+            checkEqual(GameResult.WHITE_WINS, winning.result(), "a queen can still mate, so White wins on time");
+            checkEqual(Termination.TIME_OUT, winning.termination(), "the reason is the clock");
+
+            GameSession drawn = new GameSession(Fen.parse("4k3/8/8/8/8/8/8/4K3 b - - 0 1"));
+            drawn.flagFall(Pieces.BLACK);
+            checkEqual(GameResult.DRAW, drawn.result(), "a lone king does not win on time");
+            checkEqual(Termination.TIME_OUT_WITHOUT_MATING_MATERIAL, drawn.termination(), "FIDE rule 6.9");
+        });
+
+        test("GameSession: the seventy five move rule draws without anybody claiming", () -> {
+            boolean[] toldAboutForcedDraw = {false};
+            GameSession session = new GameSession(Fen.parse("4k3/8/8/8/8/8/8/R3K3 w - - 149 80"));
+            session.setDrawArbiter(new GameSession.DrawArbiter() {
+                @Override
+                public boolean offerFiftyMoveDraw() {
+                    return false;
+                }
+
+                @Override
+                public boolean offerRepetitionDraw() {
+                    return false;
+                }
+
+                @Override
+                public void notifyForcedDraw() {
+                    toldAboutForcedDraw[0] = true;
+                }
+            });
+
+            session.play(session.moveFor(Bitboards.squareOf("a1"), Bitboards.squareOf("a2")));
+            checkEqual(GameResult.DRAW, session.result(), "the game draws itself after 75 moves");
+            checkEqual(Termination.SEVENTY_FIVE_MOVE_RULE, session.termination(), "and says which rule");
+            check(toldAboutForcedDraw[0], "the players are told about a draw they cannot refuse");
+        });
+
+        test("GameSession: the fifty move claim is offered once per player", () -> {
+            int[] offers = {0};
+            GameSession session = new GameSession(Fen.parse("4k3/8/8/8/8/8/8/R3K3 w - - 99 60"));
+            session.setDrawArbiter(new GameSession.DrawArbiter() {
+                @Override
+                public boolean offerFiftyMoveDraw() {
+                    offers[0]++;
+                    return false;
+                }
+
+                @Override
+                public boolean offerRepetitionDraw() {
+                    return false;
+                }
+
+                @Override
+                public void notifyForcedDraw() {
+                }
+            });
+
+            session.play(session.moveFor(Bitboards.squareOf("a1"), Bitboards.squareOf("a2")));
+            checkEqual(1, offers[0], "the player to move is asked once");
+            session.play(session.moveFor(Bitboards.squareOf("e8"), Bitboards.squareOf("d8")));
+            checkEqual(2, offers[0], "the other player is asked as well");
+            session.play(session.moveFor(Bitboards.squareOf("a2"), Bitboards.squareOf("a3")));
+            checkEqual(2, offers[0], "a player who declined is not asked again");
+            checkEqual(GameResult.ONGOING, session.result(), "a declined claim leaves the game running");
+        });
+
+        test("GameSession: a repeated position can be claimed as a draw", () -> {
+            GameSession session = new GameSession();
+            session.setDrawArbiter(new GameSession.DrawArbiter() {
+                @Override
+                public boolean offerFiftyMoveDraw() {
+                    return false;
+                }
+
+                @Override
+                public boolean offerRepetitionDraw() {
+                    return true;
+                }
+
+                @Override
+                public void notifyForcedDraw() {
+                }
+            });
+
+            // both knights walk out and back twice, which brings the starting position back
+            String[][] shuffle = {
+                    {"g1", "f3"}, {"g8", "f6"}, {"f3", "g1"}, {"f6", "g8"},
+                    {"g1", "f3"}, {"g8", "f6"}, {"f3", "g1"}, {"f6", "g8"},
+            };
+            for (String[] step : shuffle) {
+                if (session.result().isFinished()) {
+                    break;
+                }
+                session.play(session.moveFor(Bitboards.squareOf(step[0]), Bitboards.squareOf(step[1])));
+            }
+
+            checkEqual(GameResult.DRAW, session.result(), "the third occurrence may be claimed");
+            checkEqual(Termination.THREEFOLD_REPETITION, session.termination(), "and says which rule");
+        });
+
+        test("GameSession: a promotion asks which piece the pawn becomes", () -> {
+            GameSession session = new GameSession(Fen.parse("8/P7/8/8/7k/8/8/4K3 w - - 0 1"));
+            session.setPromotionPicker(white -> Pieces.KNIGHT);
+
+            int move = session.moveFor(Bitboards.squareOf("a7"), Bitboards.squareOf("a8"));
+            check(Moves.isPromotion(move), "the move must be a promotion");
+            checkEqual(Pieces.KNIGHT, Moves.promotionType(move), "the picker asked for a knight");
+            session.play(move);
+            checkEqual("a8=N", session.getMoveLog().get(0), "an underpromotion is written with its piece");
+        });
+
+        test("GameSession: the highlighted squares come from the legal moves of one piece", () -> {
+            GameSession session = new GameSession();
+            int[] targets = new int[MoveGen.MAX_MOVES];
+
+            checkEqual(2, session.targetsFrom(Bitboards.squareOf("e2"), targets), "a pawn has two moves at the start");
+            checkEqual(2, session.targetsFrom(Bitboards.squareOf("g1"), targets), "the knight has two squares");
+            checkEqual(0, session.targetsFrom(Bitboards.squareOf("e1"), targets), "the king is hemmed in");
+            checkEqual(0, session.targetsFrom(Bitboards.squareOf("e7"), targets), "a black pawn may not move on White's turn");
+        });
+
+        test("GameSession: restarting clears the board, the record and the result", () -> {
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.resign(Pieces.BLACK);
+            checkEqual(GameResult.WHITE_WINS, session.result(), "a resignation ends the game");
+
+            session.restart();
+            checkEqual(GameResult.ONGOING, session.result(), "a restarted game runs again");
+            check(session.termination() == null, "and has no reason to have ended");
+            checkEqual(0, session.getMoveLog().size(), "the record starts empty");
+            checkEqual(Fen.START_POSITION, Fen.write(session.position()), "the pieces are back where they started");
+            check(session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4"))),
+                    "and moves are accepted again");
+        });
+
         // -- Summary ------------------------------------------------------
         // the host frame is null on a headless run
         if (frame != null) SwingUtilities.invokeAndWait(frame::dispose);
