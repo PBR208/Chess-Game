@@ -614,10 +614,10 @@ public class GameController {
         state.capture(m);
 
         Piece newPiece = switch (choice) {
-            case QUEEN -> new Queen(b, m.getNewCol(), m.getNewRow(), white);
-            case ROOK -> new Rook(b, m.getNewCol(), m.getNewRow(), white);
-            case BISHOP -> new Bishop(b, m.getNewCol(), m.getNewRow(), white);
-            case KNIGHT -> new Knight(b, m.getNewCol(), m.getNewRow(), white);
+            case QUEEN -> new Queen(state, m.getNewCol(), m.getNewRow(), white);
+            case ROOK -> new Rook(state, m.getNewCol(), m.getNewRow(), white);
+            case BISHOP -> new Bishop(state, m.getNewCol(), m.getNewRow(), white);
+            case KNIGHT -> new Knight(state, m.getNewCol(), m.getNewRow(), white);
             default -> throw new IllegalStateException("Cannot promote to " + choice);
         };
 

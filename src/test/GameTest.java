@@ -59,10 +59,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * handler uses SwingUtilities.getWindowAncestor(this) rather than Main's
  * static field, so it's fully testable in isolation.
  * <p>
- * PREREQUISITE: Piece.java must expose the static accessors added for
- * ReplayPanel support:
- * public static BufferedImage getSpritesheet()
- * public static int getSpritesheetScale()
+ * PREREQUISITE: ui.board.PieceSprites exposes the sprite sheet accessors that
+ * the replay viewer and the promotion dialog cut their own images from:
+ * public static BufferedImage getSheet()
+ * public static int getSheetScale()
  */
 public class GameTest {
 
@@ -745,7 +745,7 @@ public class GameTest {
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
                     BoardState state = board.getState();
-                    Piece extraQueen = new Queen(board, 4, 4, true);
+                    Piece extraQueen = new Queen(board.getState(), 4, 4, true);
                     state.addPiece(extraQueen);
                     checkEqual(extraQueen, state.getPiece(4, 4), "grid must reflect the newly added piece");
                     check(state.getPieces().contains(extraQueen), "piece list must contain the newly added piece");
@@ -776,7 +776,7 @@ public class GameTest {
                     BoardState state = board.getState();
 
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece loneKing = new King(board, 4, 4, true);
+                    Piece loneKing = new King(board.getState(), 4, 4, true);
                     custom.add(loneKing);
                     state.setPieces(custom);
 
@@ -822,8 +822,8 @@ public class GameTest {
                     BoardState state = board.getState();
 
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board, 4, 7, true);
-                    Piece blackRook = new Rook(board, 4, 0, false);
+                    Piece whiteKing = new King(board.getState(), 4, 7, true);
+                    Piece blackRook = new Rook(board.getState(), 4, 0, false);
                     custom.add(whiteKing);
                     custom.add(blackRook);
                     state.setPieces(custom);
@@ -838,8 +838,8 @@ public class GameTest {
                     BoardState state = board.getState();
 
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board, 0, 7, true);  // a1
-                    Piece blackRook = new Rook(board, 3, 7, false); // d1, attacks the whole 1st rank
+                    Piece whiteKing = new King(board.getState(), 0, 7, true);  // a1
+                    Piece blackRook = new Rook(board.getState(), 3, 7, false); // d1, attacks the whole 1st rank
                     custom.add(whiteKing);
                     custom.add(blackRook);
                     state.setPieces(custom);
@@ -861,9 +861,9 @@ public class GameTest {
                     // White king on e1, White rook on e4 blocking a Black rook on e8.
                     // Sliding the White rook off the e-file must expose the king.
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board, 4, 7, true);   // e1
-                    Piece whiteRook = new Rook(board, 4, 4, true);   // e4
-                    Piece blackRook = new Rook(board, 4, 0, false);  // e8
+                    Piece whiteKing = new King(board.getState(), 4, 7, true);   // e1
+                    Piece whiteRook = new Rook(board.getState(), 4, 4, true);   // e4
+                    Piece blackRook = new Rook(board.getState(), 4, 0, false);  // e8
                     custom.add(whiteKing);
                     custom.add(whiteRook);
                     custom.add(blackRook);
@@ -1065,17 +1065,17 @@ public class GameTest {
             checkEqual("Pawn", PieceType.PAWN.getDisplayName(), "Pawn display name");
         });
 
-        test("Piece: sprite sheet loads from the classpath with six piece columns", () -> {
-            BufferedImage sheet = Piece.loadSpriteSheet(Piece.SPRITE_SHEET_PATH);
+        test("PieceSprites: sprite sheet loads from the classpath with six piece columns", () -> {
+            BufferedImage sheet = PieceSprites.loadSpriteSheet(PieceSprites.SPRITE_SHEET_PATH);
             checkNotNull(sheet, "the bundled sprite sheet must load");
             checkEqual(0, sheet.getWidth() % 6, "the sheet width must split into six piece columns");
             check(sheet.getHeight() >= sheet.getWidth() / 6 * 2, "the sheet must hold a white and a black row");
         });
 
-        test("Piece: a missing sprite sheet fails with a message naming the resource", () -> {
+        test("PieceSprites: a missing sprite sheet fails with a message naming the resource", () -> {
             String missing = "/resources/does-not-exist.png";
             try {
-                Piece.loadSpriteSheet(missing);
+                PieceSprites.loadSpriteSheet(missing);
             } catch (IllegalStateException e) {
                 check(e.getMessage().contains(missing), "the message must name the missing resource, got: " + e.getMessage());
                 return;
@@ -1244,7 +1244,8 @@ public class GameTest {
                     checkEqual(60, board.getTileSize(), "the board must use the given square size");
                     // eight squares wide, eight rows and two clock bars high
                     checkEqual(new Dimension(480, 600), board.getPreferredSize(), "the panel size must follow the squares");
-                    checkEqual(60, board.getState().getPiece(1, 7).getxPos(), "the b1 knight must sit one small square from the edge");
+                    checkEqual(60, board.getSprites().spriteFor(PieceType.KNIGHT, true).getWidth(),
+                            "the piece sprites must be scaled to the smaller squares");
                 }));
 
         test("Board: a square size below the minimum is refused", () -> {
@@ -2313,11 +2314,11 @@ public class GameTest {
                     BoardState state = board.getState();
 
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece lowerRook = new Rook(board, 0, 7, true); // a1
+                    Piece lowerRook = new Rook(board.getState(), 0, 7, true); // a1
                     custom.add(lowerRook);
-                    custom.add(new Rook(board, 0, 3, true));       // a5
-                    custom.add(new King(board, 7, 7, true));       // h1
-                    custom.add(new King(board, 7, 0, false));      // h8
+                    custom.add(new Rook(board.getState(), 0, 3, true));       // a5
+                    custom.add(new King(board.getState(), 7, 7, true));       // h1
+                    custom.add(new King(board.getState(), 7, 0, false));      // h8
                     state.setPieces(custom);
 
                     GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
@@ -2332,12 +2333,12 @@ public class GameTest {
                     BoardState state = board.getState();
 
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece movingQueen = new Queen(board, 0, 7, true); // a1
+                    Piece movingQueen = new Queen(board.getState(), 0, 7, true); // a1
                     custom.add(movingQueen);
-                    custom.add(new Queen(board, 2, 7, true));  // c1, same rank
-                    custom.add(new Queen(board, 0, 5, true));  // a3, same file
-                    custom.add(new King(board, 7, 7, true));   // h1
-                    custom.add(new King(board, 3, 0, false));  // d8
+                    custom.add(new Queen(board.getState(), 2, 7, true));  // c1, same rank
+                    custom.add(new Queen(board.getState(), 0, 5, true));  // a3, same file
+                    custom.add(new King(board.getState(), 7, 7, true));   // h1
+                    custom.add(new King(board.getState(), 3, 0, false));  // d8
                     state.setPieces(custom);
 
                     GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
@@ -2425,10 +2426,10 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board, 4, 7, true);   // e1
+                    Piece whiteKing = new King(board.getState(), 4, 7, true);   // e1
                     custom.add(whiteKing);
-                    custom.add(new King(board, 4, 0, false));         // e8
-                    custom.add(new Knight(board, 3, 6, false));       // d2, the last piece besides the kings
+                    custom.add(new King(board.getState(), 4, 0, false));         // e8
+                    custom.add(new Knight(board.getState(), 3, 6, false));       // d2, the last piece besides the kings
                     state.setPieces(custom);
 
                     GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
@@ -2447,10 +2448,10 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKnight = new Knight(board, 1, 7, true); // b1
-                    custom.add(new King(board, 4, 7, true));           // e1
+                    Piece whiteKnight = new Knight(board.getState(), 1, 7, true); // b1
+                    custom.add(new King(board.getState(), 4, 7, true));           // e1
                     custom.add(whiteKnight);
-                    custom.add(new King(board, 4, 0, false));          // e8
+                    custom.add(new King(board.getState(), 4, 0, false));          // e8
                     state.setPieces(custom);
 
                     GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
@@ -2469,11 +2470,11 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board, 4, 7, true);   // e1
+                    Piece whiteKing = new King(board.getState(), 4, 7, true);   // e1
                     custom.add(whiteKing);
-                    custom.add(new Bishop(board, 2, 7, true));        // c1, dark square
-                    custom.add(new King(board, 4, 0, false));         // e8
-                    custom.add(new Bishop(board, 5, 0, false));       // f8, dark square as well
+                    custom.add(new Bishop(board.getState(), 2, 7, true));        // c1, dark square
+                    custom.add(new King(board.getState(), 4, 0, false));         // e8
+                    custom.add(new Bishop(board.getState(), 5, 0, false));       // f8, dark square as well
                     state.setPieces(custom);
 
                     GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
@@ -2492,11 +2493,11 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board, 4, 7, true);   // e1
+                    Piece whiteKing = new King(board.getState(), 4, 7, true);   // e1
                     custom.add(whiteKing);
-                    custom.add(new Bishop(board, 2, 7, true));        // c1, dark square
-                    custom.add(new King(board, 4, 0, false));         // e8
-                    custom.add(new Bishop(board, 2, 0, false));       // c8, light square
+                    custom.add(new Bishop(board.getState(), 2, 7, true));        // c1, dark square
+                    custom.add(new King(board.getState(), 4, 0, false));         // e8
+                    custom.add(new Bishop(board.getState(), 2, 0, false));       // c8, light square
                     state.setPieces(custom);
 
                     GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
@@ -2513,9 +2514,9 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board, 4, 7, true));   // e1
-                    custom.add(new Queen(board, 3, 7, true));  // d1
-                    custom.add(new King(board, 4, 0, false));  // e8, Black has nothing else
+                    custom.add(new King(board.getState(), 4, 7, true));   // e1
+                    custom.add(new Queen(board.getState(), 3, 7, true));  // d1
+                    custom.add(new King(board.getState(), 4, 0, false));  // e8, Black has nothing else
                     state.setPieces(custom);
 
                     GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
@@ -2533,10 +2534,10 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board, 0, 7, true));   // a1, start of the white king tour
-                    custom.add(new King(board, 5, 0, false));  // f8, start of the black king tour
-                    custom.add(new Pawn(board, 0, 4, true));   // a4, blocked by a5
-                    custom.add(new Pawn(board, 0, 3, false));  // a5
+                    custom.add(new King(board.getState(), 0, 7, true));   // a1, start of the white king tour
+                    custom.add(new King(board.getState(), 5, 0, false));  // f8, start of the black king tour
+                    custom.add(new Pawn(board.getState(), 0, 4, true));   // a4, blocked by a5
+                    custom.add(new Pawn(board.getState(), 0, 3, false));  // a5
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // both players decline
@@ -2568,10 +2569,10 @@ public class GameTest {
                 Board board = new Board(new GameConfig("Alice", "Bob", 600_000, 600_000, "Rapid 10+0"));
                 boardHolder[0] = board;
                 ArrayList<Piece> custom = new ArrayList<>();
-                custom.add(new King(board, 0, 7, true));   // a1, start of the white king tour
-                custom.add(new King(board, 5, 0, false));  // f8, start of the black king tour
-                custom.add(new Pawn(board, 0, 4, true));   // a4, blocked by a5
-                custom.add(new Pawn(board, 0, 3, false));  // a5
+                custom.add(new King(board.getState(), 0, 7, true));   // a1, start of the white king tour
+                custom.add(new King(board.getState(), 5, 0, false));  // f8, start of the black king tour
+                custom.add(new Pawn(board.getState(), 0, 4, true));   // a4, blocked by a5
+                custom.add(new Pawn(board.getState(), 0, 3, false));  // a5
                 board.getState().setPieces(custom);
                 board.getGameController().setGameEndListener((record, message) -> {
                 });
@@ -2699,18 +2700,18 @@ public class GameTest {
 
                     // FEN 5r1k/8/2p5/3pP3/p3K3/P7/8/2br4 w - d6 0 2, Black just played d7-d5 with check
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whitePawn = new Pawn(board, 4, 3, true);     // e5
-                    Piece checkingPawn = new Pawn(board, 3, 3, false); // d5
-                    custom.add(new King(board, 4, 4, true));           // e4
+                    Piece whitePawn = new Pawn(board.getState(), 4, 3, true);     // e5
+                    Piece checkingPawn = new Pawn(board.getState(), 3, 3, false); // d5
+                    custom.add(new King(board.getState(), 4, 4, true));           // e4
                     custom.add(whitePawn);
-                    custom.add(new Pawn(board, 0, 5, true));           // a3, blocked by a4
+                    custom.add(new Pawn(board.getState(), 0, 5, true));           // a3, blocked by a4
                     custom.add(checkingPawn);
-                    custom.add(new King(board, 7, 0, false));          // h8
-                    custom.add(new Rook(board, 5, 0, false));          // f8 covers the f-file
-                    custom.add(new Rook(board, 3, 7, false));          // d1 covers the d-file
-                    custom.add(new Bishop(board, 2, 7, false));        // c1 covers e3
-                    custom.add(new Pawn(board, 2, 2, false));          // c6 guards d5
-                    custom.add(new Pawn(board, 0, 4, false));          // a4
+                    custom.add(new King(board.getState(), 7, 0, false));          // h8
+                    custom.add(new Rook(board.getState(), 5, 0, false));          // f8 covers the f-file
+                    custom.add(new Rook(board.getState(), 3, 7, false));          // d1 covers the d-file
+                    custom.add(new Bishop(board.getState(), 2, 7, false));        // c1 covers e3
+                    custom.add(new Pawn(board.getState(), 2, 2, false));          // c6 guards d5
+                    custom.add(new Pawn(board.getState(), 0, 4, false));          // a4
                     for (Piece p : custom) if (p instanceof Pawn) p.setFirstMove(false);
                     state.setPieces(custom);
                     state.setEnPassantTile(state.getTileNum(3, 2));    // d6
@@ -2737,13 +2738,13 @@ public class GameTest {
 
                     // FEN 4k3/8/8/KPp4r/8/7P/8/8 w - c6 0 2, Black just played c7-c5
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whitePawn = new Pawn(board, 1, 3, true); // b5
-                    custom.add(new King(board, 0, 3, true));        // a5
+                    Piece whitePawn = new Pawn(board.getState(), 1, 3, true); // b5
+                    custom.add(new King(board.getState(), 0, 3, true));        // a5
                     custom.add(whitePawn);
-                    custom.add(new Pawn(board, 7, 5, true));        // h3
-                    custom.add(new Pawn(board, 2, 3, false));       // c5
-                    custom.add(new Rook(board, 7, 3, false));       // h5, same rank as the king
-                    custom.add(new King(board, 4, 0, false));       // e8
+                    custom.add(new Pawn(board.getState(), 7, 5, true));        // h3
+                    custom.add(new Pawn(board.getState(), 2, 3, false));       // c5
+                    custom.add(new Rook(board.getState(), 7, 3, false));       // h5, same rank as the king
+                    custom.add(new King(board.getState(), 4, 0, false));       // e8
                     for (Piece p : custom) if (p instanceof Pawn) p.setFirstMove(false);
                     state.setPieces(custom);
                     state.setEnPassantTile(state.getTileNum(2, 2)); // c6
@@ -2762,9 +2763,9 @@ public class GameTest {
                     BoardState state = board.getState();
 
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board, 4, 7, true);
-                    Piece blackKing = new King(board, 4, 0, false);
-                    Piece whitePawn = new Pawn(board, 0, 1, true); // one step from promoting on a8
+                    Piece whiteKing = new King(board.getState(), 4, 7, true);
+                    Piece blackKing = new King(board.getState(), 4, 0, false);
+                    Piece whitePawn = new Pawn(board.getState(), 0, 1, true); // one step from promoting on a8
                     custom.add(whiteKing);
                     custom.add(blackKing);
                     custom.add(whitePawn);
@@ -2798,10 +2799,10 @@ public class GameTest {
                     // Ladder-mate final move: Rb1-b8#. Rook A already covers rank 7,
                     // Rook B slides onto rank 8 and the Black king has no escape square.
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board, 0, 7, true);   // a1
-                    Piece blackKing = new King(board, 7, 0, false); // h8
-                    Piece rookA = new Rook(board, 0, 1, true);      // a7
-                    Piece rookB = new Rook(board, 1, 7, true);      // b1
+                    Piece whiteKing = new King(board.getState(), 0, 7, true);   // a1
+                    Piece blackKing = new King(board.getState(), 7, 0, false); // h8
+                    Piece rookA = new Rook(board.getState(), 0, 1, true);      // a7
+                    Piece rookB = new Rook(board.getState(), 1, 7, true);      // b1
                     custom.add(whiteKing);
                     custom.add(blackKing);
                     custom.add(rookA);
@@ -2833,9 +2834,9 @@ public class GameTest {
 
                     // Textbook queen stalemate final move: Qg5-g6.
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board, 5, 1, true);   // f7
-                    Piece blackKing = new King(board, 7, 0, false); // h8
-                    Piece whiteQueen = new Queen(board, 6, 3, true); // g5
+                    Piece whiteKing = new King(board.getState(), 5, 1, true);   // f7
+                    Piece blackKing = new King(board.getState(), 7, 0, false); // h8
+                    Piece whiteQueen = new Queen(board.getState(), 6, 3, true); // g5
                     custom.add(whiteKing);
                     custom.add(blackKing);
                     custom.add(whiteQueen);
@@ -2873,9 +2874,9 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board, 5, 1, true));    // f7
-                    custom.add(new Queen(board, 6, 2, true));   // g6
-                    custom.add(new King(board, 7, 0, false));   // h8, no legal move but not in check
+                    custom.add(new King(board.getState(), 5, 1, true));    // f7
+                    custom.add(new Queen(board.getState(), 6, 2, true));   // g6
+                    custom.add(new King(board.getState(), 7, 0, false));   // h8, no legal move but not in check
                     state.setPieces(custom);
 
                     // a fresh controller has White to move
@@ -2890,11 +2891,11 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board, 0, 7, true));  // a1, start of the white king tour
-                    custom.add(new King(board, 5, 0, false)); // f8, start of the black king tour
+                    custom.add(new King(board.getState(), 0, 7, true));  // a1, start of the white king tour
+                    custom.add(new King(board.getState(), 5, 0, false)); // f8, start of the black king tour
                     // two pawns blocking each other, so the material never counts as insufficient
-                    custom.add(new Pawn(board, 0, 4, true));  // a4
-                    custom.add(new Pawn(board, 0, 3, false)); // a5
+                    custom.add(new Pawn(board.getState(), 0, 4, true));  // a4
+                    custom.add(new Pawn(board.getState(), 0, 3, false)); // a5
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(true);
@@ -2915,11 +2916,11 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board, 0, 7, true));  // a1, start of the white king tour
-                    custom.add(new King(board, 5, 0, false)); // f8, start of the black king tour
+                    custom.add(new King(board.getState(), 0, 7, true));  // a1, start of the white king tour
+                    custom.add(new King(board.getState(), 5, 0, false)); // f8, start of the black king tour
                     // two pawns blocking each other, so the material never counts as insufficient
-                    custom.add(new Pawn(board, 0, 4, true));  // a4
-                    custom.add(new Pawn(board, 0, 3, false)); // a5
+                    custom.add(new Pawn(board.getState(), 0, 4, true));  // a4
+                    custom.add(new Pawn(board.getState(), 0, 3, false)); // a5
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false);
@@ -2939,11 +2940,11 @@ public class GameTest {
                     Board board = new Board(cfg);
                     BoardState state = board.getState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board, 0, 7, true));  // a1, start of the white king tour
-                    custom.add(new King(board, 5, 0, false)); // f8, start of the black king tour
+                    custom.add(new King(board.getState(), 0, 7, true));  // a1, start of the white king tour
+                    custom.add(new King(board.getState(), 5, 0, false)); // f8, start of the black king tour
                     // two pawns blocking each other, so the material never counts as insufficient
-                    custom.add(new Pawn(board, 0, 4, true));  // a4
-                    custom.add(new Pawn(board, 0, 3, false)); // a5
+                    custom.add(new Pawn(board.getState(), 0, 4, true));  // a4
+                    custom.add(new Pawn(board.getState(), 0, 3, false)); // a5
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // always decline

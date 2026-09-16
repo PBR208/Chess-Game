@@ -11,7 +11,6 @@ package ui.board;
  * Version: 1.0
  */
 
-import engine.pieces.Piece;
 import ui.theme.Theme;
 import ui.theme.UiComponents;
 
@@ -80,8 +79,8 @@ public class PromoteGUI extends JDialog {
         setUndecorated(true);
         getContentPane().setBackground(Theme.PANEL_BG);
 
-        BufferedImage spritesheet = Piece.getSpritesheet();
-        int scale = Piece.getSpritesheetScale();
+        BufferedImage spritesheet = PieceSprites.getSheet();
+        int scale = PieceSprites.getSheetScale();
 
         // each button shows the promoting side's piece and is named after it, since it has no text
         JButton queen = createPieceButton(getPieceImage(spritesheet, scale, QUEEN_SPRITE, pTileSize, pWhite), "Queen");

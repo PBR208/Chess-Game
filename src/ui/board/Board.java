@@ -146,27 +146,27 @@ public class Board extends JPanel {
 
         ArrayList<Piece> newGame = new ArrayList<>();
 
-        newGame.add(new Rook(this, 0, 0, false));
-        newGame.add(new Rook(this, 7, 0, false));
-        newGame.add(new Knight(this, 1, 0, false));
-        newGame.add(new Knight(this, 6, 0, false));
-        newGame.add(new Bishop(this, 2, 0, false));
-        newGame.add(new Bishop(this, 5, 0, false));
-        newGame.add(new Queen(this, 3, 0, false));
-        newGame.add(new King(this, 4, 0, false));
+        newGame.add(new Rook(state, 0, 0, false));
+        newGame.add(new Rook(state, 7, 0, false));
+        newGame.add(new Knight(state, 1, 0, false));
+        newGame.add(new Knight(state, 6, 0, false));
+        newGame.add(new Bishop(state, 2, 0, false));
+        newGame.add(new Bishop(state, 5, 0, false));
+        newGame.add(new Queen(state, 3, 0, false));
+        newGame.add(new King(state, 4, 0, false));
 
-        newGame.add(new Rook(this, 0, 7, true));
-        newGame.add(new Rook(this, 7, 7, true));
-        newGame.add(new Knight(this, 1, 7, true));
-        newGame.add(new Knight(this, 6, 7, true));
-        newGame.add(new Bishop(this, 2, 7, true));
-        newGame.add(new Bishop(this, 5, 7, true));
-        newGame.add(new Queen(this, 3, 7, true));
-        newGame.add(new King(this, 4, 7, true));
+        newGame.add(new Rook(state, 0, 7, true));
+        newGame.add(new Rook(state, 7, 7, true));
+        newGame.add(new Knight(state, 1, 7, true));
+        newGame.add(new Knight(state, 6, 7, true));
+        newGame.add(new Bishop(state, 2, 7, true));
+        newGame.add(new Bishop(state, 5, 7, true));
+        newGame.add(new Queen(state, 3, 7, true));
+        newGame.add(new King(state, 4, 7, true));
 
         for (int i = 0; i <= 7; i++) {
-            newGame.add(new Pawn(this, i, 1, false));
-            newGame.add(new Pawn(this, i, 6, true));
+            newGame.add(new Pawn(state, i, 1, false));
+            newGame.add(new Pawn(state, i, 6, true));
         }
         return newGame;
     }
