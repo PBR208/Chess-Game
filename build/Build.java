@@ -56,18 +56,22 @@ public class Build {
     // set once this run has compiled, so later targets can reuse the classes
     private static boolean compiled = false;
 
+    // package prefixes the rules engine must never reach for, checked by the verify target
+    private static final List<String> FORBIDDEN_ENGINE_REFERENCES = List.of("ui.", "java.awt", "javax.");
+
     /**
      * Runs the requested build targets in the order they were given.
      * <p>
      * This is the entry point for "java build/Build.java target...". I first make sure the script
      * runs from the repository root, because every path is relative to it, then execute each target
      * and stop with a non-zero exit code on the first problem. Without arguments the script
-     * compiles, runs the headless tests and packages the jar.
+     * verifies the engine, compiles, runs the headless tests and packages the jar.
      * <p>
      * Time complexity: O(t) for t targets, each dominated by the size of the source tree it handles.
      * Space complexity: O(t) for the target list.
      *
-     * @param pArgs target names clean, compile, test, test-gui, jar or run; may be empty but never null
+     * @param pArgs target names clean, compile, verify, test, test-gui, jar or run; may be empty but
+     *              never null
      * @throws IOException          if reading sources, writing build output or starting a JVM fails
      * @throws InterruptedException if the script is interrupted while waiting for the tests
      */
@@ -77,16 +81,17 @@ public class Build {
             fail("run the script from the repository root, for example: java build/Build.java compile");
         }
         // the full build is the useful default
-        List<String> targets = pArgs.length == 0 ? List.of("compile", "test", "jar") : List.of(pArgs);
+        List<String> targets = pArgs.length == 0 ? List.of("verify", "compile", "test", "jar") : List.of(pArgs);
         for (String target : targets) {
             switch (target) {
                 case "clean" -> clean();
                 case "compile" -> compile();
+                case "verify" -> verify();
                 case "test" -> test(false);
                 case "test-gui" -> test(true);
                 case "jar" -> jar();
                 case "run" -> run();
-                default -> fail("unknown target '" + target + "', expected clean, compile, test, test-gui, jar or run");
+                default -> fail("unknown target '" + target + "', expected clean, compile, verify, test, test-gui, jar or run");
             }
         }
     }
@@ -145,6 +150,44 @@ public class Build {
 
         System.out.println("compiled " + mainSources.size() + " game sources and "
                 + testSources.size() + " test sources for Java " + RELEASE);
+    }
+
+    /**
+     * Stops the build when the rules engine reaches into the user interface.
+     * <p>
+     * The engine used to import ui.board.Board and AWT, which meant the rules could not run without
+     * a window and a sprite sheet. Nothing but a rule stops that from creeping back in, so this is
+     * that rule: I read every source below src/engine and fail on the first line outside a comment
+     * that mentions the ui package, java.awt or javax. Comments may still name those classes, for
+     * example to explain why something moved, because a comment creates no dependency.
+     * <p>
+     * Time complexity: O(n) in the total number of characters of the engine sources.
+     * Space complexity: O(l) for the lines of the largest source file.
+     *
+     * @throws IOException if an engine source cannot be read
+     */
+    private static void verify() throws IOException {
+        List<Path> engineSources = javaSources(SOURCE_ROOT.resolve("engine"), null);
+        for (Path source : engineSources) {
+            int line = 0;
+            for (String text : Files.readAllLines(source)) {
+                line++;
+                String trimmed = text.trim();
+                // a comment may name a class without depending on it
+                if (trimmed.startsWith("*") || trimmed.startsWith("//") || trimmed.startsWith("/*")) {
+                    continue;
+                }
+                for (String forbidden : FORBIDDEN_ENGINE_REFERENCES) {
+                    // the rules have to stay usable in a JVM that has no display at all
+                    if (trimmed.contains(forbidden)) {
+                        fail(source + " line " + line + " uses " + forbidden + ", the rules engine"
+                                + " must not depend on the user interface, AWT or Swing");
+                    }
+                }
+            }
+        }
+        System.out.println("verified " + engineSources.size()
+                + " engine sources are free of ui, AWT and Swing references");
     }
 
     /**
