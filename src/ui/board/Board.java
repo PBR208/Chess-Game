@@ -256,13 +256,59 @@ public class Board extends JPanel {
         return clockHeight + (gc.isTurnOfWhite() ? row : 7 - row) * tileSize;
     }
 
-    public int toLogicalCol(int x) {
-        int c = x / tileSize;
+    /**
+     * Tells whether a point on the panel lies on one of the 64 squares.
+     * <p>
+     * The panel also contains the two clock bars, and mouse events can be delivered for points
+     * outside the panel while a piece is dragged. I check that the point is inside the board width
+     * and between the top and bottom clock bars.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pX horizontal panel coordinate in pixels, any value including negative ones
+     * @param pY vertical panel coordinate in pixels, any value including negative ones
+     * @return true if the point is on a board square
+     */
+    public boolean isOnBoard(int pX, int pY) {
+        // the squares start below the top clock bar and end above the bottom one
+        return pX >= 0 && pX < cols * tileSize
+                && pY >= clockHeight && pY < clockHeight + rows * tileSize;
+    }
+
+    /**
+     * Converts a horizontal panel coordinate into a board column.
+     * <p>
+     * The view is turned towards the player to move, so the same pixel belongs to a different
+     * column for Black. I divide by the tile size with Math.floorDiv, which rounds down instead of
+     * towards zero, so points left of the board never land on the first column, and mirror the
+     * result when Black is to move. Callers check isOnBoard first.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pX horizontal panel coordinate in pixels
+     * @return the column, 0 to 7 for points on the board and outside that range otherwise
+     */
+    public int toLogicalCol(int pX) {
+        // floorDiv keeps negative coordinates off the first column
+        int c = Math.floorDiv(pX, tileSize);
         return gc.isTurnOfWhite() ? c : 7 - c;
     }
 
-    public int toLogicalRow(int y) {
-        int r = (y - clockHeight) / tileSize;
+    /**
+     * Converts a vertical panel coordinate into a board row.
+     * <p>
+     * The squares start below the top clock bar and the view is turned towards the player to move. I
+     * subtract the clock bar height, divide with Math.floorDiv so points above the board never land
+     * on the first row, and mirror the result when Black is to move. Callers check isOnBoard first.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pY vertical panel coordinate in pixels
+     * @return the row, 0 to 7 for points on the board and outside that range otherwise
+     */
+    public int toLogicalRow(int pY) {
+        // floorDiv keeps points on the top clock bar off the first row
+        int r = Math.floorDiv(pY - clockHeight, tileSize);
         return gc.isTurnOfWhite() ? r : 7 - r;
     }
 
