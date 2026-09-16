@@ -18,7 +18,9 @@ import ui.board.MoveLogPanel;
 import engine.pieces.*;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class GameController {
 
@@ -33,6 +35,9 @@ public class GameController {
 
     // works out disambiguation and check markers for the recorded notation
     private final NotationHelper notation = new NotationHelper();
+
+    // how often each position occurred since the last pawn move or capture
+    private final Map<String, Integer> positionCounts = new HashMap<>();
 
     private final GameConfig config;
     private final PromotionChooser promotionChooser;
@@ -63,7 +68,7 @@ public class GameController {
      * A restart has to clear every piece of game state, including the finished flag, otherwise the
      * new game would reject all moves. I put the starting pieces back, reset the side to move, the
      * fifty move counter, the full move number and the en passant square, reset both clocks, clear
-     * the history and mark the game as running again.
+     * the history and the position counts and mark the game as running again.
      * <p>
      * Time complexity: O(p + m) where p is the number of pieces placed and m the number of moves
      * cleared from the history. Space complexity: O(p) for the new piece objects.
@@ -77,6 +82,8 @@ public class GameController {
         state.setEnPassantTile(-1);
         b.resetClocks();
         history.clear();
+        // repetitions only count within one game
+        positionCounts.clear();
         // a restarted game accepts moves again
         gameOver = false;
     }
@@ -90,11 +97,12 @@ public class GameController {
     /**
      * Ends the game when the move just played finished it.
      * <p>
-     * After every move the game may be over by checkmate, stalemate or the move-count rules. The
-     * check state and whether the opponent has any legal reply come from makeMove, which already
-     * needed them for the notation, so the expensive search over all replies runs only once per
-     * move. No reply while in check is checkmate, no reply without check is stalemate, and
-     * otherwise the fifty and seventy-five move rules are applied.
+     * After every move the game may be over by checkmate, stalemate, repetition or the move-count
+     * rules. The check state, whether the opponent has any legal reply and how often the new
+     * position occurred come from makeMove, so the expensive search over all replies runs only once
+     * per move. No reply while in check is checkmate and no reply without check is stalemate. After
+     * that the automatic draws come first, the fifth occurrence of a position and the 75-move rule,
+     * and then the draws the player may claim, a third or fourth occurrence and the 50-move rule.
      * <p>
      * Time complexity: O(1) here, the reply search already happened in makeMove.
      * Space complexity: O(1).
@@ -102,9 +110,10 @@ public class GameController {
      * @param pMove            move that was just played, never null
      * @param pOpponentInCheck true if the side to move now is in check
      * @param pOpponentCanMove true if the side to move now has at least one legal move
+     * @param pRepetitions     how often the current position has occurred, 1 or more
      * @throws NullPointerException if pMove or its piece is null
      */
-    private void checkGameEnd(Move pMove, boolean pOpponentInCheck, boolean pOpponentCanMove) {
+    private void checkGameEnd(Move pMove, boolean pOpponentInCheck, boolean pOpponentCanMove, int pRepetitions) {
         boolean moverIsWhite = pMove.getPiece().isWhite();
 
         // no legal reply while in check is checkmate
@@ -120,11 +129,25 @@ public class GameController {
             return;
         }
 
+        // the fifth occurrence of a position ends the game automatically
+        if (pRepetitions >= 5) {
+            endGame("1/2-1/2", "Fivefold repetition — Draw");
+            return;
+        }
+
         if (passedMoves >= 150) {
             drawOfferResolver.notifyForcedDraw();
             endGame("1/2-1/2", "75-move rule — Draw");
+            return;
+        }
 
-        } else if (passedMoves >= 100) {
+        // a third or fourth occurrence lets the player to move claim the draw
+        if (pRepetitions >= 3 && drawOfferResolver.offerRepetitionDraw()) {
+            endGame("1/2-1/2", "Threefold repetition — Draw");
+            return;
+        }
+
+        if (passedMoves >= 100) {
             if (drawOfferResolver.offerDraw()) {
                 endGame("1/2-1/2", "Draw agreed");
             }
@@ -216,6 +239,11 @@ public class GameController {
         int fromCol = pMove.getPiece().getCol();
         int fromRow = pMove.getPiece().getRow();
 
+        // the position before the very first move counts as an occurrence as well
+        if (positionCounts.isEmpty()) {
+            countCurrentPosition();
+        }
+
         // rivals have to be found before the move changes the position
         String disambiguation = notation.disambiguation(fromCol, fromRow, findRivals(pMove));
 
@@ -253,6 +281,12 @@ public class GameController {
             fullMove++;
         }
 
+        // pawn moves and captures make every earlier position unreachable
+        if (passedMoves == 0) {
+            positionCounts.clear();
+        }
+        int repetitions = countCurrentPosition();
+
         // judge check and legal replies once, both the notation and the end rules need them
         boolean opponentInCheck = cs.isKingInCheckRN(turnOfWhite);
         boolean opponentCanMove = hasLegalMoves(turnOfWhite);
@@ -261,7 +295,7 @@ public class GameController {
         history.record(pMove, fromCol, fromRow, turnOfWhite, passedMoves, fullMove, disambiguation, suffix);
 
         // look for mate, stalemate and draw rules before the clock moves on
-        checkGameEnd(pMove, opponentInCheck, opponentCanMove);
+        checkGameEnd(pMove, opponentInCheck, opponentCanMove, repetitions);
         flip();
     }
 
@@ -377,6 +411,73 @@ public class GameController {
             }
         }
         return rivals;
+    }
+
+    /**
+     * Counts one more occurrence of the current position and returns the new total.
+     * <p>
+     * Repetition draws depend on how often the same position came back. I build the key of the
+     * current position and add one to its counter.
+     * <p>
+     * Time complexity: O(64 + p) for building the key.
+     * Space complexity: O(1) amortized for the map entry.
+     *
+     * @return how often the current position has occurred so far, 1 or more
+     */
+    private int countCurrentPosition() {
+        return positionCounts.merge(positionKey(), 1, Integer::sum);
+    }
+
+    /**
+     * Builds a key that is equal for two positions exactly when they count as the same position.
+     * <p>
+     * For repetition two positions are the same when the same pieces stand on the same squares, the
+     * same side is to move and the same castling and en passant options exist. I take the piece
+     * placement, side to move and castling rights from the FEN generator. The en passant square only
+     * stays in the key when a pawn can really capture there, because the FEN records it after every
+     * double step and the position would otherwise never match its later repetition.
+     * <p>
+     * Time complexity: O(64 + p) for the FEN and the en passant check.
+     * Space complexity: O(1), the key has a bounded length.
+     *
+     * @return the repetition key of the current position, never null
+     */
+    private String positionKey() {
+        // the counters don't matter for repetition, so any values work here
+        String[] fields = new FenGenerator(state).generate(turnOfWhite, 0, 1).split(" ");
+        // an en passant square nobody can use doesn't make the position different
+        String enPassant = canCaptureEnPassant() ? fields[3] : "-";
+        return fields[0] + " " + fields[1] + " " + fields[2] + " " + enPassant;
+    }
+
+    /**
+     * Tells whether the side to move can legally capture en passant right now.
+     * <p>
+     * Only a usable en passant square changes a position for the repetition rule. I return false
+     * when there is no en passant square, and otherwise check every pawn of the side to move with
+     * the normal legality rules against that square.
+     * <p>
+     * Time complexity: O(p), plus at most two check simulations of O(p) for the adjacent pawns.
+     * Space complexity: O(p) for the copy of the piece list.
+     *
+     * @return true if at least one pawn of the side to move can capture en passant
+     */
+    private boolean canCaptureEnPassant() {
+        int tile = state.getEnPassantTile();
+        // no double step just happened
+        if (tile == -1) {
+            return false;
+        }
+        int col = tile % 8;
+        int row = tile / 8;
+        // copy, the legality check simulates moves on the piece list
+        for (Piece piece : new ArrayList<>(state.getPieces())) {
+            if (piece instanceof Pawn && piece.isWhite() == turnOfWhite
+                    && isValidMove(new Move(state, piece, col, row))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void promotePawn(Move m) {
