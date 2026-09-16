@@ -51,6 +51,10 @@ public class GameController {
     // FEN full-move number, starts at 1 and grows after every Black move
     private int fullMove = 1;
 
+    // each player is offered the 50-move claim once, until a pawn move or capture starts over
+    private boolean whiteOfferedFiftyMoveClaim = false;
+    private boolean blackOfferedFiftyMoveClaim = false;
+
     public GameController(Board b, GameConfig config,
                           PromotionChooser promotionChooser, DrawOfferResolver drawOfferResolver) {
         this.b = b;
@@ -68,7 +72,8 @@ public class GameController {
      * A restart has to clear every piece of game state, including the finished flag, otherwise the
      * new game would reject all moves. I put the starting pieces back, reset the side to move, the
      * fifty move counter, the full move number and the en passant square, reset both clocks, clear
-     * the history and the position counts and mark the game as running again.
+     * the history, the position counts and the 50-move claim offers and mark the game as running
+     * again.
      * <p>
      * Time complexity: O(p + m) where p is the number of pieces placed and m the number of moves
      * cleared from the history. Space complexity: O(p) for the new piece objects.
@@ -84,6 +89,9 @@ public class GameController {
         history.clear();
         // repetitions only count within one game
         positionCounts.clear();
+        // both players may be offered the 50-move claim again
+        whiteOfferedFiftyMoveClaim = false;
+        blackOfferedFiftyMoveClaim = false;
         // a restarted game accepts moves again
         gameOver = false;
     }
@@ -121,7 +129,9 @@ public class GameController {
      * replies runs only once per move. No reply while in check is checkmate, no reply without check
      * is stalemate, and material that can never checkmate ends the game as a draw. After that the
      * automatic draws come first, the fifth occurrence of a position and the 75-move rule, and then
-     * the draws the player may claim, a third or fourth occurrence and the 50-move rule.
+     * the draws the player may claim, a third or fourth occurrence and the 50-move rule. The 50-move
+     * claim is offered to each player once per stretch without pawn moves or captures, not after
+     * every single move.
      * <p>
      * Time complexity: O(1) here, the reply search already happened in makeMove.
      * Space complexity: O(1).
@@ -172,7 +182,15 @@ public class GameController {
             return;
         }
 
-        if (passedMoves >= 100) {
+        // ask the player to move once, a declined claim is not repeated after every move
+        boolean alreadyOffered = turnOfWhite ? whiteOfferedFiftyMoveClaim : blackOfferedFiftyMoveClaim;
+        if (passedMoves >= 100 && !alreadyOffered) {
+            if (turnOfWhite) {
+                whiteOfferedFiftyMoveClaim = true;
+            } else {
+                blackOfferedFiftyMoveClaim = true;
+            }
+            // TODO [PBR208]: Add a permanent "Claim draw" action so a player can still claim after declining once.
             if (drawOfferResolver.offerDraw()) {
                 endGame("1/2-1/2", "Draw agreed");
             }
@@ -245,7 +263,8 @@ public class GameController {
      * moves handle their special rules, move any other piece and remove what it captures, and update
      * the fifty move counter, the side to move and the full move number. Then I judge check and
      * legal replies once, record the notation with its disambiguation and check marker plus the FEN,
-     * apply the end of game rules and finally hand the clock over.
+     * hand the clock over and finally apply the end of game rules, so a draw prompt already runs on
+     * the time of the player who has to decide.
      * <p>
      * Time complexity: O(p * s) where p is the number of pieces and s the 64 squares, dominated by
      * the checkmate and stalemate search after the move. Space complexity: O(m) for the growing
@@ -309,6 +328,9 @@ public class GameController {
         // pawn moves and captures make every earlier position unreachable
         if (passedMoves == 0) {
             positionCounts.clear();
+            // and a new stretch towards the 50-move rule begins
+            whiteOfferedFiftyMoveClaim = false;
+            blackOfferedFiftyMoveClaim = false;
         }
         int repetitions = countCurrentPosition();
 
@@ -319,9 +341,10 @@ public class GameController {
 
         history.record(pMove, fromCol, fromRow, turnOfWhite, passedMoves, fullMove, disambiguation, suffix);
 
-        // look for mate, stalemate and draw rules before the clock moves on
-        checkGameEnd(pMove, opponentInCheck, opponentCanMove, repetitions);
+        // hand the clock over first, a draw prompt below must run on the claiming player's time
         flip();
+        // look for mate, stalemate and draw rules
+        checkGameEnd(pMove, opponentInCheck, opponentCanMove, repetitions);
     }
 
     /**
@@ -640,14 +663,15 @@ public class GameController {
      * After a normal move the player who just moved stops and the opponent's clock starts. Once the
      * game has ended both clocks must stay stopped, otherwise the loser's clock keeps running and
      * later reports a time forfeit for a game that is already over. I only switch clocks while the
-     * game is still running and always repaint so the final position is shown.
+     * game is still running, pass the side to move from this controller so the right clock runs
+     * whichever controller the board was built with, and always repaint so the position is shown.
      * <p>
      * Time complexity: O(1), the repaint is only scheduled. Space complexity: O(1).
      */
     private void flip() {
         // a finished game keeps both clocks stopped
         if (!gameOver) {
-            b.switchClocks();
+            b.switchClocks(turnOfWhite);
         }
         b.repaint();
     }

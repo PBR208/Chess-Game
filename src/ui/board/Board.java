@@ -139,8 +139,32 @@ public class Board extends JPanel {
         }
     }
 
+    /**
+     * Hands the clock to the side to move according to the board's own controller.
+     * <p>
+     * Older callers don't say whose turn it is. I forward to the explicit version with the side to
+     * move of the board's own controller.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
     public void switchClocks() {
-        if (gc.isTurnOfWhite()) {
+        switchClocks(gc.isTurnOfWhite());
+    }
+
+    /**
+     * Starts the clock of the side to move and stops the other one.
+     * <p>
+     * The controller that just played a move knows best whose turn it is, and that also holds for a
+     * controller other than the board's own one. I stop the clock of the side that just moved and
+     * start the clock of the side to move.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pWhiteToMove true if White is to move now, false if Black is
+     */
+    public void switchClocks(boolean pWhiteToMove) {
+        // only the side to move uses up time
+        if (pWhiteToMove) {
             blackClock.stop();
             whiteClock.start();
         } else {
@@ -173,6 +197,21 @@ public class Board extends JPanel {
     public boolean areClocksRunning() {
         // a single running clock is enough
         return whiteClock.isRunning() || blackClock.isRunning();
+    }
+
+    /**
+     * Tells whether one player's clock is currently counting down.
+     * <p>
+     * Tests and the UI need to know whose time is running, for example while a draw claim is on the
+     * screen. I return the running state of the requested clock.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pWhite true for White's clock, false for Black's
+     * @return true if that clock is running
+     */
+    public boolean isClockRunning(boolean pWhite) {
+        return pWhite ? whiteClock.isRunning() : blackClock.isRunning();
     }
 
     public int toVisualX(int col) {
