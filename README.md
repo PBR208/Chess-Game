@@ -33,8 +33,8 @@ borrowed from elsewhere. Every line of logic was written by hand. These are the 
 | **Event-Driven Programming**    | `MouseListener` and `MouseMotionListener` wired to game logic; `javax.swing.Timer` driving a clock tick via a functional callback interface                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | **Persistence & Serialization** | Hand-rolled PGN writer/parser (`PgnManager`), FEN generation and loading (`FenGenerator`/`FenLoader`), and algebraic notation output (`NotationHelper`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | **UI Navigation & State**       | A panel-swapping menu system (`MainMenu` → `NewGamePanel` → `Board` / `PastGamesPanel` → `ReplayPanel`) driven by a config object (`GameConfig`)                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| **Dependency Inversion**        | `GameController` no longer constructs `PromoteGUI`/`FiftyRuleDraw` directly — it depends on `PromotionChooser`/`DrawOfferResolver` interfaces, with `Swing*` classes supplying the real dialogs. The rules engine has zero Swing imports                                                                                                                                                                                                                                                                                                                                                                                   |
-| **Separation of Concerns**      | Split what was one `Board` class doing four jobs (rendering, position data, coordinate flipping, clock ownership) into `Board` (rendering) + `BoardState` (position data); split move-history bookkeeping out of `GameController` into `MoveHistory`; pulled the repeated dark-theme styling out of four GUI panels into `Theme`/`UiComponents`; then carried that same separation all the way through the package layout — `engine.imports`, `engine.model`, `engine.persistence`, and `engine.pieces` hold zero-Swing rules/data code, while `ui.board`, `ui.menu`, and `ui.theme` hold everything that touches a window |
+| **Dependency Inversion**        | `GameController` no longer constructs `PromoteGUI`/`FiftyRuleDraw` directly — it depends on `PromotionChooser`/`DrawOfferResolver` interfaces, with `Swing*` classes supplying the real dialogs. The dialogs are out of the rules engine, although `GameController` and the pieces still import `ui.board` (see Project Structure)                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Separation of Concerns**      | Split what was one `Board` class doing four jobs (rendering, position data, coordinate flipping, clock ownership) into `Board` (rendering) + `BoardState` (position data); split move-history bookkeeping out of `GameController` into `MoveHistory`; pulled the repeated dark-theme styling out of four GUI panels into `Theme`/`UiComponents`; then carried that same separation all the way through the package layout — `ui.board`, `ui.menu`, and `ui.theme` hold everything that opens or draws a window, `engine.model` and `engine.persistence` hold no window code at all, and `engine.imports` and `engine.pieces` still lean on `ui.board` for the board and the sprites |
 | **Refactoring**                 | Introduced enums (`DrawResult`, `Choice`) to replace magic strings; every refactor here was done as a small, isolated, behavior-preserving change verified by a full recompile each time                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | **Testing**                     | Built a minimal test runner from scratch — named tests, assertion helpers, auto-dismissing modal dialogs via `Timer`-scheduled `doClick()` — and grew it alongside the refactors above so the newly-decoupled engine classes are now testable without any dialog simulation at all                                                                                                                                                                                                                                                                                                                                         |
 | **Git Workflow**                | Feature branching, PRs per feature (`enPassantFix`, `clock`, `50MoveRule`, `boardFlip`, …), tagged releases                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
@@ -59,38 +59,47 @@ reopened later, either as a plain move log or stepped through move-by-move on a 
 ## ✨ Features
 
 | ✅ Implemented                                                                                           | ❌ Not Yet Implemented                     |
-|---------------------------------------------------------------------------------------------------------|-------------------------------------------|
-| All six piece types with correct movement rules                                                         | Threefold repetition draw                 |
-| Legal move generation — self-check moves filtered out                                                   | Insufficient material draw (K vs K, etc.) |
-| Check & checkmate detection                                                                             | AI opponent                               |
-| Stalemate detection                                                                                     | Sound effects                             |
-| Castling — kingside & queenside with full validation                                                    | Online / network play                     |
-| En passant                                                                                              |                                           |
-| Pawn promotion with piece-selector dialog                                                               |                                           |
-| 50-move draw claim / 75-move forced draw                                                                |                                           |
-| Chess clock with configurable time controls — bullet/blitz/rapid/classical presets or a custom duration |                                           |
-| Board perspective flip after each move                                                                  |                                           |
-| Move highlighting on piece selection                                                                    |                                           |
-| End screen on checkmate, stalemate, or time loss                                                        |                                           |
-| Piece sprites loaded from a sprite sheet                                                                |                                           |
-| Move history / live move log panel                                                                      |                                           |
-| Main menu with New Game & Past Games navigation                                                         |                                           |
-| Custom player names per game                                                                            |                                           |
-| PGN export — every finished game auto-saved to `games/`                                                 |                                           |
-| FEN generation & parsing for board positions                                                            |                                           |
-| Past-games library with saved move logs                                                                 |                                           |
-| Move-by-move replay viewer for saved games                                                              |                                           |
+|---|---|
+| All six piece types with correct movement rules | AI opponent |
+| Legal move generation, self-check moves filtered out | Sound effects |
+| Check & checkmate detection | Online / network play |
+| Stalemate detection | |
+| Castling, kingside & queenside with full validation | |
+| En passant, including captures that answer a check and pins along the rank | |
+| Pawn promotion with a piece selector in the promoting side's colours | |
+| 50-move draw claim / 75-move forced draw | |
+| Threefold repetition claim / fivefold repetition forced draw | |
+| Insufficient material draw, and a draw on time against a lone king | |
+| Chess clock with bullet/blitz/rapid/classical presets, increments, or a custom duration | |
+| Board perspective flip after each move | |
+| Move highlighting on piece selection | |
+| End screen on checkmate, stalemate, draws, or time loss | |
+| Piece sprites loaded from a sprite sheet | |
+| Move history / live move log panel | |
+| Main menu with New Game & Past Games navigation | |
+| Custom player names per game | |
+| Standard algebraic notation with check, mate, and disambiguation (`Nbd2`, `Qh4#`) | |
+| PGN export, every finished game auto-saved to your user data folder | |
+| FEN generation & parsing for board positions | |
+| Past-games library with saved move logs | |
+| Move-by-move replay viewer for saved games | |
+| Window and board sized to fit smaller screens, with fonts every OS has | |
 
 ---
 
 ## 🏗️ Project Structure
 
 ```
+build/
+└── Build.java                        # Zero-dependency build script: clean, compile, test, test-gui, jar, run
+.github/
+└── workflows/
+    └── ci.yml                        # Build and tests on Windows, macOS, and Linux with JDK 17 and 25
 src/
 ├── app/
 │   └── Main.java                     # Entry point — owns the JFrame, swaps in menu/game/library panels
 ├── engine/
-│   ├── imports/                      # Rules engine — zero Swing/AWT imports
+│   ├── imports/                      # Rules engine — still imports ui.board.Board and MoveLogPanel
 │   │   ├── GameController.java       # Turn management, move execution, game-end rule checks
 │   │   ├── CheckScanner.java         # Simulate-and-undo check detection
 │   │   ├── Move.java                 # Value object: piece + target square + captured piece
@@ -134,15 +143,19 @@ src/
 │   └── theme/
 │       ├── Theme.java                # Shared dark-theme color palette for the menu-style screens
 │       └── UiComponents.java         # Shared button styling/hover-effect factory
+├── resources/
+│   └── pieces.png                    # Sprite sheet, loaded from the classpath as /resources/pieces.png
 └── test/
-    └── GameTest.java                 # Standalone test runner (no external framework) — see Testing below
+    ├── GameTest.java                 # Standalone test runner (no external framework) — see Testing below
+    └── GuiTestSelector.java          # Launcher window that previews single screens by hand
 ```
 
-**Why `engine` and `ui` are separate top-level packages, not just separate classes:** nothing under `engine/imports`,
-`engine/model`, `engine/persistence`, or `engine/pieces` imports anything from `ui`. That's not just a naming
-convention — it's checkable: `GameController`, `CheckScanner`, `Move`, `BoardState`, `MoveHistory`, `NotationHelper`,
-and `FenGenerator` all run and are fully tested without a display of any kind. `ui/board` and `ui/menu` are the only
-places a `JFrame`/`JDialog` gets created.
+**Why `engine` and `ui` are separate top-level packages, not just separate classes:** the split marks where the rules
+end and the windows begin, but it isn't a clean cut yet. `engine/model` and `engine/persistence` import nothing from
+`ui`. `GameController` still imports `ui.board.Board` and `ui.board.MoveLogPanel`, and every class in `engine/pieces`
+takes a `Board` in its constructor. The whole test suite runs in a headless JVM, but the rules can't run without the
+AWT classes and the sprite sheet, because every piece needs them. `ui/board` and `ui/menu` are the only places a
+`JFrame`/`JDialog` gets created.
 
 **Why `BoardState` is separate from `Board`:** `Board` is a `JPanel` — it renders, owns the two clocks, and handles
 coordinate flipping. Before this split, it *also* owned the raw pieces list, the grid, and the en passant tile
@@ -155,10 +168,12 @@ dialog." These two interfaces let `GameController` ask an abstraction instead; `
 `SwingDrawOfferResolver` are the real, dialog-backed answers `Board` supplies, but a test (or any future non-Swing
 front end) can supply its own.
 
-**One remaining crack, flagged rather than hidden:** `engine.pieces.Piece` still takes a `ui.board.Board` in its
-constructor, to read tile size and slice its sprite. That's an upward dependency from `engine` into `ui` that the
-package split doesn't fully remove — decoupling piece rendering from piece construction would close it, but that's
-a bigger, separate change than a folder reorganization.
+**The remaining cracks, flagged rather than hidden:** `engine.pieces.Piece` takes a `ui.board.Board` in its
+constructor to read the square size, and it loads and slices the sprite sheet with `java.awt` and `javax.imageio`.
+`GameController` uses `Board` to put pieces on their pixel positions and keeps a `MoveLogPanel` for the live move
+log. Those are upward dependencies from `engine` into `ui` that the package split doesn't remove. Moving the sprites
+into the UI and giving the rules a position model of their own would close them, but that's a bigger, separate change
+than a folder reorganization.
 
 ---
 
@@ -175,12 +190,16 @@ public boolean isKingLeftInCheck(Move move) {
     piece.setRow(move.getNewRow());
     if (captured != null) state.removePiece(captured);
 
-    // 2. Scan all opponent pieces
+    // 2. Keep the grid in sync, sliding pieces look up blockers there
+    state.moveOnGrid(piece, oldCol, oldRow);
+
+    // 3. Scan all opponent pieces
     boolean inCheck = isKingInCheckRN(piece.isWhite());
 
-    // 3. Undo — restore original state
+    // 4. Undo, restore the original state
     piece.setCol(oldCol);
     piece.setRow(oldRow);
+    state.moveOnGrid(piece, move.getNewCol(), move.getNewRow());
     if (captured != null) state.addPiece(captured);
 
     return inCheck;
@@ -190,20 +209,20 @@ public boolean isKingLeftInCheck(Move move) {
 Checkmate is declared when the king is in check **and** this simulation returns `true` for every possible move of every
 friendly piece.
 
-> **Known limitation:** this simulate/undo only updates the *moving piece's* own position — it doesn't update
-> `BoardState`'s grid. That's fine for checking a king's own destination square, but it means a *discovered* attack
-> (a sliding piece moving away and exposing its own king to a pin) isn't detected. This is a pre-existing
-> characteristic of `CheckScanner`, not something introduced by the position-data refactor above — flagged here
-> rather than silently worked around.
+Early versions only moved the piece itself during this simulation and left `BoardState`'s grid alone, so a sliding
+piece could still look through the square the moving piece had just left. Moves that blocked a check were rejected,
+and a discovered attack on the moving side's own king went unnoticed. Syncing the grid in step 2 fixed both, and the
+test suite covers blocking a check as well as a discovered check. An en passant capture is simulated the same way,
+with the passed pawn removed before the scan.
 
 ---
 
 ## ✅ Testing
 
-`test/GameTest.java` is a from-scratch test runner (no JUnit) with over 115 named test cases, grouped by the class
+`test/GameTest.java` is a from-scratch test runner (no JUnit) with 176 named test cases, grouped by the class
 they exercise — `GameConfig`, `GameRecord`, `BoardState`, `Move`/`CheckScanner`, `NotationHelper`, `FenGenerator`,
 `MoveHistory`, `PieceType`, `ChessClock`, the dialogs, the menu panels, and `GameController`'s full rules engine
-(moves, captures, castling, en passant, promotion, checkmate, stalemate, and the 50/75-move draw rules).
+(moves, captures, castling, en passant, promotion, checkmate, stalemate, the 50/75-move rules, repetition, and insufficient material).
 
 Because `GameController` depends on the `PromotionChooser`/`DrawOfferResolver` interfaces rather than concrete
 dialogs, the rules-engine tests drive promotion and draw scenarios with small fake implementations instead of
@@ -211,17 +230,20 @@ simulating dialog clicks — no `Timer`-scheduled `doClick()` needed for any of 
 themselves (`PromoteGUI`, `FiftyRuleDraw`, `EndScreen`) and the two `Swing*` wrapper classes are still tested the
 old way, since they're the parts that genuinely need a real window.
 
-**Run the tests** (requires a display, since the dialog-based tests build real `JFrame`/`JDialog` windows):
+**Run the tests** from the repository root. The same commands work in PowerShell, `cmd.exe`, and any Unix shell:
 
 ```bash
-javac -d out $(find src -name "*.java")
-java -cp out test.GameTest
+java build/Build.java test        # headless: rules, notation, persistence and panel tests
+java build/Build.java test-gui    # also opens the real dialogs and frames, needs a display
 ```
 
-In an environment with no display available at all, only the tests that construct a `JFrame` or show a modal dialog
-will fail — everything else (all of `BoardState`, `Move`, `CheckScanner`, `NotationHelper`, `FenGenerator`,
-`MoveHistory`, `PieceType`, `Theme`/`UiComponents`, and `GameController`'s rules-engine tests) runs and passes without
-one, since none of it needs a real window.
+`test` runs the suite in a headless JVM, the way a build server would. Tests that need a real window, such as the
+modal dialogs or a `JFrame`, are reported as skipped there instead of failing, so a headless run ends with 146 passed
+and 30 skipped, while `test-gui` runs all 176. A watchdog closes any dialog a test left open and fails that test
+instead of hanging the run, and the suite saves its games to a temporary folder, so it never touches your own library.
+
+Every push to `main` and every pull request builds the game and runs the headless tests on Windows, macOS, and Linux
+with JDK 17 and JDK 25, plus the window tests on Linux under a virtual display (see `.github/workflows/ci.yml`).
 
 ---
 
@@ -229,8 +251,8 @@ one, since none of it needs a real window.
 
 ### Prerequisites
 
-- Java **JDK 17** or later
-- Any Java IDE (IntelliJ IDEA, Eclipse, VS Code with Java Extension Pack)
+A Java **JDK 17** or later is all you need. The build script is plain Java, so there is no Maven, Gradle, or shell
+script to install. An IDE (IntelliJ IDEA, Eclipse, VS Code with the Java Extension Pack) is optional.
 
 ### Running the Game
 
@@ -241,22 +263,28 @@ git clone https://github.com/PBR208/Chess-Game.git
 cd Chess-Game
 ```
 
-**Compile from the command line:**
+**Build and run from the command line**, with the same commands on Windows, macOS, and Linux:
 
 ```bash
-javac -d out $(find src -name "*.java")
+java build/Build.java              # compile for Java 17, run the headless tests, package out/Chess-Game.jar
+java build/Build.java run          # compile if needed and start the game
+java -jar out/Chess-Game.jar       # start the packaged jar
 ```
 
-**Run:**
+The script also knows the targets `clean`, `compile`, `test`, `test-gui`, and `jar`, and runs several of them in the
+order given. It compiles with `--release 17` and UTF-8 source encoding no matter which JDK runs it, copies
+`src/resources` next to the classes so the sprite sheet is found, and refuses to package class files that need a Java
+newer than 17.
 
-```bash
-java -cp out app.Main
-```
+**Or open in an IDE:** import the project folder, mark `src` as the source root, and run `app.Main`.
 
-**Or open in an IDE:** import the project folder and run `Main.java` directly.
+The game needs a graphical display. Started without one, for example on a server or with `-Djava.awt.headless=true`,
+it prints what is missing and exits with code 2 instead of failing silently.
 
-> Alternatively, download the pre-built `.jar` from
-> the [latest release](https://github.com/PBR208/Chess-Game/releases/latest) and run it with `java -jar Chess-Game.jar`.
+> **About the release jar:** the `Chess-Game.jar` attached to
+> [v1.2.1](https://github.com/PBR208/Chess-Game/releases/tag/v1.2.1) was built for Java 25 and won't start on older
+> runtimes. Until the next release is out, build the jar yourself as shown above, or download the `Chess-Game-jar`
+> artifact of a recent CI run, which targets Java 17.
 
 ---
 
@@ -268,11 +296,17 @@ java -cp out app.Main
 3. Click one of your pieces to select it — valid moves are highlighted in green
 4. Click a highlighted square to move
 5. The board flips so the other player faces their own pieces from the bottom
-6. The clocks switch automatically; a player who runs out of time loses
-7. The game ends on checkmate, stalemate, time loss, or a 50/75-move draw — the result is saved automatically as a
-   PGN file in a `games/` folder next to where you ran the app
+6. The clocks switch automatically; a player who runs out of time loses, unless the player still on time has only a king left or neither side has enough material to checkmate, which makes it a draw
+7. The game ends on checkmate, stalemate, time loss, or a draw by repetition, insufficient material, or the 50/75-move
+   rule, and the result is saved automatically as a PGN file (see below for where)
 
 White always moves first.
+
+Saved games go to your user data folder: `%APPDATA%\ChessGame\games` on Windows,
+`~/Library/Application Support/ChessGame/games` on macOS, and `$XDG_DATA_HOME/chess-game/games` (usually
+`~/.local/share/chess-game/games`) on Linux. Pass `-Dchess.gamesDir=<folder>` to `java` to use another folder. Games
+from the old `games/` folder in the working directory are copied over once, the first time the game reads or writes
+saved games.
 
 From the main menu, **Past Games** opens a library of every saved game. Select one to view its full move log, or
 switch to the **Replay** tab to step through the position move-by-move on a mini board.
