@@ -3396,6 +3396,72 @@ public class GameTest {
                     "position five at depth three");
         });
 
+        // =================================================================
+        System.out.println("\n-- FEN codec ----------------------------------------------------");
+        // =================================================================
+
+        test("Fen: reading and writing a position gives the same text back", () -> {
+            String[] fens = {
+                    Fen.START_POSITION,
+                    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+                    "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+                    "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
+                    "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 0 1",
+                    "4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1",
+            };
+            for (String fen : fens) {
+                checkEqual(fen, Fen.write(Fen.parse(fen)), "the codec must round trip this position");
+            }
+        });
+
+        test("Fen: the starting position is written exactly as the standard spells it", () -> {
+            checkEqual(Fen.START_POSITION, Fen.write(Position.startPosition()),
+                    "the position the engine builds must write as the standard start FEN");
+            checkEqual(Fen.write(Position.startPosition()), Fen.write(Fen.parse(Fen.START_POSITION)),
+                    "reading the start FEN must give the same position the engine builds");
+        });
+
+        test("Fen: counters and castling rights survive the round trip", () -> {
+            String fen = "r3k2r/8/8/8/8/8/8/R3K2R b Kq - 7 23";
+            Position position = Fen.parse(fen);
+
+            checkEqual(7, position.halfmoveClock(), "the half move clock is read");
+            checkEqual(23, position.fullmoveNumber(), "the full move number is read");
+            checkEqual(Position.WHITE_KINGSIDE | Position.BLACK_QUEENSIDE, position.castlingRights(),
+                    "only the rights the FEN lists may survive");
+            checkEqual(fen, Fen.write(position), "the text must come back unchanged");
+        });
+
+        test("Fen: an en passant square nobody can use is dropped", () -> {
+            Position position = Fen.parse("4k3/8/8/3p4/8/8/8/4K3 w - d6 0 1");
+            checkEqual(Position.NO_EN_PASSANT, position.epSquare(), "no white pawn can capture on d6");
+            checkEqual("4k3/8/8/3p4/8/8/8/4K3 w - - 0 1", Fen.write(position),
+                    "an unusable en passant square is written as a dash");
+        });
+
+        test("Fen: positions that cannot occur are refused with a reason", () -> {
+            String[][] cases = {
+                    {"8/8/8/8/8/8/8/8 w - - 0 1", "king"},
+                    {"4k3/8/8/8/8/8/8/4K2K w - - 0 1", "king"},
+                    {"4k2P/8/8/8/8/8/8/4K3 w - - 0 1", "pawn"},
+                    {"4k3/8/8/8/8/8/8/4K3 w K - 0 1", "rook on h1"},
+                    {"4k3/8/8/3pP3/8/8/8/4K3 w - d3 0 1", "rank 6"},
+                    {"4k3/8/8/8/4R3/8/8/4K3 w - - 0 1", "not to move"},
+                    {"4k3/8/8/8/8/8/8/4K4 w - - 0 1", "squares"},
+                    {"4k3/8/8/8/8/8/8/4K3 w", "fields"},
+            };
+            for (String[] testCase : cases) {
+                try {
+                    Fen.parse(testCase[0]);
+                    throw new AssertionError("this FEN must be refused: " + testCase[0]);
+                } catch (IllegalArgumentException expected) {
+                    check(expected.getMessage().toLowerCase().contains(testCase[1]),
+                            "the message for " + testCase[0] + " should mention " + testCase[1]
+                                    + ", got: " + expected.getMessage());
+                }
+            }
+        });
+
         // -- Summary ------------------------------------------------------
         // the host frame is null on a headless run
         if (frame != null) SwingUtilities.invokeAndWait(frame::dispose);
