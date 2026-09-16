@@ -1475,6 +1475,56 @@ public class GameTest {
             checkEqual(PromoteGUI.Choice.KNIGHT, choice[0], "choice");
         });
 
+        guiTest("PromoteGUI: Black's dialog shows black pieces", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    PromoteGUI white = new PromoteGUI(frame, TILE_SIZE, true);
+                    PromoteGUI black = new PromoteGUI(frame, TILE_SIZE, false);
+                    int[] whitePixels = iconPixels(findButton(white, "Queen"));
+                    int[] blackPixels = iconPixels(findButton(black, "Queen"));
+                    white.dispose();
+                    black.dispose();
+                    check(!java.util.Arrays.equals(whitePixels, blackPixels), "Black's queen icon must differ from White's");
+                }));
+
+        guiTest("PromoteGUI: closing the window doesn't skip the promotion", () -> {
+            boolean[] stillOpen = {false};
+            // first try to close the dialog through the window system, like Alt+F4 does
+            Timer closer = new Timer(20, e -> {
+                for (Window w : Window.getWindows()) {
+                    if (w instanceof PromoteGUI d && d.isVisible()) {
+                        d.dispatchEvent(new java.awt.event.WindowEvent(d, java.awt.event.WindowEvent.WINDOW_CLOSING));
+                        stillOpen[0] = d.isVisible();
+                        ((Timer) e.getSource()).stop();
+                    }
+                }
+            });
+            closer.start();
+            // then pick a piece the normal way
+            scheduleClick("Rook");
+            PromoteGUI.Choice[] choice = {null};
+            SwingUtilities.invokeAndWait(() -> choice[0] = new PromoteGUI(frame, TILE_SIZE).showDialog());
+            closer.stop();
+            check(stillOpen[0], "closing the window must leave the promotion dialog open");
+            checkEqual(PromoteGUI.Choice.ROOK, choice[0], "the piece picked afterwards must count");
+        });
+
+        guiTest("PromoteGUI: a dialog closed without a choice falls back to a queen", () -> {
+            // close the dialog from code, the way a parent window or the watchdog would
+            Timer disposer = new Timer(20, e -> {
+                for (Window w : Window.getWindows()) {
+                    if (w instanceof PromoteGUI d && d.isVisible()) {
+                        d.dispose();
+                        ((Timer) e.getSource()).stop();
+                    }
+                }
+            });
+            disposer.start();
+            PromoteGUI.Choice[] choice = {null};
+            SwingUtilities.invokeAndWait(() -> choice[0] = new PromoteGUI(frame, TILE_SIZE).showDialog());
+            disposer.stop();
+            checkEqual(PromoteGUI.Choice.QUEEN, choice[0], "a dialog closed without a click must still produce a queen");
+        });
+
         // =================================================================
         System.out.println("\n-- SwingPromotionChooser & SwingDrawOfferResolver ---------------");
         // =================================================================
@@ -2821,6 +2871,29 @@ public class GameTest {
     }
 
     // -- Test-only helpers ------------------------------------------------
+
+    /**
+     * Reads the pixels of a button's icon so two icons can be compared.
+     * <p>
+     * The promotion test has to tell White's and Black's piece icons apart without looking at the
+     * screen. I draw the icon image into a plain ARGB image and return all of its pixels row by row.
+     * <p>
+     * Time complexity: O(w * h) for an icon of width w and height h.
+     * Space complexity: O(w * h) for the copy and the pixel array.
+     *
+     * @param pButton button that shows an ImageIcon, never null
+     * @return the icon's pixels as ARGB values, never null
+     * @throws ClassCastException if the button's icon is not an ImageIcon
+     */
+    private static int[] iconPixels(AbstractButton pButton) {
+        Image image = ((ImageIcon) pButton.getIcon()).getImage();
+        BufferedImage copy = new BufferedImage(image.getWidth(null), image.getHeight(null), BufferedImage.TYPE_INT_ARGB);
+        // draw the icon into a plain image so its pixels can be compared
+        Graphics2D g2d = copy.createGraphics();
+        g2d.drawImage(image, 0, 0, null);
+        g2d.dispose();
+        return copy.getRGB(0, 0, copy.getWidth(), copy.getHeight(), null, 0, copy.getWidth());
+    }
 
     /**
      * Creates a timed board on the event thread, stops its clocks and keeps only a weak reference.
