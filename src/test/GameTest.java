@@ -3340,14 +3340,14 @@ public class GameTest {
             int[] moves = new int[MoveGen.MAX_MOVES];
 
             // the rook on f8 covers f1, the square the king would cross
-            Position crossing = PerftTest.fromFen("5r1k/8/8/8/8/8/8/4K2R w K - 0 1");
+            Position crossing = PerftTest.fromFen("5rk1/8/8/8/8/8/8/4K2R w K - 0 1");
             int count = MoveGen.generateLegal(crossing, moves, 0);
             for (int index = 0; index < count; index++) {
                 check(!Moves.isCastling(moves[index]), "castling across an attacked square must not be offered");
             }
 
             // with nothing covering the way the same castling is fine
-            Position allowed = PerftTest.fromFen("7k/8/8/8/8/8/8/4K2R w K - 0 1");
+            Position allowed = PerftTest.fromFen("6k1/8/8/8/8/8/8/4K2R w K - 0 1");
             count = MoveGen.generateLegal(allowed, moves, 0);
             boolean castles = false;
             for (int index = 0; index < count; index++) {

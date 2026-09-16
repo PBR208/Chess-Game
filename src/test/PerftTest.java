@@ -10,17 +10,16 @@ package test;
  * gate counts hundreds of millions of positions and takes minutes.
  *
  * Owner: PBR208 - https://github.com/PBR208/
- * Version: 1.0
+ * Version: 1.1
  */
 
-import engine.core.Bitboards;
+import engine.core.Fen;
 import engine.core.Perft;
-import engine.core.Pieces;
 import engine.core.Position;
 
 public final class PerftTest {
 
-    // the five positions every engine is measured against, with the counts for depth 1 upwards
+    // the five positions every engine is measured against
     private static final String START_POSITION =
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
     private static final String KIWIPETE =
@@ -105,75 +104,18 @@ public final class PerftTest {
     /**
      * Reads a position from a FEN string.
      * <p>
-     * The standard test positions are published as FEN, so the gate needs to read one. This is the
-     * plain reader the tests need, it trusts its input and only understands what a correct FEN
-     * contains: the piece placement from rank eight down to rank one, the side to move, the castling
-     * rights, the en passant square and both counters, with the counters optional. The engine's own
-     * FEN codec with full validation is a separate piece of work, this one exists so the generator
-     * can be tested at all.
+     * The gate and several tests set their positions up from FEN. This used to be a plain reader of
+     * its own, written before the engine had a codec, and it is now the engine's own Fen.parse, so
+     * the tests read a position exactly the way the engine does, including its validation.
      * <p>
      * Time complexity: O(n) in the length of the FEN string. Space complexity: O(1) beyond the
      * position it builds.
      *
      * @param pFen a position in Forsyth Edwards notation, never null
      * @return the position it describes, never null
-     * @throws IllegalArgumentException if the placement or a field cannot be read
+     * @throws IllegalArgumentException if the text is not a legal chess position
      */
     public static Position fromFen(String pFen) {
-        String[] fields = pFen.trim().split("\\s+");
-        // placement and side to move are the two fields no FEN can do without
-        if (fields.length < 2) {
-            throw new IllegalArgumentException("a FEN needs at least a placement and a side to move: " + pFen);
-        }
-
-        Position position = Position.empty();
-        String[] ranks = fields[0].split("/");
-        if (ranks.length != 8) {
-            throw new IllegalArgumentException("a FEN placement needs eight ranks: " + fields[0]);
-        }
-        for (int index = 0; index < 8; index++) {
-            // FEN writes rank eight first, while rank eight is row seven here
-            int rank = 7 - index;
-            int file = 0;
-            for (char symbol : ranks[index].toCharArray()) {
-                if (symbol >= '1' && symbol <= '8') {
-                    // a digit stands for that many empty squares
-                    file += symbol - '0';
-                } else {
-                    position.put(Pieces.fromFenChar(symbol), Bitboards.square(file, rank));
-                    file++;
-                }
-            }
-        }
-
-        position.setSideToMove(fields[1].equals("w") ? Pieces.WHITE : Pieces.BLACK);
-
-        if (fields.length > 2) {
-            int rights = 0;
-            if (fields[2].indexOf('K') >= 0) {
-                rights |= Position.WHITE_KINGSIDE;
-            }
-            if (fields[2].indexOf('Q') >= 0) {
-                rights |= Position.WHITE_QUEENSIDE;
-            }
-            if (fields[2].indexOf('k') >= 0) {
-                rights |= Position.BLACK_KINGSIDE;
-            }
-            if (fields[2].indexOf('q') >= 0) {
-                rights |= Position.BLACK_QUEENSIDE;
-            }
-            position.setCastlingRights(rights);
-        }
-        // a dash means no pawn can be captured en passant
-        if (fields.length > 3 && !fields[3].equals("-")) {
-            position.setEpSquare(Bitboards.squareOf(fields[3]));
-        }
-        if (fields.length > 4) {
-            position.setHalfmoveClock(Integer.parseInt(fields[4]));
-        }
-        if (fields.length > 5) {
-            position.setFullmoveNumber(Integer.parseInt(fields[5]));
-        }
-        return position;
+        return Fen.parse(pFen);
     }
 }
