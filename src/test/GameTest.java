@@ -638,6 +638,67 @@ public class GameTest {
             cleanupSavedGame(white);
         });
 
+        test("PgnManager: the default games folder follows each operating system", () -> {
+            String home = System.getProperty("user.home");
+            // an absolute path on whatever OS runs the test
+            String absolute = java.nio.file.Paths.get(System.getProperty("java.io.tmpdir"), "data").toString();
+
+            checkEqual(java.nio.file.Paths.get(absolute, "ChessGame", "games"),
+                    PgnManager.defaultGamesDirectory("Windows 11", home, absolute, null),
+                    "Windows must use APPDATA");
+            checkEqual(java.nio.file.Paths.get(home, "AppData", "Roaming", "ChessGame", "games"),
+                    PgnManager.defaultGamesDirectory("Windows 10", home, " ", null),
+                    "Windows without APPDATA must use AppData/Roaming in the home folder");
+            checkEqual(java.nio.file.Paths.get(home, "Library", "Application Support", "ChessGame", "games"),
+                    PgnManager.defaultGamesDirectory("Mac OS X", home, null, null),
+                    "macOS must use Application Support");
+            checkEqual(java.nio.file.Paths.get(absolute, "chess-game", "games"),
+                    PgnManager.defaultGamesDirectory("Linux", home, null, absolute),
+                    "Linux must use XDG_DATA_HOME");
+            checkEqual(java.nio.file.Paths.get(home, ".local", "share", "chess-game", "games"),
+                    PgnManager.defaultGamesDirectory("Linux", home, null, "relative/data"),
+                    "a relative XDG_DATA_HOME must be ignored");
+        });
+
+        test("PgnManager: old games are copied to the new folder once and never overwritten", () -> {
+            java.nio.file.Path legacy = Files.createTempDirectory("chess-legacy-games");
+            Files.writeString(legacy.resolve("old.pgn"), "[White \"A\"]");
+
+            java.nio.file.Path target = Files.createTempDirectory("chess-new-library").resolve("games");
+            checkEqual(1, PgnManager.migrateLegacyGames(legacy, target), "the old game must be copied");
+            check(Files.exists(target.resolve("old.pgn")), "the copied game must be in the new folder");
+
+            // a later start must not bring back a game the player deleted
+            Files.delete(target.resolve("old.pgn"));
+            checkEqual(0, PgnManager.migrateLegacyGames(legacy, target), "the copy must only happen once");
+            check(!Files.exists(target.resolve("old.pgn")), "a deleted game must stay deleted");
+            check(Files.exists(legacy.resolve("old.pgn")), "the old folder must stay untouched");
+
+            // a game that already exists in the new folder keeps its content
+            java.nio.file.Path existing = Files.createTempDirectory("chess-existing-library");
+            Files.writeString(existing.resolve("old.pgn"), "mine");
+            checkEqual(0, PgnManager.migrateLegacyGames(legacy, existing), "an existing game must not be copied over");
+            checkEqual("mine", Files.readString(existing.resolve("old.pgn")), "an existing game must not be overwritten");
+        });
+
+        test("PgnManager: save reports when the games folder can't be used", () -> {
+            String previous = System.getProperty(PgnManager.GAMES_DIR_PROPERTY);
+            java.nio.file.Path blocker = Files.createTempFile("chess-not-a-folder", ".txt");
+            try {
+                // a regular file where the folder should be makes saving impossible
+                System.setProperty(PgnManager.GAMES_DIR_PROPERTY, blocker.toString());
+                boolean saved = PgnManager.save(new GameRecord("A", "B", "1-0", "2026.01.01", "Blitz 5+0",
+                        List.of("e4"), List.of("fen1")));
+                check(!saved, "saving into a file instead of a folder must report a failure");
+            } finally {
+                // later tests keep using the temporary games folder
+                if (previous != null) {
+                    System.setProperty(PgnManager.GAMES_DIR_PROPERTY, previous);
+                }
+                Files.deleteIfExists(blocker);
+            }
+        });
+
         // =================================================================
         System.out.println("\n-- BoardState ---------------------------------------------------");
         // =================================================================
