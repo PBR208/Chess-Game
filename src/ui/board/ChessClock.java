@@ -1,5 +1,16 @@
 package ui.board;
 
+/*
+ * Purpose: ChessClock keeps and draws the remaining thinking time of one player. It counts down
+ * only while it runs, reports when the time is used up and paints the player's clock bar above or
+ * below the board. I measure the elapsed time with the monotonic System.nanoTime clock, while the
+ * Swing timer only decides how often the display refreshes, so a busy event thread can never hand
+ * a player free time. An unlimited clock simply never counts down.
+ *
+ * Owner: PBR208 - https://github.com/PBR208/
+ * Version: 1.0
+ */
+
 import javax.swing.*;
 import java.awt.*;
 
@@ -9,7 +20,12 @@ public class ChessClock {
     private static final long LOW_TIME_MS = 30 * 1000L;       // red at < 30 s
 
     private final boolean isWhite;
+    // remaining time as last shown on screen, refreshed on every tick
     private long timeMs;
+    // remaining time at the moment the clock was last started or stopped
+    private long bankedMs;
+    // System.nanoTime() of the last start, only meaningful while running
+    private long runningSinceNanos;
     private boolean running = false;
 
     private final Runnable onRepaint;
@@ -29,46 +45,151 @@ public class ChessClock {
         void onExpired(boolean isWhiteExpired);
     }
 
-    public ChessClock(boolean isWhite, long startTimeMs, Runnable onRepaint, TimeExpiredCallback onExpired) {
-        this.isWhite = isWhite;
-        this.START_TIME_MS = startTimeMs;
-        this.timeMs = startTimeMs;
-        this.onRepaint = onRepaint;
-        this.onExpired = onExpired;
+    /**
+     * Creates a stopped clock with the given starting time.
+     * <p>
+     * Every player gets their own clock when a board is built. I store the colour, the starting
+     * time and the two callbacks, and start the Swing timer that refreshes the display ten times a
+     * second. The timer only looks at the clock, the actual time is measured separately.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pIsWhite     true for White's clock, false for Black's
+     * @param pStartTimeMs starting time in milliseconds, 0 for an unlimited clock, never negative
+     * @param pOnRepaint   called after every refresh so the board can redraw, never null
+     * @param pOnExpired   called once when the time runs out, never null
+     */
+    public ChessClock(boolean pIsWhite, long pStartTimeMs, Runnable pOnRepaint, TimeExpiredCallback pOnExpired) {
+        this.isWhite = pIsWhite;
+        this.START_TIME_MS = pStartTimeMs;
+        this.timeMs = pStartTimeMs;
+        this.bankedMs = pStartTimeMs;
+        this.onRepaint = pOnRepaint;
+        this.onExpired = pOnExpired;
 
         timer = new Timer(100, e -> tick());
         timer.start(); // always spinning; only counts while running == true
     }
 
+    /**
+     * Starts counting down this player's time.
+     * <p>
+     * A player's time runs from the moment it is their turn. I remember that moment from the
+     * monotonic clock and mark the clock as running. Starting a clock that already runs changes
+     * nothing, so its original start moment is kept.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
     public void start() {
+        // a running clock keeps its original start moment
+        if (running) {
+            return;
+        }
+        runningSinceNanos = System.nanoTime();
         running = true;
     }
 
+    /**
+     * Stops counting down and keeps the time that is left.
+     * <p>
+     * When a player finishes a move their time has to freeze exactly where it is. I work out the
+     * remaining time from the monotonic clock, store it and mark the clock as stopped. Stopping a
+     * clock that isn't running changes nothing.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
     public void stop() {
+        // nothing to settle on a stopped clock
+        if (!running) {
+            return;
+        }
+        // bank the time that was left at this moment
+        bankedMs = currentTimeMs();
+        timeMs = bankedMs;
         running = false;
     }
 
+    /**
+     * Stops the clock and puts the starting time back.
+     * <p>
+     * A restarted game needs both clocks as they were at the beginning. I stop the clock and reset
+     * the stored and displayed time to the starting time.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
     public void reset() {
         running = false;
         timeMs = START_TIME_MS;
+        bankedMs = START_TIME_MS;
     }
 
+    /**
+     * Adds time to this player's clock, for example the increment after a move.
+     * <p>
+     * Time controls such as 2+1 give a player extra seconds after every move they make. I add the
+     * amount to the banked time, which works whether the clock is running or not, and refresh the
+     * displayed value. Unlimited clocks and amounts of zero or less are ignored.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pExtraMs milliseconds to add, 0 or less does nothing
+     */
+    public void addTime(long pExtraMs) {
+        // an unlimited clock has nothing to add to
+        if (START_TIME_MS == 0 || pExtraMs <= 0) {
+            return;
+        }
+        bankedMs += pExtraMs;
+        timeMs = currentTimeMs();
+    }
+
+    /**
+     * Refreshes the display and detects when the time has run out.
+     * <p>
+     * The Swing timer calls this ten times a second. A stopped clock is ignored and an unlimited
+     * clock only repaints. Otherwise I take the remaining time from the monotonic clock, so a tick
+     * that arrives late still sees the right time, repaint, and report the flag fall once the time
+     * reaches zero.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
     private void tick() {
         if (!running) return;
 
-        //if 0 = unlimmited time
+        // an unlimited clock only needs the repaint
         if (START_TIME_MS == 0) {
             onRepaint.run();
             return;
         }
 
-        timeMs = Math.max(0, timeMs - 100);
+        timeMs = currentTimeMs();
         onRepaint.run();
 
         if (timeMs == 0) {
             stop();
             onExpired.onExpired(isWhite);
         }
+    }
+
+    /**
+     * Works out how much time is left right now.
+     * <p>
+     * Counting timer ticks lost time whenever the event thread was busy, because late ticks were
+     * merged into one. I subtract the time that really passed since the last start, measured with
+     * System.nanoTime, from the banked time. Stopped and unlimited clocks just return the banked
+     * value.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return remaining time in milliseconds, never below 0
+     */
+    private long currentTimeMs() {
+        // a stopped or unlimited clock doesn't lose time
+        if (!running || START_TIME_MS == 0) {
+            return bankedMs;
+        }
+        long elapsedMs = (System.nanoTime() - runningSinceNanos) / 1_000_000;
+        return Math.max(0, bankedMs - elapsedMs);
     }
 
     public void draw(Graphics2D g2d, int yOffset, int width, int height) {
@@ -131,7 +252,17 @@ public class ChessClock {
         return running;
     }
 
+    /**
+     * Returns the time this player has left.
+     * <p>
+     * Tests, the result logic and later features need the exact remaining time, not the value that
+     * was last painted. I compute it from the monotonic clock at the moment of the call.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return remaining time in milliseconds, 0 for an unlimited clock or when the time is up
+     */
     public long getTimeMs() {
-        return timeMs;
+        return currentTimeMs();
     }
 }

@@ -38,15 +38,32 @@ public class Board extends JPanel {
 
     private final ChessClock whiteClock;
     private final ChessClock blackClock;
+    // added to a player's clock after each of their moves
+    private final long incrementMs;
 
     private final Color LIGHT_TILE = new Color(232, 235, 239);
     private final Color DARK_TILE = new Color(125, 135, 150);
     private final Color HINT_COLOR = new Color(81, 168, 0, 200);
 
-    public Board(GameConfig config) {
-        this.gc = new GameController(this, config, new SwingPromotionChooser(this), new SwingDrawOfferResolver(this));
-        this.whiteClock = new ChessClock(true, config.whiteTimeMs(), this::repaint, this::onTimeExpired);
-        this.blackClock = new ChessClock(false, config.blackTimeMs(), this::repaint, this::onTimeExpired);
+    /**
+     * Builds the game board for a new game.
+     * <p>
+     * A game needs its rules controller, two clocks, mouse input and the starting position. I create
+     * the controller with the Swing dialogs, both clocks with the configured times, remember the
+     * increment, size the panel for the board and the two clock bars, hook up the mouse, place the
+     * pieces and start White's clock.
+     * <p>
+     * Time complexity: O(p) for placing the p starting pieces. Space complexity: O(p).
+     *
+     * @param pConfig names, times and increment of the new game, never null
+     * @throws NullPointerException if pConfig is null
+     */
+    public Board(GameConfig pConfig) {
+        this.gc = new GameController(this, pConfig, new SwingPromotionChooser(this), new SwingDrawOfferResolver(this));
+        this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), this::repaint, this::onTimeExpired);
+        this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), this::repaint, this::onTimeExpired);
+        // the same increment applies to both players
+        this.incrementMs = pConfig.incrementMs();
 
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
 
@@ -155,20 +172,22 @@ public class Board extends JPanel {
      * Starts the clock of the side to move and stops the other one.
      * <p>
      * The controller that just played a move knows best whose turn it is, and that also holds for a
-     * controller other than the board's own one. I stop the clock of the side that just moved and
-     * start the clock of the side to move.
+     * controller other than the board's own one. I stop the clock of the side that just moved, add
+     * the increment to it as a Fischer clock does, and start the clock of the side to move.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
      * @param pWhiteToMove true if White is to move now, false if Black is
      */
     public void switchClocks(boolean pWhiteToMove) {
-        // only the side to move uses up time
+        // only the side to move uses up time, the side that just moved earns its increment
         if (pWhiteToMove) {
             blackClock.stop();
+            blackClock.addTime(incrementMs);
             whiteClock.start();
         } else {
             whiteClock.stop();
+            whiteClock.addTime(incrementMs);
             blackClock.start();
         }
     }
@@ -212,6 +231,21 @@ public class Board extends JPanel {
      */
     public boolean isClockRunning(boolean pWhite) {
         return pWhite ? whiteClock.isRunning() : blackClock.isRunning();
+    }
+
+    /**
+     * Returns the time one player has left.
+     * <p>
+     * Tests and features such as the result logic need the exact remaining time of a player. I ask
+     * the requested clock for its current value.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pWhite true for White's clock, false for Black's
+     * @return remaining time in milliseconds, 0 for an unlimited clock
+     */
+    public long getRemainingTimeMs(boolean pWhite) {
+        return pWhite ? whiteClock.getTimeMs() : blackClock.getTimeMs();
     }
 
     public int toVisualX(int col) {

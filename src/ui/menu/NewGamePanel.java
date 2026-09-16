@@ -1,5 +1,15 @@
 package ui.menu;
 
+/*
+ * Purpose: NewGamePanel is the screen where players set up a new game before it starts. It asks
+ * for both player names and a time control, either one of the presets or a custom duration. I
+ * collect everything into a GameConfig, so the board, the clocks and the saved game all start from
+ * the same settings. Presets such as Bullet 2+1 also carry their increment.
+ *
+ * Owner: PBR208 - https://github.com/PBR208/
+ * Version: 1.0
+ */
+
 import engine.model.GameConfig;
 import app.Main;
 import ui.theme.Theme;
@@ -11,15 +21,16 @@ import java.awt.*;
 
 public class NewGamePanel extends JPanel {
 
+    // button text, label, white time, black time and increment in milliseconds
     private static final Object[][] PRESETS = {
-            {"Unlimited", "Unlimited", 0L, 0L},
-            {"Bullet 1+0", "Bullet 1+0", 60_000L, 60_000L},
-            {"Bullet 2+1", "Bullet 2+1", 120_000L, 120_000L},
-            {"Blitz 3+0", "Blitz 3+0", 180_000L, 180_000L},
-            {"Blitz 5+0", "Blitz 5+0", 300_000L, 300_000L},
-            {"Rapid 10+0", "Rapid 10+0", 600_000L, 600_000L},
-            {"Rapid 15+10", "Rapid 15+10", 900_000L, 900_000L},
-            {"Classical 30+0", "Classical 30+0", 1_800_000L, 1_800_000L},
+            {"Unlimited", "Unlimited", 0L, 0L, 0L},
+            {"Bullet 1+0", "Bullet 1+0", 60_000L, 60_000L, 0L},
+            {"Bullet 2+1", "Bullet 2+1", 120_000L, 120_000L, 1_000L},
+            {"Blitz 3+0", "Blitz 3+0", 180_000L, 180_000L, 0L},
+            {"Blitz 5+0", "Blitz 5+0", 300_000L, 300_000L, 0L},
+            {"Rapid 10+0", "Rapid 10+0", 600_000L, 600_000L, 0L},
+            {"Rapid 15+10", "Rapid 15+10", 900_000L, 900_000L, 10_000L},
+            {"Classical 30+0", "Classical 30+0", 1_800_000L, 1_800_000L, 0L},
     };
 
     private final JTextField whiteField = new JTextField("White", 14);
@@ -30,7 +41,18 @@ public class NewGamePanel extends JPanel {
     private long selectedWhiteMs = 600_000L;
     private long selectedBlackMs = 600_000L;
     private String selectedLabel = "Unlimited";
+    private long selectedIncrementMs = 0;
 
+    /**
+     * Builds the New Game screen with player names, time controls and the start and back buttons.
+     * <p>
+     * Before a game starts the players pick their names and a time control. I lay out the name
+     * fields, one toggle button per preset that remembers its times and increment, the custom time
+     * row and the Back and Start buttons. Start hands the resulting configuration to the main
+     * window.
+     * <p>
+     * Time complexity: O(k) for k presets. Space complexity: O(k) for their buttons.
+     */
     public NewGamePanel() {
         setBackground(Theme.BG);
         setLayout(new GridBagLayout());
@@ -76,11 +98,14 @@ public class NewGamePanel extends JPanel {
             long wMs = (long) p[2];
             long bMs = (long) p[3];
             String label = (String) p[1];
+            // Bullet 2+1 and Rapid 15+10 add time after every move
+            long incMs = (long) p[4];
 
             btn.addActionListener(e -> {
                 selectedWhiteMs = wMs;
                 selectedBlackMs = bMs;
                 selectedLabel = label;
+                selectedIncrementMs = incMs;
             });
 
             btn.addItemListener(e -> {
@@ -134,15 +159,8 @@ public class NewGamePanel extends JPanel {
         JButton startBtn = actionButton("Start ▶", true);
 
         backBtn.addActionListener(e -> Main.showMenu());
-        startBtn.addActionListener(e -> {
-            GameConfig cfg = new GameConfig(
-                    whiteField.getText().trim(),
-                    blackField.getText().trim(),
-                    selectedWhiteMs,
-                    selectedBlackMs,
-                    selectedLabel);
-            Main.startGame(cfg);
-        });
+        // start the game with everything selected on this screen
+        startBtn.addActionListener(e -> Main.startGame(createConfig()));
 
         buttons.add(backBtn);
         buttons.add(startBtn);
@@ -151,6 +169,15 @@ public class NewGamePanel extends JPanel {
         add(card, new GridBagConstraints());
     }
 
+    /**
+     * Uses the minutes and seconds from the custom fields as the time control.
+     * <p>
+     * Players who want a time that isn't a preset type it into the two fields. I parse both fields,
+     * set the same total time for both players with no increment and build a matching label.
+     * Invalid input keeps the previous selection.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
     private void applyCustomTime() {
         try {
             long mins = Long.parseLong(customMin.getText().trim());
@@ -158,9 +185,31 @@ public class NewGamePanel extends JPanel {
             selectedWhiteMs = (mins * 60 + secs) * 1000L;
             selectedBlackMs = selectedWhiteMs;
             selectedLabel = "Custom " + mins + "+" + secs;
+            // custom times don't have an increment
+            selectedIncrementMs = 0;
         } catch (NumberFormatException ex) {
             // ignore invalid input, keep previous selection
         }
+    }
+
+    /**
+     * Builds the configuration for a new game from the current selections.
+     * <p>
+     * The Start button needs one object with everything the game has to know. I take the trimmed
+     * names from the two fields and the times, label and increment of the selected time control.
+     * <p>
+     * Time complexity: O(n) in the length of the names. Space complexity: O(n) for the configuration.
+     *
+     * @return the configuration for the new game, never null
+     */
+    public GameConfig createConfig() {
+        return new GameConfig(
+                whiteField.getText().trim(),
+                blackField.getText().trim(),
+                selectedWhiteMs,
+                selectedBlackMs,
+                selectedLabel,
+                selectedIncrementMs);
     }
 
     private JLabel sectionLabel(String text) {
