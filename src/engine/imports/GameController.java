@@ -323,8 +323,6 @@ public class GameController {
         } else {
             pMove.getPiece().setCol(pMove.getNewCol());
             pMove.getPiece().setRow(pMove.getNewRow());
-            pMove.getPiece().setxPos(pMove.getNewCol() * b.getTileSize());
-            pMove.getPiece().setyPos(pMove.getNewRow() * b.getTileSize());
 
             pMove.getPiece().setFirstMove(false);
 
@@ -408,8 +406,6 @@ public class GameController {
 
         pMove.getPiece().setCol(pMove.getNewCol());
         pMove.getPiece().setRow(pMove.getNewRow());
-        pMove.getPiece().setxPos(pMove.getNewCol() * b.getTileSize());
-        pMove.getPiece().setyPos(pMove.getNewRow() * b.getTileSize());
 
         // a moved pawn loses its double step
         pMove.getPiece().setFirstMove(false);
@@ -643,7 +639,6 @@ public class GameController {
         if (newCol == 6) {
             Piece rook = state.getPiece(7, row);
             rook.setCol(5);
-            rook.setxPos(5 * b.getTileSize());
             rook.setFirstMove(false);
             state.moveOnGrid(rook, 7, row);
         }
@@ -651,7 +646,6 @@ public class GameController {
         if (newCol == 2) {
             Piece rook = state.getPiece(0, row);
             rook.setCol(3);
-            rook.setxPos(3 * b.getTileSize());
             rook.setFirstMove(false);
             state.moveOnGrid(rook, 0, row);
         }

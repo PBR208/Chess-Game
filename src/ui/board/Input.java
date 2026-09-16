@@ -54,8 +54,7 @@ public class Input extends MouseAdapter {
         Piece pAtLocation = b.getPiece(col, row);
         if (pAtLocation != null) {
             // keep the piece centered under the mouse while it is dragged
-            pAtLocation.setxPos(pEvent.getX() - b.getTileSize() / 2);
-            pAtLocation.setyPos(pEvent.getY() - b.getTileSize() / 2);
+            b.setDragPosition(pEvent.getX() - b.getTileSize() / 2, pEvent.getY() - b.getTileSize() / 2);
 
             b.setSelectedPiece(pAtLocation);
         }
@@ -65,8 +64,8 @@ public class Input extends MouseAdapter {
     public void mouseDragged(MouseEvent e) {
 
         if (b.getSelectedPiece() != null) {
-            b.getSelectedPiece().setxPos(e.getX() - b.getTileSize() / 2); // /2 for centering on the tile
-            b.getSelectedPiece().setyPos(e.getY() - b.getTileSize() / 2);
+            // /2 keeps the sprite centered on the tile under the mouse
+            b.setDragPosition(e.getX() - b.getTileSize() / 2, e.getY() - b.getTileSize() / 2);
 
             b.repaint();
         }
@@ -77,8 +76,9 @@ public class Input extends MouseAdapter {
      * <p>
      * A move ends when the mouse button is released. A release outside the squares used to count as
      * the nearest edge square, which could play a move nobody meant, so it now cancels the drag. For a
-     * release on a square I build the move, play it when the rules allow it and otherwise put the
-     * piece back on its own square. The selection is cleared in every case.
+     * release on a square I build the move and play it when the rules allow it. A move the rules
+     * refuse needs no cleanup, because the piece is drawn on its own square again as soon as the
+     * selection is gone. The selection is cleared in every case.
      * <p>
      * Time complexity: O(s * p) when a move is played, for the end of game search over s squares and p
      * pieces. Space complexity: O(1) apart from the recorded move.
@@ -97,10 +97,6 @@ public class Input extends MouseAdapter {
 
             if (m != null && gc.isValidMove(m)) {
                 gc.makeMove(m);
-            } else {
-                // put the piece back onto its own square
-                selected.setxPos(selected.getCol() * b.getTileSize());
-                selected.setyPos(selected.getRow() * b.getTileSize());
             }
         }
 

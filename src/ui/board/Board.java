@@ -42,9 +42,15 @@ public class Board extends JPanel {
 
     private final BoardState state = new BoardState();
     private Piece selectedPiece;
+    // pixel position of the dragged piece, it follows the mouse instead of sitting on its square
+    private int dragX;
+    private int dragY;
     private final HashSet<Integer> legalMoveTiles = new HashSet<>();
 
     private final GameController gc;
+
+    // piece images scaled to this board's square size
+    private final PieceSprites sprites;
 
     private final ChessClock whiteClock;
     private final ChessClock blackClock;
@@ -94,6 +100,8 @@ public class Board extends JPanel {
         }
         this.tileSize = pTileSize;
         this.clockHeight = pTileSize;
+        // the board draws the pieces, so it owns their images
+        this.sprites = new PieceSprites(pTileSize);
         this.gc = new GameController(this, pConfig, new SwingPromotionChooser(this), new SwingDrawOfferResolver(this));
         this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), this::repaint, this::onTimeExpired);
         this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), this::repaint, this::onTimeExpired);
@@ -200,10 +208,12 @@ public class Board extends JPanel {
         }
 
         for (Piece p : state.getPieces()) {
+            // the piece under the mouse follows the cursor, all others sit on their square
             if (p == selectedPiece) {
-                p.paint(g2d, p.getxPos(), p.getyPos());
+                g2d.drawImage(sprites.spriteFor(p.getType(), p.isWhite()), dragX, dragY, null);
             } else {
-                p.paint(g2d, toVisualX(p.getCol()), toVisualY(p.getRow()));
+                g2d.drawImage(sprites.spriteFor(p.getType(), p.isWhite()),
+                        toVisualX(p.getCol()), toVisualY(p.getRow()), null);
             }
         }
 
@@ -368,6 +378,38 @@ public class Board extends JPanel {
         // floorDiv keeps points on the top clock bar off the first row
         int r = Math.floorDiv(pY - clockHeight, tileSize);
         return gc.isTurnOfWhite() ? r : 7 - r;
+    }
+
+    /**
+     * Remembers where the dragged piece is drawn.
+     * <p>
+     * While a piece is dragged it hangs on the mouse instead of standing on a square, and that pixel
+     * position used to live in the piece itself, which gave every rules class a reason to know about
+     * screen coordinates. The board draws, so the board keeps the position. The values are only read
+     * while a piece is selected, so a stale position after a drop does no harm.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pX horizontal panel coordinate of the sprite's upper left corner, any value
+     * @param pY vertical panel coordinate of the sprite's upper left corner, any value
+     */
+    public void setDragPosition(int pX, int pY) {
+        this.dragX = pX;
+        this.dragY = pY;
+    }
+
+    /**
+     * Returns the scaled piece images this board draws with.
+     * <p>
+     * The sprites are scaled once per board and tests check that they match the square size. I hand
+     * out the same instance the painting uses.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the sprite source of this board, never null
+     */
+    public PieceSprites getSprites() {
+        return sprites;
     }
 
     private void onTimeExpired(boolean isWhiteExpired) {
