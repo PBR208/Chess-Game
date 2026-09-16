@@ -3573,6 +3573,69 @@ public class GameTest {
             }
         });
 
+        // =================================================================
+        System.out.println("\n-- Algebraic notation from the core ------------------------------");
+        // =================================================================
+
+        test("San: plain moves get the piece letter, pawns get none", () -> {
+            Position start = Position.startPosition();
+            checkEqual("e4", San.of(start, Moves.encode(Bitboards.squareOf("e2"), Bitboards.squareOf("e4"))),
+                    "a pawn push is written as the square alone");
+            checkEqual("Nf3", San.of(start, Moves.encode(Bitboards.squareOf("g1"), Bitboards.squareOf("f3"))),
+                    "a knight is written with an N");
+            checkEqual(Fen.START_POSITION, Fen.write(start), "writing notation must not change the position");
+        });
+
+        test("San: a capturing pawn is named by the file it came from", () -> {
+            Position position = Fen.parse("rnbqkbnr/ppp1pppp/8/3p4/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2");
+            checkEqual("exd5", San.of(position, Moves.encode(Bitboards.squareOf("e4"), Bitboards.squareOf("d5"))),
+                    "a pawn capture names its own file");
+        });
+
+        test("San: identical pieces are told apart by file, or by rank when the file is shared", () -> {
+            Position knights = Fen.parse("4k3/8/8/8/8/5N2/8/1N2K3 w - - 0 1");
+            checkEqual("Nbd2", San.of(knights, Moves.encode(Bitboards.squareOf("b1"), Bitboards.squareOf("d2"))),
+                    "two knights reaching d2 are told apart by their file");
+
+            Position rooks = Fen.parse("4k3/8/8/8/8/R7/8/R3K3 w - - 0 1");
+            checkEqual("R1a2", San.of(rooks, Moves.encode(Bitboards.squareOf("a1"), Bitboards.squareOf("a2"))),
+                    "two rooks on one file are told apart by their rank");
+        });
+
+        test("San: a promotion names the piece the pawn becomes", () -> {
+            Position position = Fen.parse("8/P7/8/8/7k/8/8/4K3 w - - 0 1");
+            checkEqual("a8=Q", San.of(position, Moves.encodePromotion(
+                            Bitboards.squareOf("a7"), Bitboards.squareOf("a8"), Moves.PROMOTION_QUEEN)),
+                    "a promotion to a queen");
+            checkEqual("a8=N", San.of(position, Moves.encodePromotion(
+                            Bitboards.squareOf("a7"), Bitboards.squareOf("a8"), Moves.PROMOTION_KNIGHT)),
+                    "an underpromotion to a knight");
+        });
+
+        test("San: castling is written with the letter O", () -> {
+            Position position = Fen.parse("4k3/8/8/8/8/8/8/R3K2R w KQ - 0 1");
+            checkEqual("O-O", San.of(position, Moves.encodeCastling(
+                    Bitboards.squareOf("e1"), Bitboards.squareOf("g1"))), "kingside castling");
+            checkEqual("O-O-O", San.of(position, Moves.encodeCastling(
+                    Bitboards.squareOf("e1"), Bitboards.squareOf("c1"))), "queenside castling");
+        });
+
+        test("San: check and mate are marked", () -> {
+            Position check = Fen.parse("4k3/8/8/8/8/8/8/4KR2 w - - 0 1");
+            checkEqual("Rf8+", San.of(check, Moves.encode(Bitboards.squareOf("f1"), Bitboards.squareOf("f8"))),
+                    "a rook giving check gets a plus");
+
+            Position mate = Fen.parse("6k1/5ppp/8/8/8/8/8/R3K3 w - - 0 1");
+            checkEqual("Ra8#", San.of(mate, Moves.encode(Bitboards.squareOf("a1"), Bitboards.squareOf("a8"))),
+                    "a mate on the back rank gets a hash");
+        });
+
+        test("San: an en passant capture reads like any other pawn capture", () -> {
+            Position position = Fen.parse("4k3/8/8/3pP3/8/8/8/4K3 w - d6 0 1");
+            checkEqual("exd6", San.of(position, Moves.encodeEnPassant(
+                    Bitboards.squareOf("e5"), Bitboards.squareOf("d6"))), "en passant is written as exd6");
+        });
+
         // -- Summary ------------------------------------------------------
         // the host frame is null on a headless run
         if (frame != null) SwingUtilities.invokeAndWait(frame::dispose);
