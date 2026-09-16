@@ -1150,7 +1150,7 @@ public class GameTest {
                     FiftyRuleDraw d = new FiftyRuleDraw(frame, TILE_SIZE, false);
                     check(hasButton(d, "Claim Draw"), "Must have 'Claim Draw'");
                     check(hasButton(d, "Decline"), "Must have 'Decline'");
-                    check(!hasButton(d, "Restart"), "Must NOT have 'Restart'");
+                    check(!hasButton(d, "OK"), "Must NOT have 'OK'");
                     d.dispose();
                 }));
 
@@ -1183,21 +1183,21 @@ public class GameTest {
         guiTest("FiftyRuleDraw ·forced draw has correct buttons", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     FiftyRuleDraw d = new FiftyRuleDraw(frame, TILE_SIZE, true);
-                    check(hasButton(d, "Restart"), "Must have 'Restart'");
+                    check(hasButton(d, "OK"), "Must have 'OK'");
                     check(!hasButton(d, "Claim Draw"), "Must NOT have 'Claim Draw'");
                     check(!hasButton(d, "Decline"), "Must NOT have 'Decline'");
                     d.dispose();
                 }));
 
-        guiTest("FiftyRuleDraw ·forced draw Restart closes dialog", () -> {
-            scheduleClick("Restart");
+        guiTest("FiftyRuleDraw ·forced draw OK closes dialog", () -> {
+            scheduleClick("OK");
             boolean[] visible = {true};
             SwingUtilities.invokeAndWait(() -> {
                 FiftyRuleDraw d = new FiftyRuleDraw(frame, TILE_SIZE, true);
                 d.setVisible(true);
                 visible[0] = d.isVisible();
             });
-            check(!visible[0], "Forced-draw dialog should close after clicking Restart");
+            check(!visible[0], "Forced-draw dialog should close after clicking OK");
         });
 
         // ═════════════════════════════════════════════════════════════════
@@ -1315,7 +1315,7 @@ public class GameTest {
         });
 
         guiTest("SwingDrawOfferResolver ·notifyForcedDraw shows and dismisses the forced-draw dialog", () -> {
-            scheduleClick("Restart");
+            scheduleClick("OK");
             SwingUtilities.invokeAndWait(() -> {
                 JFrame testFrame = new JFrame();
                 Board board = new Board(GameConfig.unlimited());
@@ -2036,6 +2036,172 @@ public class GameTest {
                     check(ending[0].contains("Threefold"), "the game must end by threefold repetition, got: " + ending[0]);
                 }));
 
+        test("GameController · king against king is an immediate draw", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whiteKing = new King(board, 4, 7, true);   // e1
+                    custom.add(whiteKing);
+                    custom.add(new King(board, 4, 0, false));         // e8
+                    custom.add(new Knight(board, 3, 6, false));       // d2, the last piece besides the kings
+                    state.setPieces(custom);
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    String[] ending = {null};
+                    gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
+
+                    gc.makeMove(new Move(state, whiteKing, 3, 6)); // Kxd2 leaves two bare kings
+                    checkNotNull(ending[0], "two bare kings must end the game");
+                    check(ending[0].startsWith("1/2-1/2") && ending[0].contains("Insufficient material"),
+                            "the game must end as a draw by insufficient material, got: " + ending[0]);
+                }));
+
+        test("GameController · king and knight against king is a draw", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whiteKnight = new Knight(board, 1, 7, true); // b1
+                    custom.add(new King(board, 4, 7, true));           // e1
+                    custom.add(whiteKnight);
+                    custom.add(new King(board, 4, 0, false));          // e8
+                    state.setPieces(custom);
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    String[] ending = {null};
+                    gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
+
+                    gc.makeMove(new Move(state, whiteKnight, 2, 5)); // Nc3
+                    checkNotNull(ending[0], "a lone knight can never mate, so the game must end");
+                    check(ending[0].startsWith("1/2-1/2") && ending[0].contains("Insufficient material"),
+                            "the game must end as a draw by insufficient material, got: " + ending[0]);
+                }));
+
+        test("GameController · bishops on the same colour can't mate, so the game is drawn", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whiteKing = new King(board, 4, 7, true);   // e1
+                    custom.add(whiteKing);
+                    custom.add(new Bishop(board, 2, 7, true));        // c1, dark square
+                    custom.add(new King(board, 4, 0, false));         // e8
+                    custom.add(new Bishop(board, 5, 0, false));       // f8, dark square as well
+                    state.setPieces(custom);
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    String[] ending = {null};
+                    gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
+
+                    gc.makeMove(new Move(state, whiteKing, 4, 6)); // Ke2
+                    checkNotNull(ending[0], "same coloured bishops can never mate, so the game must end");
+                    check(ending[0].startsWith("1/2-1/2") && ending[0].contains("Insufficient material"),
+                            "the game must end as a draw by insufficient material, got: " + ending[0]);
+                }));
+
+        test("GameController · bishops on opposite colours keep the game going", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    Piece whiteKing = new King(board, 4, 7, true);   // e1
+                    custom.add(whiteKing);
+                    custom.add(new Bishop(board, 2, 7, true));        // c1, dark square
+                    custom.add(new King(board, 4, 0, false));         // e8
+                    custom.add(new Bishop(board, 2, 0, false));       // c8, light square
+                    state.setPieces(custom);
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    String[] ending = {null};
+                    gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
+
+                    gc.makeMove(new Move(state, whiteKing, 4, 6)); // Ke2
+                    check(ending[0] == null, "opposite coloured bishops can still mate, got: " + ending[0]);
+                }));
+
+        test("GameController · running out of time against a lone king is a draw", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    custom.add(new King(board, 4, 7, true));   // e1
+                    custom.add(new Queen(board, 3, 7, true));  // d1
+                    custom.add(new King(board, 4, 0, false));  // e8, Black has nothing else
+                    state.setPieces(custom);
+
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    String[] ending = {null};
+                    gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
+
+                    gc.flagFall(true); // White's clock runs out
+                    checkNotNull(ending[0], "a flag fall always ends the game");
+                    check(ending[0].startsWith("1/2-1/2"), "a lone king can't win on time, got: " + ending[0]);
+                }));
+
+        test("GameController · the 50-move claim is offered once to each player, not after every move", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    GameConfig cfg = GameConfig.unlimited();
+                    Board board = new Board(cfg);
+                    BoardState state = board.getState();
+                    ArrayList<Piece> custom = new ArrayList<>();
+                    custom.add(new King(board, 0, 7, true));   // a1, start of the white king tour
+                    custom.add(new King(board, 5, 0, false));  // f8, start of the black king tour
+                    custom.add(new Pawn(board, 0, 4, true));   // a4, blocked by a5
+                    custom.add(new Pawn(board, 0, 3, false));  // a5
+                    state.setPieces(custom);
+
+                    FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // both players decline
+                    GameController gc = new GameController(board, cfg, w -> PieceType.QUEEN, resolver);
+                    shuffleKings(gc, state, 120);
+
+                    checkEqual(2, resolver.offerDrawCount,
+                            "White and Black must each be asked once, not after all 21 moves past the limit");
+                }));
+
+        guiTest("GameController · the 50-move claim runs on the claiming player's clock", () -> {
+            boolean[] clocks = {false, false, false}; // claim seen, white running, black running
+            Board[] boardHolder = {null};
+            // read both clocks while the claim dialog is on screen, then decline it
+            Timer decline = new Timer(20, e -> {
+                for (Window w : Window.getWindows()) {
+                    if (w instanceof JDialog d && d.isVisible() && boardHolder[0] != null && hasButton(d, "Decline")) {
+                        clocks[0] = true;
+                        clocks[1] = boardHolder[0].isClockRunning(true);
+                        clocks[2] = boardHolder[0].isClockRunning(false);
+                        clickButton(d, "Decline");
+                        ((Timer) e.getSource()).stop();
+                    }
+                }
+            });
+            decline.start();
+
+            SwingUtilities.invokeAndWait(() -> {
+                Board board = new Board(new GameConfig("Alice", "Bob", 600_000, 600_000, "Rapid 10+0"));
+                boardHolder[0] = board;
+                ArrayList<Piece> custom = new ArrayList<>();
+                custom.add(new King(board, 0, 7, true));   // a1, start of the white king tour
+                custom.add(new King(board, 5, 0, false));  // f8, start of the black king tour
+                custom.add(new Pawn(board, 0, 4, true));   // a4, blocked by a5
+                custom.add(new Pawn(board, 0, 3, false));  // a5
+                board.getState().setPieces(custom);
+                board.getGameController().setGameEndListener((record, message) -> {
+                });
+                // Black's 50th move opens the claim for White on the board's own controller
+                shuffleKings(board.getGameController(), board.getState(), 100);
+            });
+            decline.stop();
+
+            check(clocks[0], "the 50-move claim must have been offered");
+            check(clocks[1], "White is the one to decide, so White's clock must run");
+            check(!clocks[2], "Black already moved, so Black's clock must be stopped");
+        });
+
         // ═════════════════════════════════════════════════════════════════
         System.out.println("\n── GameController · rules engine ────────────────────────────────");
         // ═════════════════════════════════════════════════════════════════
@@ -2313,6 +2479,9 @@ public class GameTest {
                     ArrayList<Piece> custom = new ArrayList<>();
                     custom.add(new King(board, 0, 7, true));  // a1, start of the white king tour
                     custom.add(new King(board, 5, 0, false)); // f8, start of the black king tour
+                    // two pawns blocking each other, so the material never counts as insufficient
+                    custom.add(new Pawn(board, 0, 4, true));  // a4
+                    custom.add(new Pawn(board, 0, 3, false)); // a5
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(true);
@@ -2335,6 +2504,9 @@ public class GameTest {
                     ArrayList<Piece> custom = new ArrayList<>();
                     custom.add(new King(board, 0, 7, true));  // a1, start of the white king tour
                     custom.add(new King(board, 5, 0, false)); // f8, start of the black king tour
+                    // two pawns blocking each other, so the material never counts as insufficient
+                    custom.add(new Pawn(board, 0, 4, true));  // a4
+                    custom.add(new Pawn(board, 0, 3, false)); // a5
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false);
@@ -2356,6 +2528,9 @@ public class GameTest {
                     ArrayList<Piece> custom = new ArrayList<>();
                     custom.add(new King(board, 0, 7, true));  // a1, start of the white king tour
                     custom.add(new King(board, 5, 0, false)); // f8, start of the black king tour
+                    // two pawns blocking each other, so the material never counts as insufficient
+                    custom.add(new Pawn(board, 0, 4, true));  // a4
+                    custom.add(new Pawn(board, 0, 3, false)); // a5
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // always decline
@@ -2434,6 +2609,7 @@ public class GameTest {
     private static class FakeDrawOfferResolver implements DrawOfferResolver {
         private final boolean acceptOffer;
         boolean offerDrawCalled = false;
+        int offerDrawCount = 0;
         boolean forcedDrawNotified = false;
 
         FakeDrawOfferResolver(boolean acceptOffer) {
@@ -2445,9 +2621,21 @@ public class GameTest {
             forcedDrawNotified = true;
         }
 
+        /**
+         * Records that a draw claim was offered and answers with the configured choice.
+         * <p>
+         * Tests check both whether and how often a claim was offered. I set the flag, count the call
+         * and return the answer the test picked when it created this fake.
+         * <p>
+         * Time complexity: O(1). Space complexity: O(1).
+         *
+         * @return true if this fake accepts every offer, false if it declines them
+         */
         @Override
         public boolean offerDraw() {
             offerDrawCalled = true;
+            // lets tests make sure a claim isn't offered over and over
+            offerDrawCount++;
             return acceptOffer;
         }
     }
@@ -2472,7 +2660,7 @@ public class GameTest {
      * search over p pieces and s squares. Space complexity: O(h) for the recorded move history.
      *
      * @param pGc        controller that plays the moves, never null
-     * @param pState     board state with only the two kings, on a1 and f8, never null
+     * @param pState     board state with the kings on a1 and f8 and nothing else on their tours, never null
      * @param pHalfMoves number of half moves to play, from 0 up to 180
      */
     private static void shuffleKings(GameController pGc, BoardState pState, int pHalfMoves) {

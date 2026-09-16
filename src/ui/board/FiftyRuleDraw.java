@@ -101,7 +101,8 @@ public class FiftyRuleDraw extends JDialog {
             msg = "<html><center>The game has ended in a draw under<br>" +
                     "the 75-move rule. No captures or pawn<br>" +
                     "moves occurred in the last 75 moves.</center></html>";
-            button1 = UiComponents.button("Restart", buttonFont, Theme.BUTTON_SECONDARY);
+            // the button only closes the notice, it never restarted anything
+            button1 = UiComponents.button("OK", buttonFont, Theme.BUTTON_SECONDARY);
             button1.addActionListener(e -> dispose());
         } else {
             // the reason depends on the rule that made the draw claimable

@@ -51,6 +51,10 @@ public class GameController {
     // FEN full-move number, starts at 1 and grows after every Black move
     private int fullMove = 1;
 
+    // each player is offered the 50-move claim once, until a pawn move or capture starts over
+    private boolean whiteOfferedFiftyMoveClaim = false;
+    private boolean blackOfferedFiftyMoveClaim = false;
+
     public GameController(Board b, GameConfig config,
                           PromotionChooser promotionChooser, DrawOfferResolver drawOfferResolver) {
         this.b = b;
@@ -68,7 +72,8 @@ public class GameController {
      * A restart has to clear every piece of game state, including the finished flag, otherwise the
      * new game would reject all moves. I put the starting pieces back, reset the side to move, the
      * fifty move counter, the full move number and the en passant square, reset both clocks, clear
-     * the history and the position counts and mark the game as running again.
+     * the history, the position counts and the 50-move claim offers and mark the game as running
+     * again.
      * <p>
      * Time complexity: O(p + m) where p is the number of pieces placed and m the number of moves
      * cleared from the history. Space complexity: O(p) for the new piece objects.
@@ -84,25 +89,49 @@ public class GameController {
         history.clear();
         // repetitions only count within one game
         positionCounts.clear();
+        // both players may be offered the 50-move claim again
+        whiteOfferedFiftyMoveClaim = false;
+        blackOfferedFiftyMoveClaim = false;
         // a restarted game accepts moves again
         gameOver = false;
     }
 
-    public void flagFall(boolean isWhiteExpired) {
-        String result = isWhiteExpired ? "0-1" : "1-0";
-        String winner = isWhiteExpired ? config.blackName() : config.whiteName();
+    /**
+     * Ends the game because a player's clock ran out.
+     * <p>
+     * Normally the opponent wins on time. FIDE rule 6.9 makes it a draw instead when the opponent
+     * could never checkmate by any series of legal moves. I treat the clear cases as a draw, a side
+     * that has nothing but its king and a position with insufficient material for both sides, and
+     * give the win on time in every other case.
+     * <p>
+     * Time complexity: O(p + m) for the material checks over p pieces and the record of m moves.
+     * Space complexity: O(m) for the game record.
+     *
+     * @param pIsWhiteExpired true if White's clock ran out, false if Black's did
+     */
+    public void flagFall(boolean pIsWhiteExpired) {
+        // FIDE 6.9: a side that could never checkmate doesn't win on time
+        if (onlyKingLeft(!pIsWhiteExpired) || isInsufficientMaterial()) {
+            endGame("1/2-1/2", "Time out — Draw");
+            return;
+        }
+        String result = pIsWhiteExpired ? "0-1" : "1-0";
+        String winner = pIsWhiteExpired ? config.blackName() : config.whiteName();
         endGame(result, winner + " wins on time!");
     }
 
     /**
      * Ends the game when the move just played finished it.
      * <p>
-     * After every move the game may be over by checkmate, stalemate, repetition or the move-count
-     * rules. The check state, whether the opponent has any legal reply and how often the new
-     * position occurred come from makeMove, so the expensive search over all replies runs only once
-     * per move. No reply while in check is checkmate and no reply without check is stalemate. After
-     * that the automatic draws come first, the fifth occurrence of a position and the 75-move rule,
-     * and then the draws the player may claim, a third or fourth occurrence and the 50-move rule.
+     * After every move the game may be over by checkmate, stalemate, insufficient material,
+     * repetition or the move-count rules. The check state, whether the opponent has any legal reply
+     * and how often the new position occurred come from makeMove, so the expensive search over all
+     * replies runs only once per move. No reply while in check is checkmate, no reply without check
+     * is stalemate, and material that can never checkmate ends the game as a draw. After that the
+     * automatic draws come first, the fifth occurrence of a position and the 75-move rule, and then
+     * the draws the player may claim, a third or fourth occurrence and the 50-move rule. The 50-move
+     * claim is offered to each player once per stretch without pawn moves or captures, not after
+     * every single move.
      * <p>
      * Time complexity: O(1) here, the reply search already happened in makeMove.
      * Space complexity: O(1).
@@ -129,6 +158,12 @@ public class GameController {
             return;
         }
 
+        // a position where nobody can ever checkmate is a draw right away
+        if (isInsufficientMaterial()) {
+            endGame("1/2-1/2", "Insufficient material — Draw");
+            return;
+        }
+
         // the fifth occurrence of a position ends the game automatically
         if (pRepetitions >= 5) {
             endGame("1/2-1/2", "Fivefold repetition — Draw");
@@ -147,7 +182,15 @@ public class GameController {
             return;
         }
 
-        if (passedMoves >= 100) {
+        // ask the player to move once, a declined claim is not repeated after every move
+        boolean alreadyOffered = turnOfWhite ? whiteOfferedFiftyMoveClaim : blackOfferedFiftyMoveClaim;
+        if (passedMoves >= 100 && !alreadyOffered) {
+            if (turnOfWhite) {
+                whiteOfferedFiftyMoveClaim = true;
+            } else {
+                blackOfferedFiftyMoveClaim = true;
+            }
+            // TODO [PBR208]: Add a permanent "Claim draw" action so a player can still claim after declining once.
             if (drawOfferResolver.offerDraw()) {
                 endGame("1/2-1/2", "Draw agreed");
             }
@@ -220,7 +263,8 @@ public class GameController {
      * moves handle their special rules, move any other piece and remove what it captures, and update
      * the fifty move counter, the side to move and the full move number. Then I judge check and
      * legal replies once, record the notation with its disambiguation and check marker plus the FEN,
-     * apply the end of game rules and finally hand the clock over.
+     * hand the clock over and finally apply the end of game rules, so a draw prompt already runs on
+     * the time of the player who has to decide.
      * <p>
      * Time complexity: O(p * s) where p is the number of pieces and s the 64 squares, dominated by
      * the checkmate and stalemate search after the move. Space complexity: O(m) for the growing
@@ -284,6 +328,9 @@ public class GameController {
         // pawn moves and captures make every earlier position unreachable
         if (passedMoves == 0) {
             positionCounts.clear();
+            // and a new stretch towards the 50-move rule begins
+            whiteOfferedFiftyMoveClaim = false;
+            blackOfferedFiftyMoveClaim = false;
         }
         int repetitions = countCurrentPosition();
 
@@ -294,9 +341,10 @@ public class GameController {
 
         history.record(pMove, fromCol, fromRow, turnOfWhite, passedMoves, fullMove, disambiguation, suffix);
 
-        // look for mate, stalemate and draw rules before the clock moves on
-        checkGameEnd(pMove, opponentInCheck, opponentCanMove, repetitions);
+        // hand the clock over first, a draw prompt below must run on the claiming player's time
         flip();
+        // look for mate, stalemate and draw rules
+        checkGameEnd(pMove, opponentInCheck, opponentCanMove, repetitions);
     }
 
     /**
@@ -480,6 +528,68 @@ public class GameController {
         return false;
     }
 
+    /**
+     * Tells whether neither side has enough material left to ever checkmate.
+     * <p>
+     * With only kings, a king and a single knight, or kings and bishops that all stand on squares of
+     * one colour, no sequence of legal moves can end in checkmate, so FIDE rule 5.2.2 treats the game
+     * as drawn right away. I go through all pieces and give up as soon as a queen, rook or pawn shows
+     * up, count the knights and remember which square colours the bishops stand on.
+     * <p>
+     * Time complexity: O(p) for p pieces. Space complexity: O(1).
+     *
+     * @return true if the remaining material can never produce a checkmate
+     */
+    private boolean isInsufficientMaterial() {
+        int knights = 0;
+        boolean lightBishop = false;
+        boolean darkBishop = false;
+        for (Piece piece : state.getPieces()) {
+            switch (piece.getType()) {
+                // both kings are always on the board
+                case KING -> {
+                }
+                case KNIGHT -> knights++;
+                // a8 is a light square, so an even column plus row means light
+                case BISHOP -> {
+                    if ((piece.getCol() + piece.getRow()) % 2 == 0) {
+                        lightBishop = true;
+                    } else {
+                        darkBishop = true;
+                    }
+                }
+                // a queen, rook or pawn can still lead to a mate
+                default -> {
+                    return false;
+                }
+            }
+        }
+        // bishops on a single colour without knights, or one knight without bishops
+        return (knights == 0 && !(lightBishop && darkBishop))
+                || (knights == 1 && !lightBishop && !darkBishop);
+    }
+
+    /**
+     * Tells whether one side has nothing left but its king.
+     * <p>
+     * A lone king can never deliver checkmate, which decides the result when the other player runs
+     * out of time. I look for any piece of that colour other than the king.
+     * <p>
+     * Time complexity: O(p) for p pieces. Space complexity: O(1).
+     *
+     * @param pWhite true to look at White's pieces, false for Black's
+     * @return true if that side has only its king
+     */
+    private boolean onlyKingLeft(boolean pWhite) {
+        for (Piece piece : state.getPieces()) {
+            // any other piece of that colour could still help to mate
+            if (piece.isWhite() == pWhite && piece.getType() != PieceType.KING) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private void promotePawn(Move m) {
 
         boolean white = m.getPiece().isWhite();
@@ -553,14 +663,15 @@ public class GameController {
      * After a normal move the player who just moved stops and the opponent's clock starts. Once the
      * game has ended both clocks must stay stopped, otherwise the loser's clock keeps running and
      * later reports a time forfeit for a game that is already over. I only switch clocks while the
-     * game is still running and always repaint so the final position is shown.
+     * game is still running, pass the side to move from this controller so the right clock runs
+     * whichever controller the board was built with, and always repaint so the position is shown.
      * <p>
      * Time complexity: O(1), the repaint is only scheduled. Space complexity: O(1).
      */
     private void flip() {
         // a finished game keeps both clocks stopped
         if (!gameOver) {
-            b.switchClocks();
+            b.switchClocks(turnOfWhite);
         }
         b.repaint();
     }
