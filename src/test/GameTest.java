@@ -1132,6 +1132,27 @@ public class GameTest {
             checkEqual(0L, unlimited.getTimeMs(), "an unlimited clock must stay unlimited");
         });
 
+        test("ChessClock · the refresh timer only runs while the clock runs", () -> {
+            ChessClock clock = new ChessClock(true, 60_000, () -> {
+            }, (w) -> {
+            });
+            check(!clock.isTicking(), "a new clock must not start its timer before the clock starts");
+            clock.start();
+            check(clock.isTicking(), "a running clock needs its timer");
+            clock.stop();
+            check(!clock.isTicking(), "a stopped clock must stop its timer");
+        });
+
+        test("Board · a board whose clocks are stopped can be garbage collected", () -> {
+            java.lang.ref.WeakReference<Board> ref = boardWithStoppedClocks();
+            // give the collector a few chances, a live timer would keep the board reachable forever
+            for (int i = 0; i < 20 && ref.get() != null; i++) {
+                System.gc();
+                Thread.sleep(50);
+            }
+            check(ref.get() == null, "no clock timer may keep a board alive after its clocks are stopped");
+        });
+
         test("Board · the player who just moved gets the increment", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(new GameConfig("Alice", "Bob", 120_000, 120_000, "Bullet 2+1", 1_000));
@@ -2717,6 +2738,31 @@ public class GameTest {
     }
 
     // ── Test-only helpers ────────────────────────────────────────────────
+
+    /**
+     * Creates a timed board on the event thread, stops its clocks and keeps only a weak reference.
+     * <p>
+     * The leak test must not hold the board itself, otherwise the test would keep it alive. I build
+     * the board with a ten minute clock on the event thread, stop both clocks the way a finished game
+     * does and hand back nothing but a weak reference.
+     * <p>
+     * Time complexity: O(p) for the p starting pieces. Space complexity: O(p) until the board is
+     * collected.
+     *
+     * @return weak reference to the board, never null
+     * @throws Exception if building the board on the event thread fails or is interrupted
+     */
+    private static java.lang.ref.WeakReference<Board> boardWithStoppedClocks() throws Exception {
+        java.util.concurrent.atomic.AtomicReference<java.lang.ref.WeakReference<Board>> holder =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        SwingUtilities.invokeAndWait(() -> {
+            Board board = new Board(new GameConfig("Alice", "Bob", 600_000, 600_000, "Rapid 10+0"));
+            // a finished game stops both clocks
+            board.stopClocks();
+            holder.set(new java.lang.ref.WeakReference<>(board));
+        });
+        return holder.get();
+    }
 
     /**
      * A DrawOfferResolver that never offers/accepts anything — used by tests
