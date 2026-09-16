@@ -1203,6 +1203,28 @@ public class GameTest {
                     check(board.getGameController().getMoveLog().isEmpty(), "no move may be played");
                 }));
 
+        test("Main: a headless start explains the problem and exits with code 2", () -> {
+            String javaExe = java.nio.file.Paths.get(System.getProperty("java.home"), "bin", "java").toString();
+            File output = Files.createTempFile("chess-headless-start", ".log").toFile();
+            // start the real entry point in its own JVM, the way a server or a container would
+            Process process = new ProcessBuilder(javaExe, "-Djava.awt.headless=true",
+                    "-cp", System.getProperty("java.class.path"), "app.Main")
+                    .redirectErrorStream(true)
+                    .redirectOutput(output)
+                    .start();
+            boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+            }
+            String text = Files.readString(output.toPath());
+            Files.deleteIfExists(output.toPath());
+
+            check(finished, "a headless start must end on its own");
+            // 2 is the exit code Main uses for a missing display
+            checkEqual(2, process.exitValue(), "a headless start must report a failure, output: " + text);
+            check(text.contains("graphical display"), "the output must explain that a display is missing, got: " + text);
+        });
+
         // =================================================================
         System.out.println("\n-- EndScreen ----------------------------------------------------");
         // =================================================================
