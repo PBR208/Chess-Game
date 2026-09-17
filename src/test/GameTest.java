@@ -11,6 +11,7 @@ package test;
  * Version: 1.0
  */
 
+import engine.core.*;
 import engine.imports.*;
 import engine.model.*;
 import engine.persistence.*;
@@ -3089,6 +3090,235 @@ public class GameTest {
                     }
                     check(threw, "getMoveLog() must not allow external mutation of the recorded move history");
                 }));
+
+        // =================================================================
+        System.out.println("\n-- Bitboard core ------------------------------------------------");
+        // =================================================================
+
+        test("Bitboards: square numbering runs from a1 to h8", () -> {
+            checkEqual(0, Bitboards.squareOf("a1"), "a1 must be square 0");
+            checkEqual(63, Bitboards.squareOf("h8"), "h8 must be square 63");
+            checkEqual(28, Bitboards.squareOf("e4"), "e4 must be square 28");
+            checkEqual("e4", Bitboards.nameOf(28), "square 28 must be named e4");
+            checkEqual(4, Bitboards.fileOf(Bitboards.squareOf("e4")), "e4 stands on the e-file");
+            checkEqual(3, Bitboards.rankOf(Bitboards.squareOf("e4")), "e4 stands on the fourth rank");
+        });
+
+        test("Bitboards: walking a set returns its squares from low to high", () -> {
+            long set = Bitboards.bit(Bitboards.squareOf("a1")) | Bitboards.bit(Bitboards.squareOf("e4"))
+                    | Bitboards.bit(Bitboards.squareOf("h8"));
+            checkEqual(3, Bitboards.count(set), "the set holds three squares");
+            checkEqual(Bitboards.squareOf("a1"), Bitboards.lowestSquare(set), "a1 is the lowest square");
+            set = Bitboards.clearLowestSquare(set);
+            checkEqual(Bitboards.squareOf("e4"), Bitboards.lowestSquare(set), "e4 follows a1");
+            set = Bitboards.clearLowestSquare(set);
+            checkEqual(Bitboards.squareOf("h8"), Bitboards.lowestSquare(set), "h8 is the last square");
+            checkEqual(0, Bitboards.count(Bitboards.clearLowestSquare(set)), "the set is empty afterwards");
+        });
+
+        test("Moves: a packed move keeps its squares, flag and promotion piece", () -> {
+            int quiet = Moves.encode(Bitboards.squareOf("e2"), Bitboards.squareOf("e4"));
+            checkEqual(Bitboards.squareOf("e2"), Moves.from(quiet), "the move starts on e2");
+            checkEqual(Bitboards.squareOf("e4"), Moves.to(quiet), "the move ends on e4");
+            checkEqual(Moves.FLAG_NORMAL, Moves.flag(quiet), "a pawn push is an ordinary move");
+            checkEqual("e2e4", Moves.toUci(quiet), "UCI spells the move as e2e4");
+
+            int promotion = Moves.encodePromotion(Bitboards.squareOf("e7"), Bitboards.squareOf("e8"), Moves.PROMOTION_QUEEN);
+            check(Moves.isPromotion(promotion), "the move must be marked as a promotion");
+            checkEqual(Pieces.QUEEN, Moves.promotionType(promotion), "the pawn becomes a queen");
+            checkEqual("e7e8q", Moves.toUci(promotion), "UCI spells a promotion with the piece letter");
+
+            int castling = Moves.encodeCastling(Bitboards.squareOf("e1"), Bitboards.squareOf("g1"));
+            check(Moves.isCastling(castling), "the move must be marked as castling");
+            checkEqual("e1g1", Moves.toUci(castling), "UCI spells castling as the king move");
+
+            int enPassant = Moves.encodeEnPassant(Bitboards.squareOf("e5"), Bitboards.squareOf("d6"));
+            check(Moves.isEnPassant(enPassant), "the move must be marked as en passant");
+        });
+
+        test("Position: the starting position has the right pieces, rights and counters", () -> {
+            Position position = Position.startPosition();
+
+            checkEqual(32, Bitboards.count(position.occupancy()), "a new game has 32 pieces");
+            checkEqual(16, Bitboards.count(position.occupancy(Pieces.WHITE)), "White owns 16 of them");
+            checkEqual(8, Bitboards.count(position.pieces(Pieces.WHITE_PAWN)), "White has eight pawns");
+            checkEqual(Pieces.WHITE_KING, position.pieceAt(Bitboards.squareOf("e1")), "the white king stands on e1");
+            checkEqual(Pieces.BLACK_QUEEN, position.pieceAt(Bitboards.squareOf("d8")), "the black queen stands on d8");
+            checkEqual(Pieces.NONE, position.pieceAt(Bitboards.squareOf("e4")), "the middle of the board is empty");
+            checkEqual(Pieces.WHITE, position.sideToMove(), "White moves first");
+            checkEqual(Position.ALL_CASTLING_RIGHTS, position.castlingRights(), "both sides may still castle both ways");
+            checkEqual(Position.NO_EN_PASSANT, position.epSquare(), "nothing can be captured en passant yet");
+            checkEqual(0, position.halfmoveClock(), "the fifty move counter starts at zero");
+            checkEqual(1, position.fullmoveNumber(), "the game starts at move one");
+            checkEqual(position.computeKey(), position.key(), "the key must match a full recount");
+        });
+
+        test("Position: making and taking back a move restores the position exactly", () -> {
+            Position position = Position.startPosition();
+            String before = position.toString();
+            long keyBefore = position.key();
+
+            int e2e4 = Moves.encode(Bitboards.squareOf("e2"), Bitboards.squareOf("e4"));
+            position.makeMove(e2e4);
+            check(!position.toString().equals(before), "the board must change when a move is played");
+            checkEqual(Pieces.WHITE_PAWN, position.pieceAt(Bitboards.squareOf("e4")), "the pawn stands on e4");
+            checkEqual(Pieces.NONE, position.pieceAt(Bitboards.squareOf("e2")), "e2 is empty now");
+            checkEqual(Pieces.BLACK, position.sideToMove(), "Black is to move");
+            checkEqual(1, position.ply(), "one move can be taken back");
+
+            position.unmakeMove(e2e4);
+            checkEqual(before, position.toString(), "the board must look exactly as before");
+            checkEqual(keyBefore, position.key(), "the key must be the one from before the move");
+            checkEqual(Pieces.WHITE, position.sideToMove(), "White is to move again");
+            checkEqual(1, position.fullmoveNumber(), "the move number must be back at one");
+            checkEqual(0, position.ply(), "nothing is left on the undo stack");
+        });
+
+        test("Position: the key stays correct over a sequence of moves", () -> {
+            Position position = Position.startPosition();
+            int[] line = {
+                    Moves.encode(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")),
+                    Moves.encode(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")),
+                    Moves.encode(Bitboards.squareOf("g1"), Bitboards.squareOf("f3")),
+                    Moves.encode(Bitboards.squareOf("b8"), Bitboards.squareOf("c6")),
+            };
+            for (int move : line) {
+                position.makeMove(move);
+                checkEqual(position.computeKey(), position.key(),
+                        "the incremental key must match a full recount after " + Moves.toUci(move));
+            }
+            for (int i = line.length - 1; i >= 0; i--) {
+                position.unmakeMove(line[i]);
+                checkEqual(position.computeKey(), position.key(),
+                        "the key must stay correct while taking back " + Moves.toUci(line[i]));
+            }
+            checkEqual(Position.startPosition().key(), position.key(), "the start position must return");
+        });
+
+        test("Position: a double push only offers en passant when a pawn can take", () -> {
+            // no black pawn stands next to e4, so there is nothing to capture
+            Position quiet = Position.startPosition();
+            quiet.makeMove(Moves.encode(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            checkEqual(Position.NO_EN_PASSANT, quiet.epSquare(), "an unusable en passant square must not be recorded");
+
+            // black pawn on d4, so White's e2-e4 really can be answered by d4xe3
+            Position offered = Position.empty();
+            offered.put(Pieces.WHITE_KING, Bitboards.squareOf("e1"));
+            offered.put(Pieces.BLACK_KING, Bitboards.squareOf("e8"));
+            offered.put(Pieces.WHITE_PAWN, Bitboards.squareOf("e2"));
+            offered.put(Pieces.BLACK_PAWN, Bitboards.squareOf("d4"));
+            offered.makeMove(Moves.encode(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            checkEqual(Bitboards.squareOf("e3"), offered.epSquare(), "the skipped square must be e3");
+            checkEqual(offered.computeKey(), offered.key(), "the en passant file belongs to the key");
+        });
+
+        test("Position: an en passant capture removes the passed pawn and puts it back", () -> {
+            Position position = Position.empty();
+            position.put(Pieces.WHITE_KING, Bitboards.squareOf("e1"));
+            position.put(Pieces.BLACK_KING, Bitboards.squareOf("e8"));
+            position.put(Pieces.WHITE_PAWN, Bitboards.squareOf("e5"));
+            position.put(Pieces.BLACK_PAWN, Bitboards.squareOf("d7"));
+            position.setSideToMove(Pieces.BLACK);
+
+            position.makeMove(Moves.encode(Bitboards.squareOf("d7"), Bitboards.squareOf("d5")));
+            checkEqual(Bitboards.squareOf("d6"), position.epSquare(), "the black pawn may be taken on d6");
+
+            int capture = Moves.encodeEnPassant(Bitboards.squareOf("e5"), Bitboards.squareOf("d6"));
+            position.makeMove(capture);
+            checkEqual(Pieces.NONE, position.pieceAt(Bitboards.squareOf("d5")), "the captured pawn must leave the board");
+            checkEqual(Pieces.WHITE_PAWN, position.pieceAt(Bitboards.squareOf("d6")), "the capturing pawn stands on d6");
+
+            position.unmakeMove(capture);
+            checkEqual(Pieces.BLACK_PAWN, position.pieceAt(Bitboards.squareOf("d5")), "the captured pawn must come back");
+            checkEqual(Pieces.WHITE_PAWN, position.pieceAt(Bitboards.squareOf("e5")), "the capturing pawn returns to e5");
+            checkEqual(position.computeKey(), position.key(), "the key must be correct again");
+        });
+
+        test("Position: promotion replaces the pawn and unmake brings it back", () -> {
+            Position position = Position.empty();
+            position.put(Pieces.WHITE_KING, Bitboards.squareOf("e1"));
+            position.put(Pieces.BLACK_KING, Bitboards.squareOf("e8"));
+            position.put(Pieces.WHITE_PAWN, Bitboards.squareOf("a7"));
+
+            int promotion = Moves.encodePromotion(Bitboards.squareOf("a7"), Bitboards.squareOf("a8"), Moves.PROMOTION_KNIGHT);
+            position.makeMove(promotion);
+            checkEqual(Pieces.WHITE_KNIGHT, position.pieceAt(Bitboards.squareOf("a8")), "an underpromotion must give a knight");
+            checkEqual(Pieces.NONE, position.pieceAt(Bitboards.squareOf("a7")), "the pawn has left a7");
+
+            position.unmakeMove(promotion);
+            checkEqual(Pieces.WHITE_PAWN, position.pieceAt(Bitboards.squareOf("a7")), "the pawn must stand on a7 again");
+            checkEqual(Pieces.NONE, position.pieceAt(Bitboards.squareOf("a8")), "the knight must be gone");
+            checkEqual(position.computeKey(), position.key(), "the key must be correct again");
+        });
+
+        test("Position: castling moves the rook as well and can be taken back", () -> {
+            Position position = Position.empty();
+            position.put(Pieces.WHITE_KING, Bitboards.squareOf("e1"));
+            position.put(Pieces.WHITE_ROOK, Bitboards.squareOf("h1"));
+            position.put(Pieces.BLACK_KING, Bitboards.squareOf("e8"));
+            position.setCastlingRights(Position.WHITE_KINGSIDE);
+
+            int castling = Moves.encodeCastling(Bitboards.squareOf("e1"), Bitboards.squareOf("g1"));
+            position.makeMove(castling);
+            checkEqual(Pieces.WHITE_KING, position.pieceAt(Bitboards.squareOf("g1")), "the king stands on g1");
+            checkEqual(Pieces.WHITE_ROOK, position.pieceAt(Bitboards.squareOf("f1")), "the rook jumped to f1");
+            checkEqual(0, position.castlingRights(), "a king that castled may not castle again");
+
+            position.unmakeMove(castling);
+            checkEqual(Pieces.WHITE_KING, position.pieceAt(Bitboards.squareOf("e1")), "the king returns to e1");
+            checkEqual(Pieces.WHITE_ROOK, position.pieceAt(Bitboards.squareOf("h1")), "the rook returns to h1");
+            checkEqual(Position.WHITE_KINGSIDE, position.castlingRights(), "the right comes back with the move");
+            checkEqual(position.computeKey(), position.key(), "the key must be correct again");
+        });
+
+        test("Position: moving or losing a rook takes the matching castling right away", () -> {
+            Position position = Position.startPosition();
+            position.makeMove(Moves.encode(Bitboards.squareOf("a2"), Bitboards.squareOf("a4")));
+            position.makeMove(Moves.encode(Bitboards.squareOf("a7"), Bitboards.squareOf("a5")));
+            position.makeMove(Moves.encode(Bitboards.squareOf("a1"), Bitboards.squareOf("a3")));
+
+            check((position.castlingRights() & Position.WHITE_QUEENSIDE) == 0,
+                    "a rook that left a1 loses White's queenside right");
+            check((position.castlingRights() & Position.WHITE_KINGSIDE) != 0,
+                    "the kingside right is untouched");
+            check((position.castlingRights() & Position.BLACK_QUEENSIDE) != 0,
+                    "Black keeps both rights");
+        });
+
+        test("Position: the move counters follow the rules", () -> {
+            Position position = Position.startPosition();
+
+            position.makeMove(Moves.encode(Bitboards.squareOf("g1"), Bitboards.squareOf("f3")));
+            checkEqual(1, position.halfmoveClock(), "a knight move raises the fifty move counter");
+            checkEqual(1, position.fullmoveNumber(), "the move number only grows after Black moved");
+
+            position.makeMove(Moves.encode(Bitboards.squareOf("g8"), Bitboards.squareOf("f6")));
+            checkEqual(2, position.halfmoveClock(), "the counter keeps growing");
+            checkEqual(2, position.fullmoveNumber(), "the second move begins after Black's reply");
+
+            position.makeMove(Moves.encode(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            checkEqual(0, position.halfmoveClock(), "a pawn move starts the fifty move count over");
+        });
+
+        test("Position: a capture removes the piece and unmake puts it back", () -> {
+            Position position = Position.empty();
+            position.put(Pieces.WHITE_KING, Bitboards.squareOf("e1"));
+            position.put(Pieces.BLACK_KING, Bitboards.squareOf("e8"));
+            position.put(Pieces.WHITE_ROOK, Bitboards.squareOf("a1"));
+            position.put(Pieces.BLACK_ROOK, Bitboards.squareOf("a8"));
+            position.setHalfmoveClock(7);
+
+            int capture = Moves.encode(Bitboards.squareOf("a1"), Bitboards.squareOf("a8"));
+            position.makeMove(capture);
+            checkEqual(Pieces.WHITE_ROOK, position.pieceAt(Bitboards.squareOf("a8")), "the white rook took on a8");
+            checkEqual(0, position.halfmoveClock(), "a capture starts the fifty move count over");
+            checkEqual(3, Bitboards.count(position.occupancy()), "only three pieces are left");
+
+            position.unmakeMove(capture);
+            checkEqual(Pieces.BLACK_ROOK, position.pieceAt(Bitboards.squareOf("a8")), "the black rook must come back");
+            checkEqual(7, position.halfmoveClock(), "the fifty move counter comes back too");
+            checkEqual(position.computeKey(), position.key(), "the key must be correct again");
+        });
 
         // -- Summary ------------------------------------------------------
         // the host frame is null on a headless run
