@@ -19,6 +19,7 @@ import engine.model.GameConfig;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.ArrayList;
 
 public class Board extends JPanel implements GameSession.View {
 
@@ -57,6 +58,8 @@ public class Board extends JPanel implements GameSession.View {
     private final ChessClock blackClock;
     // added to a player's clock after each of their moves
     private final long incrementMs;
+    // what both clocks showed after each ply, index 0 being the start of the game
+    private final ArrayList<long[]> clockSnapshots = new ArrayList<>();
 
     private final Color LIGHT_TILE = new Color(232, 235, 239);
     private final Color DARK_TILE = new Color(125, 135, 150);
@@ -113,6 +116,8 @@ public class Board extends JPanel implements GameSession.View {
         this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), this::repaint, this::onTimeExpired);
         // the same increment applies to both players
         this.incrementMs = pConfig.incrementMs();
+        // the times before a single move was played, which is where taking back the first move leads
+        clockSnapshots.add(new long[]{pConfig.whiteTimeMs(), pConfig.blackTimeMs()});
 
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
 
@@ -305,6 +310,60 @@ public class Board extends JPanel implements GameSession.View {
         whiteClock.reset();
         blackClock.reset();
         whiteClock.start();
+    }
+
+    /**
+     * Remembers what both clocks show after the move that was just played.
+     * <p>
+     * Taking a move back has to give both players the time they had before it, and only the clocks
+     * themselves know that. I store both remaining times under the ply the game is at now. A move
+     * played after something was taken back drops the snapshots of the line that was abandoned, so
+     * the list always describes the game as it really went.
+     * <p>
+     * Time complexity: O(d) for the d snapshots of an abandoned line, O(1) otherwise.
+     * Space complexity: O(1) per played move.
+     *
+     * @param pPly how many moves have been played, 1 after the first move
+     */
+    @Override
+    public void recordClocks(int pPly) {
+        // a new move after an undo replaces the times of the line nobody is playing any more
+        while (clockSnapshots.size() > pPly) {
+            clockSnapshots.remove(clockSnapshots.size() - 1);
+        }
+        clockSnapshots.add(new long[]{whiteClock.getTimeMs(), blackClock.getTimeMs()});
+    }
+
+    /**
+     * Puts both clocks back to what they showed at a ply and starts the one of the player to move.
+     * <p>
+     * A taken back move gives the time back that was spent on it. I stop both clocks, set them to
+     * the times recorded for that ply and start the clock of whoever is to move there. A ply nobody
+     * recorded, which can only happen for a game that was loaded rather than played, leaves the
+     * times alone and only hands the clock over.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pPly         how many moves are played now, 0 at the starting position
+     * @param pWhiteToMove true if White is to move at that ply
+     */
+    @Override
+    public void restoreClocks(int pPly, boolean pWhiteToMove) {
+        whiteClock.stop();
+        blackClock.stop();
+
+        if (pPly < clockSnapshots.size()) {
+            long[] times = clockSnapshots.get(pPly);
+            whiteClock.setTimeMs(times[0]);
+            blackClock.setTimeMs(times[1]);
+        }
+
+        // the player to move is the one whose clock runs
+        if (pWhiteToMove) {
+            whiteClock.start();
+        } else {
+            blackClock.start();
+        }
     }
 
     /**

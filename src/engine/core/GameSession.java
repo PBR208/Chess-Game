@@ -29,6 +29,29 @@ public final class GameSession {
         void resetClocks();
 
         void repaint();
+
+        /**
+         * Remembers what both clocks show after the move that was just played.
+         * <p>
+         * A screen without clocks has nothing to remember, so this does nothing unless a view says
+         * otherwise.
+         *
+         * @param pPly how many moves have been played, 1 after the first move
+         */
+        default void recordClocks(int pPly) {
+        }
+
+        /**
+         * Puts both clocks back to what they showed at a ply and hands them to the player to move.
+         * <p>
+         * This is what a taken back move uses instead of switching the clocks, because switching
+         * them would pay out the increment of a move that is no longer played.
+         *
+         * @param pPly         how many moves are played now, 0 at the starting position
+         * @param pWhiteToMove true if White is to move at that ply
+         */
+        default void restoreClocks(int pPly, boolean pWhiteToMove) {
+        }
     }
 
     /** Where the written record of the game is shown. */
@@ -214,6 +237,8 @@ public final class GameSession {
 
         // the clock goes over first, so a draw claim below runs on the claiming player's time
         view.switchClocks(position.sideToMove() == Pieces.WHITE);
+        // the times as they stand after this move, so taking it back can put them back
+        view.recordClocks(playedMoves.size());
         view.repaint();
 
         checkForEnd(repetitions);
@@ -524,7 +549,9 @@ public final class GameSession {
      * Time complexity: O(1). Space complexity: O(1).
      */
     private void refreshAfterCursorMove() {
-        view.switchClocks(position.sideToMove() == Pieces.WHITE);
+        // the clocks go back to what they showed at this ply, which also hands them to the right
+        // player. Switching them instead would pay out the increment of a move nobody plays now.
+        view.restoreClocks(playedMoves.size(), position.sideToMove() == Pieces.WHITE);
         view.repaint();
         if (moveLogView == null) {
             return;
