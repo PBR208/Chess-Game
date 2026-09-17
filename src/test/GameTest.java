@@ -2651,11 +2651,9 @@ public class GameTest {
         // interfaces instead of creating PromoteGUI/FiftyRuleDraw directly, so
         // these scenarios are driven with fake, headless implementations -
         // no dialog-clicking Timer tricks needed for any of the tests below.
-        // Each test builds its own GameController sharing the test Board's
-        // BoardState (rather than using board.getGameController(), which is
-        // still wired to the real Swing dialogs) so the board's rendering
-        // plumbing (repaint/clocks/piece construction) stays real while the
-        // two dialog seams are swapped for test doubles.
+        // Each test builds its own position and its own GameController on a
+        // view that draws nothing, so these rules run without a window at all
+        // now that the board itself has moved on to the game session.
 
         test("GameController: makeMove executes a simple pawn push", () ->
                 SwingUtilities.invokeAndWait(() -> {
