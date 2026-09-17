@@ -3869,6 +3869,208 @@ public class GameTest {
                     "and moves are accepted again");
         });
 
+        // =================================================================
+        System.out.println();
+        System.out.println("-- Undo, redo and takebacks -------------------------------------");
+        // =================================================================
+
+        test("GameSession: taking a move back restores the position exactly", () -> {
+            GameSession session = new GameSession();
+            String before = Fen.write(session.position());
+
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            check(session.undo(), "a played move can be taken back");
+
+            checkEqual(before, Fen.write(session.position()),
+                    "the pieces, the rights, the en passant square and both counters must all come back");
+            checkEqual(0, session.getMoveLog().size(), "the record loses the move as well");
+            checkEqual(0, session.getFenHistory().size(), "and the position it produced");
+            check(session.isWhiteToMove(), "White is to move again");
+            check(!session.canUndo(), "there is nothing left to take back");
+            check(session.canRedo(), "but the move is waiting to be played again");
+        });
+
+        test("GameSession: taking back a rook move gives the castling right back", () -> {
+            GameSession session = new GameSession(Fen.parse("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1"));
+            String before = Fen.write(session.position());
+
+            session.play(session.moveFor(Bitboards.squareOf("h1"), Bitboards.squareOf("g1")));
+            check(!Fen.write(session.position()).contains("KQkq"),
+                    "moving the rook costs White the kingside right");
+
+            check(session.undo(), "the rook move can be taken back");
+            checkEqual(before, Fen.write(session.position()),
+                    "a right the move gave away has to come back with it");
+        });
+
+        test("GameSession: a move played after an undo throws the redo branch away", () -> {
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.undo();
+            check(session.canRedo(), "the move is waiting to be played again");
+
+            session.play(session.moveFor(Bitboards.squareOf("d2"), Bitboards.squareOf("d4")));
+            check(!session.canRedo(), "playing something else abandons what was taken back");
+            checkEqual(List.of("d4"), session.getMoveLog(), "the game follows the move that was really played");
+        });
+
+        test("GameSession: redo replays the moves in order and keeps the rest of the branch", () -> {
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+            session.undo();
+            session.undo();
+            checkEqual(0, session.getMoveLog().size(), "both moves are taken back");
+
+            check(session.redo(), "the first move comes back");
+            checkEqual(List.of("e4"), session.getMoveLog(), "and it is the one that was played first");
+            check(session.canRedo(), "the second move is still waiting");
+
+            check(session.redo(), "which comes back as well");
+            checkEqual(List.of("e4", "e5"), session.getMoveLog(), "the game stands where it stood");
+            check(!session.canRedo(), "and nothing is left to replay");
+        });
+
+        test("GameSession: taking back the mating move lets the game go on", () -> {
+            GameSession session = new GameSession();
+            // 1. f3 e5 2. g4 Qh4 mate
+            session.play(session.moveFor(Bitboards.squareOf("f2"), Bitboards.squareOf("f3")));
+            session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+            session.play(session.moveFor(Bitboards.squareOf("g2"), Bitboards.squareOf("g4")));
+            session.play(session.moveFor(Bitboards.squareOf("d8"), Bitboards.squareOf("h4")));
+            checkEqual(GameResult.BLACK_WINS, session.result(), "the game is over");
+
+            check(session.undo(), "the mating move can be taken back");
+            checkEqual(GameResult.ONGOING, session.result(), "which puts the game back to running");
+            check(session.termination() == null, "with no reason left for it having ended");
+            check(session.play(session.moveFor(Bitboards.squareOf("d8"), Bitboards.squareOf("h4"))),
+                    "and the mate can be played all over again");
+        });
+
+        test("GameSession: taking back an irreversible move brings the repetition counts back", () -> {
+            int[] repetitionOffers = {0};
+            GameSession session = new GameSession();
+            session.setDrawArbiter(new GameSession.DrawArbiter() {
+                @Override
+                public boolean offerFiftyMoveDraw() {
+                    return false;
+                }
+
+                @Override
+                public boolean offerRepetitionDraw() {
+                    repetitionOffers[0]++;
+                    return false;
+                }
+
+                @Override
+                public void notifyForcedDraw() {
+                }
+            });
+
+            // both knights out and back brings the starting position back for the second time
+            String[][] shuffle = {{"g1", "f3"}, {"g8", "f6"}, {"f3", "g1"}, {"f6", "g8"}};
+            for (String[] step : shuffle) {
+                session.play(session.moveFor(Bitboards.squareOf(step[0]), Bitboards.squareOf(step[1])));
+            }
+
+            // a pawn move makes every earlier position unreachable and clears the counts
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            check(session.undo(), "taking the pawn move back has to bring those counts back");
+
+            for (String[] step : shuffle) {
+                session.play(session.moveFor(Bitboards.squareOf(step[0]), Bitboards.squareOf(step[1])));
+            }
+            checkEqual(1, repetitionOffers[0],
+                    "the third occurrence must still be noticed after the counts were rebuilt");
+        });
+
+        test("GameSession: clicking a move jumps the game to it and back again", () -> {
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+            session.play(session.moveFor(Bitboards.squareOf("g1"), Bitboards.squareOf("f3")));
+
+            check(session.goToPly(1), "the game can go back to just after the first move");
+            checkEqual(List.of("e4"), session.getMoveLog(), "only the first move is played there");
+
+            check(session.goToPly(3), "and forward to the end again");
+            checkEqual(3, session.getMoveLog().size(), "all three moves are back");
+            check(!session.goToPly(9), "a ply the game never reached is refused");
+        });
+
+        test("GameSession: a refused takeback leaves the game exactly as it was", () -> {
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            String afterMove = Fen.write(session.position());
+
+            session.setTakebackArbiter(pWhiteAsks -> false);
+            check(!session.requestTakeback(), "a refused request takes nothing back");
+            checkEqual(afterMove, Fen.write(session.position()), "the position stays where it was");
+            checkEqual(1, session.getMoveLog().size(), "and so does the record");
+
+            boolean[] asked = {false};
+            session.setTakebackArbiter(pWhiteAsks -> {
+                asked[0] = pWhiteAsks;
+                return true;
+            });
+            check(session.requestTakeback(), "an agreed request takes the move back");
+            check(asked[0], "White played the last move, so White is the one asking");
+            checkEqual(0, session.getMoveLog().size(), "and the move is gone");
+        });
+
+        test("GameSession: the clocks are recorded after a move and restored when it is taken back", () -> {
+            List<String> calls = new ArrayList<>();
+            GameSession session = new GameSession();
+            session.setView(new GameSession.View() {
+                @Override
+                public void switchClocks(boolean pWhiteToMove) {
+                }
+
+                @Override
+                public void stopClocks() {
+                }
+
+                @Override
+                public void resetClocks() {
+                }
+
+                @Override
+                public void repaint() {
+                }
+
+                @Override
+                public void recordClocks(int pPly) {
+                    calls.add("record " + pPly);
+                }
+
+                @Override
+                public void restoreClocks(int pPly, boolean pWhiteToMove) {
+                    calls.add("restore " + pPly);
+                }
+            });
+
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.undo();
+            checkEqual(List.of("record 1", "restore 0"), calls,
+                    "a move records the clocks at its ply, and taking it back restores the ply before it");
+        });
+
+        test("ChessClock: a restored time replaces whatever the clock was showing", () -> {
+            ChessClock clock = new ChessClock(true, 60_000, () -> {
+            }, w -> {
+            });
+            clock.setTimeMs(12_345);
+            checkEqual(12_345L, clock.getTimeMs(), "the clock shows the time it was given back");
+            clock.setTimeMs(-5);
+            checkEqual(0L, clock.getTimeMs(), "a time below zero means no time left");
+
+            ChessClock unlimited = new ChessClock(true, 0, () -> {
+            }, w -> {
+            });
+            unlimited.setTimeMs(5_000);
+            checkEqual(0L, unlimited.getTimeMs(), "an unlimited clock has no time to restore");
+        });
+
         // -- Summary ------------------------------------------------------
         // the host frame is null on a headless run
         if (frame != null) SwingUtilities.invokeAndWait(frame::dispose);
