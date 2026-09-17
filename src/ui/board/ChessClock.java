@@ -344,12 +344,7 @@ public class ChessClock {
         pG2d.drawString(label, labelX, labelY);
 
         //Time display
-        long totalSec = timeMs / 1000;
-        // under ten seconds a player counts in tenths, so the display does too, but an unlimited
-        // clock keeps showing plain zeros rather than counting tenths of a time it never uses
-        String timeText = START_TIME_MS > 0 && timeMs < TENTHS_BELOW_MS
-                ? String.format("%d.%d", totalSec, timeMs % 1000 / 100)
-                : String.format("%02d:%02d", totalSec / 60, totalSec % 60);
+        String timeText = formatTime(timeMs, START_TIME_MS);
 
         Color timeColor;
         if (!running) timeColor = CLOCK_COLOR;
