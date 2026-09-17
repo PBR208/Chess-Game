@@ -22,6 +22,8 @@ import ui.board.EndScreen;
 import ui.board.MoveLogPanel;
 import ui.menu.MainMenu;
 import ui.menu.PastGamesPanel;
+import ui.theme.Theme;
+import ui.theme.UiComponents;
 
 import javax.swing.*;
 import java.awt.*;
@@ -155,6 +157,7 @@ public class Main {
             gameContainer.setBackground(new Color(28, 28, 30));
             gameContainer.add(board, BorderLayout.CENTER);
             gameContainer.add(logPanel, BorderLayout.EAST);
+            gameContainer.add(actionBar(board), BorderLayout.SOUTH);
 
             JPanel wrapper = new JPanel(new GridBagLayout());
             wrapper.setBackground(new Color(28, 28, 30));
@@ -164,6 +167,49 @@ public class Main {
             frame.revalidate();
             frame.repaint();
         });
+    }
+
+    /**
+     * Builds the row of actions under the board.
+     * <p>
+     * Players need a way to take a move back and to play it again, and both only make sense while
+     * there is something to take back or replay. I build the two buttons, hand the clicks to the
+     * session, which asks the opponent in a timed game, and let the board tell me whenever the game
+     * changed so the buttons can be greyed out exactly when they would do nothing.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the panel and its buttons.
+     *
+     * @param pBoard the board of the running game, never null
+     * @return the action row, never null
+     * @throws NullPointerException if pBoard is null
+     */
+    private static JPanel actionBar(Board pBoard) {
+        GameSession session = pBoard.getSession();
+
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 6));
+        bar.setBackground(Theme.PANEL_BG);
+
+        Font buttonFont = new Font(Font.SANS_SERIF, Font.PLAIN, 13);
+        JButton takeBack = UiComponents.button("Take back", buttonFont, Theme.BUTTON_SECONDARY);
+        takeBack.setName("takeBack");
+        JButton replay = UiComponents.button("Replay move", buttonFont, Theme.BUTTON_SECONDARY);
+        replay.setName("replayMove");
+
+        // the session decides whether the move really comes back, since a timed game asks the opponent
+        takeBack.addActionListener(e -> session.requestTakeback());
+        replay.addActionListener(e -> session.redo());
+
+        // a button that would do nothing says so by being grey
+        Runnable refresh = () -> {
+            takeBack.setEnabled(session.canUndo());
+            replay.setEnabled(session.canRedo());
+        };
+        pBoard.setGameChangedListener(refresh);
+        refresh.run();
+
+        bar.add(takeBack);
+        bar.add(replay);
+        return bar;
     }
 
     /**

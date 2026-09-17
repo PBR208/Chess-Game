@@ -60,6 +60,9 @@ public class Board extends JPanel implements GameSession.View {
     private final long incrementMs;
     // what both clocks showed after each ply, index 0 being the start of the game
     private final ArrayList<long[]> clockSnapshots = new ArrayList<>();
+    // told after every change the session makes, so the buttons around the board can follow along
+    private Runnable onGameChanged = () -> {
+    };
 
     private final Color LIGHT_TILE = new Color(232, 235, 239);
     private final Color DARK_TILE = new Color(125, 135, 150);
@@ -111,6 +114,8 @@ public class Board extends JPanel implements GameSession.View {
         session.setView(this);
         session.setPromotionPicker(new SwingPromotionChooser(this));
         session.setDrawArbiter(new SwingDrawOfferResolver(this));
+        // a game on a clock asks the opponent before a move is taken back, a casual one does not
+        session.setTakebackArbiter(new SwingTakebackArbiter(this, pConfig.whiteTimeMs() > 0));
 
         this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), this::repaint, this::onTimeExpired);
         this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), this::repaint, this::onTimeExpired);
@@ -287,6 +292,7 @@ public class Board extends JPanel implements GameSession.View {
             whiteClock.addTime(incrementMs);
             blackClock.start();
         }
+        fireGameChanged();
     }
 
     /**
@@ -298,6 +304,7 @@ public class Board extends JPanel implements GameSession.View {
     public void stopClocks() {
         whiteClock.stop();
         blackClock.stop();
+        fireGameChanged();
     }
 
     /**
@@ -310,6 +317,10 @@ public class Board extends JPanel implements GameSession.View {
         whiteClock.reset();
         blackClock.reset();
         whiteClock.start();
+        // a new game keeps none of the times the finished one left behind
+        clockSnapshots.clear();
+        clockSnapshots.add(new long[]{whiteClock.getTimeMs(), blackClock.getTimeMs()});
+        fireGameChanged();
     }
 
     /**
@@ -364,6 +375,32 @@ public class Board extends JPanel implements GameSession.View {
         } else {
             blackClock.start();
         }
+        fireGameChanged();
+    }
+
+    /**
+     * Sets who is told when the game changed.
+     * <p>
+     * The buttons beside the board have to know whether there is a move to take back or to play
+     * again, and only the session knows that. Every change it makes reaches this board through one
+     * of the clock methods, so those are where the news is passed on.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pListener run after every change to the game, or null for nobody
+     */
+    public void setGameChangedListener(Runnable pListener) {
+        this.onGameChanged = pListener == null ? () -> {
+        } : pListener;
+    }
+
+    /**
+     * Tells the listener that the game changed.
+     * <p>
+     * Time complexity: O(1) beyond whatever the listener does. Space complexity: O(1).
+     */
+    private void fireGameChanged() {
+        onGameChanged.run();
     }
 
     /**
