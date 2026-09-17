@@ -55,8 +55,6 @@ public class Board extends JPanel implements GameSession.View {
 
     private final ChessClock whiteClock;
     private final ChessClock blackClock;
-    // added to a player's clock after each of their moves
-    private final long incrementMs;
 
     private final Color LIGHT_TILE = new Color(232, 235, 239);
     private final Color DARK_TILE = new Color(125, 135, 150);
@@ -109,10 +107,11 @@ public class Board extends JPanel implements GameSession.View {
         session.setPromotionPicker(new SwingPromotionChooser(this));
         session.setDrawArbiter(new SwingDrawOfferResolver(this));
 
-        this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), this::repaint, this::onTimeExpired);
-        this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), this::repaint, this::onTimeExpired);
-        // the same increment applies to both players
-        this.incrementMs = pConfig.incrementMs();
+        // both clocks play the same time control, but they may start from different times
+        this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), pConfig.clockMode(),
+                pConfig.incrementMs(), pConfig.delayMs(), this::repaint, this::onTimeExpired);
+        this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), pConfig.clockMode(),
+                pConfig.incrementMs(), pConfig.delayMs(), this::repaint, this::onTimeExpired);
 
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
 
@@ -272,14 +271,14 @@ public class Board extends JPanel implements GameSession.View {
      */
     @Override
     public void switchClocks(boolean pWhiteToMove) {
-        // only the side to move uses up time, the side that just moved earns its increment
+        // only the side to move uses up time, and the clock that just stopped settles its own mode
         if (pWhiteToMove) {
             blackClock.stop();
-            blackClock.addTime(incrementMs);
+            blackClock.onMoveFinished();
             whiteClock.start();
         } else {
             whiteClock.stop();
-            whiteClock.addTime(incrementMs);
+            whiteClock.onMoveFinished();
             blackClock.start();
         }
     }

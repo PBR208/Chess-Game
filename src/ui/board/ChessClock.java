@@ -11,6 +11,8 @@ package ui.board;
  * Version: 1.0
  */
 
+import engine.model.ClockMode;
+
 import javax.swing.*;
 import java.awt.*;
 
@@ -18,6 +20,8 @@ public class ChessClock {
 
     private final long START_TIME_MS;
     private static final long LOW_TIME_MS = 30 * 1000L;       // red at < 30 s
+    // below ten seconds a player counts in tenths, so the display starts showing them
+    private static final long TENTHS_BELOW_MS = 10 * 1000L;
 
     private final boolean isWhite;
     // remaining time as last shown on screen, refreshed on every tick
@@ -27,6 +31,15 @@ public class ChessClock {
     // System.nanoTime() of the last start, only meaningful while running
     private long runningSinceNanos;
     private boolean running = false;
+
+    // how this clock treats the time around a move
+    private final ClockMode mode;
+    // added after a move on a Fischer clock, 0 in every other mode
+    private final long incrementMs;
+    // the delay a Bronstein or simple delay clock works with, 0 in every other mode
+    private final long delayMs;
+    // how much of this turn's delay has not been used up yet, only meaningful while running
+    private long delayLeftMs;
 
     private final Runnable onRepaint;
     private final TimeExpiredCallback onExpired;
@@ -61,10 +74,39 @@ public class ChessClock {
      * @param pOnExpired   called once when the time runs out, never null
      */
     public ChessClock(boolean pIsWhite, long pStartTimeMs, Runnable pOnRepaint, TimeExpiredCallback pOnExpired) {
+        // a clock nobody gave a time control to simply counts down
+        this(pIsWhite, pStartTimeMs, ClockMode.SUDDEN_DEATH, 0, 0, pOnRepaint, pOnExpired);
+    }
+
+    /**
+     * Creates a stopped clock that plays a given time control.
+     * <p>
+     * A time control is more than a starting time. I store the colour, the starting time and how the
+     * clock treats the time around a move, which is the increment of a Fischer clock or the delay of
+     * a Bronstein or simple delay one, together with the two callbacks, and create the Swing timer
+     * that refreshes the display ten times a second while the clock runs. The timer only looks at the
+     * clock, the time itself is measured from the monotonic clock.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pIsWhite     true for White's clock, false for Black's
+     * @param pStartTimeMs starting time in milliseconds, 0 for an unlimited clock, never negative
+     * @param pMode        how the clock treats the time around a move, never null
+     * @param pIncrementMs time added after a move on a Fischer clock, 0 in every other mode
+     * @param pDelayMs     the delay of a Bronstein or simple delay clock, 0 in every other mode
+     * @param pOnRepaint   called after every refresh so the board can redraw, never null
+     * @param pOnExpired   called once when the time runs out, never null
+     * @throws NullPointerException if pMode is null
+     */
+    public ChessClock(boolean pIsWhite, long pStartTimeMs, ClockMode pMode, long pIncrementMs, long pDelayMs,
+                      Runnable pOnRepaint, TimeExpiredCallback pOnExpired) {
         this.isWhite = pIsWhite;
         this.START_TIME_MS = pStartTimeMs;
         this.timeMs = pStartTimeMs;
         this.bankedMs = pStartTimeMs;
+        this.mode = pMode;
+        this.incrementMs = Math.max(0, pIncrementMs);
+        this.delayMs = Math.max(0, pDelayMs);
         this.onRepaint = pOnRepaint;
         this.onExpired = pOnExpired;
 
@@ -87,6 +129,8 @@ public class ChessClock {
             return;
         }
         runningSinceNanos = System.nanoTime();
+        // a simple delay clock waits out its whole delay again at the start of every turn
+        delayLeftMs = mode == ClockMode.SIMPLE_DELAY ? delayMs : 0;
         running = true;
         // only a running clock needs display refreshes
         timer.start();
@@ -108,7 +152,12 @@ public class ChessClock {
             return;
         }
         // bank the time that was left at this moment
+        long beforeMs = bankedMs;
         bankedMs = currentTimeMs();
+        // a Bronstein clock gives back exactly what the move used, and never more than the delay
+        if (mode == ClockMode.BRONSTEIN && START_TIME_MS > 0) {
+            bankedMs += Math.min(beforeMs - bankedMs, delayMs);
+        }
         timeMs = bankedMs;
         running = false;
         // a stopped timer no longer holds on to this clock and its board
@@ -148,6 +197,24 @@ public class ChessClock {
         }
         bankedMs += pExtraMs;
         timeMs = currentTimeMs();
+    }
+
+    /**
+     * Gives this player whatever their time control owes them for the move they just finished.
+     * <p>
+     * Only a Fischer clock pays after a move, and it pays the same increment whether the move took a
+     * second or a minute. A Bronstein clock has already given back the time the move really used at
+     * the moment it stopped, and sudden death and a simple delay owe nothing at all, so for those
+     * this does nothing. Calling it on every move keeps the board from having to know which mode is
+     * being played.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
+    public void onMoveFinished() {
+        // Bronstein settles up when the clock stops, the other two modes owe nothing
+        if (mode == ClockMode.FISCHER) {
+            addTime(incrementMs);
+        }
     }
 
     /**
@@ -196,7 +263,9 @@ public class ChessClock {
             return bankedMs;
         }
         long elapsedMs = (System.nanoTime() - runningSinceNanos) / 1_000_000;
-        return Math.max(0, bankedMs - elapsedMs);
+        // a simple delay clock counts nothing at all until this turn's delay is used up
+        long countedMs = Math.max(0, elapsedMs - delayLeftMs);
+        return Math.max(0, bankedMs - countedMs);
     }
 
     /**
@@ -253,7 +322,11 @@ public class ChessClock {
 
         //Time display
         long totalSec = timeMs / 1000;
-        String timeText = String.format("%02d:%02d", totalSec / 60, totalSec % 60);
+        // under ten seconds a player counts in tenths, so the display does too, but an unlimited
+        // clock keeps showing plain zeros rather than counting tenths of a time it never uses
+        String timeText = START_TIME_MS > 0 && timeMs < TENTHS_BELOW_MS
+                ? String.format("%d.%d", totalSec, timeMs % 1000 / 100)
+                : String.format("%02d:%02d", totalSec / 60, totalSec % 60);
 
         Color timeColor;
         if (!running) timeColor = CLOCK_COLOR;
