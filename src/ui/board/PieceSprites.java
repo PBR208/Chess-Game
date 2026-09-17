@@ -3,16 +3,15 @@ package ui.board;
 /*
  * Purpose: PieceSprites owns everything about drawing chess pieces. It loads the shared sprite sheet
  * from the classpath once, cuts the square for a piece type and colour out of it and scales that
- * square to the size the board currently uses. I pulled this out of engine.pieces.Piece so the rules
- * classes no longer touch AWT, ImageIO or a Swing component, which is what lets the engine run
- * without a display. Scaled sprites are cached per board, because the scaling is by far the most
- * expensive part of painting a position.
+ * square to the size the board currently uses. It speaks the engine core's piece codes, so the board
+ * can draw straight from a position without turning bitboards back into objects first. Scaled
+ * sprites are cached per board, because the scaling is by far the most expensive part of painting.
  *
  * Owner: PBR208 - https://github.com/PBR208/
- * Version: 1.0
+ * Version: 2.0
  */
 
-import engine.pieces.PieceType;
+import engine.core.Pieces;
 
 import javax.imageio.ImageIO;
 import java.awt.Graphics2D;
@@ -43,7 +42,7 @@ public class PieceSprites {
     private final int tileSize;
 
     // one cached sprite per colour and piece type, filled on first use
-    private final BufferedImage[][] cache = new BufferedImage[2][PieceType.values().length];
+    private final BufferedImage[][] cache = new BufferedImage[2][Pieces.TYPE_COUNT];
 
     /**
      * Creates a sprite source that scales every piece to one square size.
@@ -71,8 +70,7 @@ public class PieceSprites {
      * Every piece is drawn from one shared sheet, so the game cannot start without it. I open the
      * resource relative to the classpath root, read it with ImageIO and close the stream again. A
      * missing resource, data no image reader understands and read errors all end in an
-     * IllegalStateException that names the resource. Before, a missing sheet surfaced as an
-     * ExceptionInInitializerError caused by "input == null!", which gave no hint about the cause.
+     * IllegalStateException that names the resource, instead of an unrelated error much later.
      * <p>
      * Time complexity: O(w * h) for decoding an image of width w and height h.
      * Space complexity: O(w * h) for the decoded image.
@@ -103,25 +101,26 @@ public class PieceSprites {
     /**
      * Returns the sprite column a piece type occupies in the sheet.
      * <p>
-     * The sheet was drawn in its own order, which is not the order of the PieceType enum, and both
-     * the promotion dialog and the replay board have to cut from the right column. I keep that
-     * mapping here, so the piece classes carry no knowledge about the image at all.
+     * The sheet was drawn in its own order, which is not the order the engine numbers piece types
+     * in, and the promotion dialog and the replay board both have to cut from the right column. I
+     * keep that mapping here, so nothing else needs to know how the image is laid out.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
-     * @param pType piece type to look up, never null
+     * @param pPieceType piece type without colour, Pieces.PAWN up to Pieces.KING
      * @return the column index in the sheet, 0 to 5
-     * @throws NullPointerException if pType is null
+     * @throws IllegalArgumentException if pPieceType is not a piece type
      */
-    public static int spriteColumn(PieceType pType) {
+    public static int spriteColumn(int pPieceType) {
         // the sheet order is king, queen, bishop, knight, rook, pawn
-        return switch (pType) {
-            case KING -> 0;
-            case QUEEN -> 1;
-            case BISHOP -> 2;
-            case KNIGHT -> 3;
-            case ROOK -> 4;
-            case PAWN -> 5;
+        return switch (pPieceType) {
+            case Pieces.KING -> 0;
+            case Pieces.QUEEN -> 1;
+            case Pieces.BISHOP -> 2;
+            case Pieces.KNIGHT -> 3;
+            case Pieces.ROOK -> 4;
+            case Pieces.PAWN -> 5;
+            default -> throw new IllegalArgumentException("piece type " + pPieceType + " has no sprite");
         };
     }
 
@@ -136,21 +135,21 @@ public class PieceSprites {
      * Time complexity: O(1) for a cached sprite, O(s^2) for the first request of a type and colour
      * with a square size of s. Space complexity: O(s^2) per cached sprite.
      *
-     * @param pType  piece type to draw, never null
-     * @param pWhite true for the white row of the sheet, false for the black row
+     * @param pPieceType piece type without colour, Pieces.PAWN up to Pieces.KING
+     * @param pWhite     true for the white row of the sheet, false for the black row
      * @return the scaled sprite, never null
-     * @throws NullPointerException if pType is null
+     * @throws IllegalArgumentException if pPieceType is not a piece type
      */
-    public BufferedImage spriteFor(PieceType pType, boolean pWhite) {
+    public BufferedImage spriteFor(int pPieceType, boolean pWhite) {
         int colourRow = pWhite ? 0 : 1;
-        BufferedImage cached = cache[colourRow][pType.ordinal()];
+        BufferedImage cached = cache[colourRow][pPieceType];
         // every sprite is scaled once per board
         if (cached != null) {
             return cached;
         }
 
         // white pieces sit in the top row of the sheet, black pieces in the row below
-        BufferedImage sprite = SHEET.getSubimage(spriteColumn(pType) * SHEET_SCALE,
+        BufferedImage sprite = SHEET.getSubimage(spriteColumn(pPieceType) * SHEET_SCALE,
                 colourRow * SHEET_SCALE, SHEET_SCALE, SHEET_SCALE);
         Image scaled = sprite.getScaledInstance(tileSize, tileSize, Image.SCALE_SMOOTH);
 
@@ -160,8 +159,25 @@ public class PieceSprites {
         g2d.drawImage(scaled, 0, 0, null);
         g2d.dispose();
 
-        cache[colourRow][pType.ordinal()] = result;
+        cache[colourRow][pPieceType] = result;
         return result;
+    }
+
+    /**
+     * Returns the piece image for a piece code, scaled to this instance's square size.
+     * <p>
+     * A position stores whole pieces, colour included, so the board has a piece code rather than a
+     * type and a colour. I split the code and hand it on.
+     * <p>
+     * Time complexity: O(1) for a cached sprite, O(s^2) for the first request.
+     * Space complexity: O(s^2) per cached sprite.
+     *
+     * @param pPiece piece code, Pieces.WHITE_PAWN up to Pieces.BLACK_KING
+     * @return the scaled sprite, never null
+     * @throws IllegalArgumentException if pPiece is not a piece code
+     */
+    public BufferedImage spriteForPiece(int pPiece) {
+        return spriteFor(Pieces.typeOf(pPiece), Pieces.isWhite(pPiece));
     }
 
     /**
@@ -182,8 +198,7 @@ public class PieceSprites {
     /**
      * Returns the edge length of one square in the sprite sheet.
      * <p>
-     * Callers that cut their own sprites need to know how large one piece is in the sheet. I return
-     * the sheet width divided by its six columns.
+     * Callers that cut their own sprites need to know how large one piece is in the sheet.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
@@ -195,9 +210,6 @@ public class PieceSprites {
 
     /**
      * Returns the square size this instance scales its sprites to.
-     * <p>
-     * Tests and the board itself compare the sprite size with the square size. I return the size the
-     * instance was built with.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *

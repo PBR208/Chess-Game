@@ -1,31 +1,26 @@
 package ui.board;
 
 /*
- * Purpose: Board is the Swing panel that shows a running game. It paints the tiles, the pieces,
- * the legal move hints and both player clocks, and it translates between screen pixels and board
- * squares while turning the view towards the player to move. The position data itself lives in
- * BoardState and the rules in GameController, so this class stays focused on presentation and on
- * owning the two clocks.
+ * Purpose: Board is the Swing panel that shows a running game. It paints the tiles, the pieces, the
+ * legal move hints and both player clocks, and it translates between screen pixels and the squares
+ * the engine counts in, while turning the view towards the player to move. The game itself lives in
+ * a GameSession on the bitboard core, so this class holds no position data of its own and only asks
+ * the session what stands where and which squares a picked up piece may go to.
  *
  * Owner: PBR208 - https://github.com/PBR208/
- * Version: 1.0
+ * Version: 2.0
  */
 
-import engine.imports.BoardState;
+import engine.core.Bitboards;
+import engine.core.GameSession;
+import engine.core.MoveGen;
+import engine.core.Pieces;
 import engine.model.GameConfig;
-import engine.imports.GameController;
-import engine.imports.GameView;
-import engine.imports.Move;
-import engine.imports.StartPosition;
-import engine.pieces.*;
 
 import javax.swing.*;
 import java.awt.*;
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
 
-public class Board extends JPanel implements GameView {
+public class Board extends JPanel implements GameSession.View {
 
     // edge length of one square in pixels when no size is given
     public static final int DEFAULT_TILE_SIZE = 85;
@@ -35,6 +30,8 @@ public class Board extends JPanel implements GameView {
     private static final int WINDOW_FRAME_PX = 60;
     // width of the move log next to the board
     private static final int MOVE_LOG_WIDTH_PX = 200;
+    // stands for "no square is selected"
+    private static final int NO_SQUARE = -1;
 
     private final int tileSize;
     private final int rows = 8;
@@ -42,14 +39,16 @@ public class Board extends JPanel implements GameView {
     // each clock bar is as high as one square
     private final int clockHeight;
 
-    private final BoardState state = new BoardState();
-    private Piece selectedPiece;
+    private final GameSession session;
+
+    // square of the piece the mouse picked up, or NO_SQUARE while nothing is dragged
+    private int selectedSquare = NO_SQUARE;
+    // squares that piece may move to, filled when it is picked up
+    private final int[] targets = new int[MoveGen.MAX_MOVES];
+    private int targetCount;
     // pixel position of the dragged piece, it follows the mouse instead of sitting on its square
     private int dragX;
     private int dragY;
-    private final HashSet<Integer> legalMoveTiles = new HashSet<>();
-
-    private final GameController gc;
 
     // piece images scaled to this board's square size
     private final PieceSprites sprites;
@@ -69,7 +68,7 @@ public class Board extends JPanel implements GameView {
      * Tests and callers that don't care about the screen keep the size the board always had. I
      * forward to the full constructor with 85 pixel squares.
      * <p>
-     * Time complexity: O(p) for placing the p starting pieces. Space complexity: O(p).
+     * Time complexity: O(p) for the p starting pieces. Space complexity: O(1) beyond the session.
      *
      * @param pConfig names, times and increment of the new game, never null
      * @throws NullPointerException if pConfig is null
@@ -81,14 +80,14 @@ public class Board extends JPanel implements GameView {
     /**
      * Builds the game board for a new game with squares of a given size.
      * <p>
-     * A game needs its rules controller, two clocks, mouse input and the starting position, and it
-     * has to fit on the player's screen. I store the square size first, since everything else is
-     * measured in squares, then create the controller with the Swing dialogs, both clocks with the
-     * configured times, remember the increment, size the panel for the board and the two clock bars,
-     * hook up the mouse, place the pieces scaled to the square size and start White's clock.
+     * A game needs a session to play in, two clocks, mouse input and a size that fits the player's
+     * screen. I store the square size first, since everything else is measured in squares, create
+     * the session on the starting position and hand it this board as its view, the promotion dialog
+     * and the draw dialogs, build both clocks with the configured times, size the panel for the board
+     * and the two clock bars, hook up the mouse and start White's clock.
      * <p>
-     * Time complexity: O(p * s^2) for the p starting pieces and their sprites scaled to squares of s
-     * pixels. Space complexity: O(p * s^2) for the scaled sprites.
+     * Time complexity: O(p) for the p starting pieces. Space complexity: O(s^2) for the sprites
+     * scaled to squares of s pixels.
      *
      * @param pConfig   names, times and increment of the new game, never null
      * @param pTileSize edge length of one square in pixels, at least MIN_TILE_SIZE
@@ -104,7 +103,12 @@ public class Board extends JPanel implements GameView {
         this.clockHeight = pTileSize;
         // the board draws the pieces, so it owns their images
         this.sprites = new PieceSprites(pTileSize);
-        this.gc = new GameController(this, state, pConfig, new SwingPromotionChooser(this), new SwingDrawOfferResolver(this));
+
+        this.session = new GameSession();
+        session.setView(this);
+        session.setPromotionPicker(new SwingPromotionChooser(this));
+        session.setDrawArbiter(new SwingDrawOfferResolver(this));
+
         this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), this::repaint, this::onTimeExpired);
         this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), this::repaint, this::onTimeExpired);
         // the same increment applies to both players
@@ -112,11 +116,9 @@ public class Board extends JPanel implements GameView {
 
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
 
-        Input input = new Input(this, gc);
+        Input input = new Input(this, session);
         this.addMouseListener(input);
         this.addMouseMotionListener(input);
-
-        state.setPieces(addPieces());
 
         whiteClock.start();
     }
@@ -145,27 +147,26 @@ public class Board extends JPanel implements GameView {
     }
 
     /**
-     * Returns the pieces of a new game.
+     * Paints the clocks, the board, the move hints and every piece.
      * <p>
-     * The board used to build the 32 starting pieces itself, which made the rules engine call back
-     * into a Swing component whenever a game restarted. I forward to StartPosition, which places them
-     * on this board's position, and keep the method so existing callers and tests stay unchanged.
+     * The view is turned towards the player to move, so the clock of the waiting player is drawn at
+     * the top and the one of the player to move at the bottom. I draw the squares, then the hints for
+     * a picked up piece, then every piece the position holds, with the dragged one following the
+     * mouse instead of sitting on its square.
      * <p>
-     * Time complexity: O(p) for the p pieces created. Space complexity: O(p) for the returned list.
+     * Time complexity: O(64) for the squares plus O(p) for the p pieces.
+     * Space complexity: O(1), the sprites are cached.
      *
-     * @return the pieces of the starting position, never null
+     * @param pGraphics graphics context handed in by Swing, never null
      */
-    public ArrayList<Piece> addPieces() {
-        return StartPosition.create(state);
-    }
-
-    public void paintComponent(Graphics g) {
-        super.paintComponent(g);
-        Graphics2D g2d = (Graphics2D) g;
+    @Override
+    public void paintComponent(Graphics pGraphics) {
+        super.paintComponent(pGraphics);
+        Graphics2D g2d = (Graphics2D) pGraphics;
         g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
                 RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
-        boolean whiteAtBottom = gc.isTurnOfWhite();
+        boolean whiteAtBottom = session.isWhiteToMove();
         int boardWidth = cols * tileSize;
         int bottomY = clockHeight + rows * tileSize;
 
@@ -175,33 +176,30 @@ public class Board extends JPanel implements GameView {
             whiteClock.draw(g2d, 0, boardWidth, clockHeight);
         }
 
-        for (int r = 0; r < rows; r++) {
-            for (int c = 0; c < cols; c++) {
-                g2d.setColor((c + r) % 2 == 0
-                        ? LIGHT_TILE
-                        : DARK_TILE);
-                g2d.fillRect(toVisualX(c), toVisualY(r), tileSize, tileSize);
+        for (int row = 0; row < rows; row++) {
+            for (int col = 0; col < cols; col++) {
+                g2d.setColor((col + row) % 2 == 0 ? LIGHT_TILE : DARK_TILE);
+                g2d.fillRect(toVisualX(col), toVisualY(row), tileSize, tileSize);
             }
         }
 
-        if (selectedPiece != null) {
-            for (int r = 0; r < rows; r++) {
-                for (int c = 0; c < cols; c++) {
-                    if (legalMoveTiles.contains(getTileNum(c, r))) {
-                        g2d.setColor(HINT_COLOR);
-                        g2d.fillRect(toVisualX(c), toVisualY(r), tileSize, tileSize);
-                    }
-                }
-            }
+        // the squares a picked up piece may go to
+        for (int index = 0; index < targetCount; index++) {
+            g2d.setColor(HINT_COLOR);
+            g2d.fillRect(toVisualX(colOf(targets[index])), toVisualY(rowOf(targets[index])), tileSize, tileSize);
         }
 
-        for (Piece p : state.getPieces()) {
+        for (int square = 0; square < Bitboards.SQUARE_COUNT; square++) {
+            int piece = session.position().pieceAt(square);
+            if (piece == Pieces.NONE) {
+                continue;
+            }
             // the piece under the mouse follows the cursor, all others sit on their square
-            if (p == selectedPiece) {
-                g2d.drawImage(sprites.spriteFor(p.getType(), p.isWhite()), dragX, dragY, null);
+            if (square == selectedSquare) {
+                g2d.drawImage(sprites.spriteForPiece(piece), dragX, dragY, null);
             } else {
-                g2d.drawImage(sprites.spriteFor(p.getType(), p.isWhite()),
-                        toVisualX(p.getCol()), toVisualY(p.getRow()), null);
+                g2d.drawImage(sprites.spriteForPiece(piece),
+                        toVisualX(colOf(square)), toVisualY(rowOf(square)), null);
             }
         }
 
@@ -213,28 +211,66 @@ public class Board extends JPanel implements GameView {
     }
 
     /**
-     * Hands the clock to the side to move according to the board's own controller.
+     * Picks up the piece on a square and works out where it may go.
      * <p>
-     * Older callers don't say whose turn it is. I forward to the explicit version with the side to
-     * move of the board's own controller.
+     * A player can only pick up a piece of the side to move, and only while the game is running. I
+     * remember the square and ask the session for the squares that piece may move to, which is what
+     * the hints are painted from. Anything else clears the selection.
+     * <p>
+     * Time complexity: O(m) for the m legal moves of the position. Space complexity: O(1).
+     *
+     * @param pSquare square that was pressed, 0 to 63
+     */
+    public void selectSquare(int pSquare) {
+        int piece = session.position().pieceAt(pSquare);
+        boolean ownPiece = piece != Pieces.NONE
+                && Pieces.isWhite(piece) == session.isWhiteToMove();
+        if (!ownPiece) {
+            clearSelection();
+            return;
+        }
+        selectedSquare = pSquare;
+        targetCount = session.targetsFrom(pSquare, targets);
+    }
+
+    /**
+     * Drops whatever was picked up.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      */
-    public void switchClocks() {
-        switchClocks(gc.isTurnOfWhite());
+    public void clearSelection() {
+        selectedSquare = NO_SQUARE;
+        targetCount = 0;
+    }
+
+    /**
+     * Remembers where the dragged piece is drawn.
+     * <p>
+     * While a piece is dragged it hangs on the mouse instead of standing on a square. The board
+     * draws, so the board keeps that pixel position, and it is only read while a piece is selected.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pX horizontal panel coordinate of the sprite's upper left corner, any value
+     * @param pY vertical panel coordinate of the sprite's upper left corner, any value
+     */
+    public void setDragPosition(int pX, int pY) {
+        this.dragX = pX;
+        this.dragY = pY;
     }
 
     /**
      * Starts the clock of the side to move and stops the other one.
      * <p>
-     * The controller that just played a move knows best whose turn it is, and that also holds for a
-     * controller other than the board's own one. I stop the clock of the side that just moved, add
-     * the increment to it as a Fischer clock does, and start the clock of the side to move.
+     * The session hands the clock over after every move. I stop the clock of the side that just
+     * moved, add the increment to it as a Fischer clock does, and start the clock of the side to
+     * move.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
      * @param pWhiteToMove true if White is to move now, false if Black is
      */
+    @Override
     public void switchClocks(boolean pWhiteToMove) {
         // only the side to move uses up time, the side that just moved earns its increment
         if (pWhiteToMove) {
@@ -248,11 +284,23 @@ public class Board extends JPanel implements GameView {
         }
     }
 
+    /**
+     * Stops both clocks because the game has ended.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
+    @Override
     public void stopClocks() {
         whiteClock.stop();
         blackClock.stop();
     }
 
+    /**
+     * Puts both clocks back to their starting times and starts White's.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
+    @Override
     public void resetClocks() {
         whiteClock.reset();
         blackClock.reset();
@@ -263,22 +311,18 @@ public class Board extends JPanel implements GameView {
      * Tells whether either player's clock is currently counting down.
      * <p>
      * The end of a game has to freeze both clocks, and tests need a way to confirm that without
-     * waiting for a flag to fall. I simply ask both clocks for their running state.
+     * waiting for a flag to fall.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
-     * @return true if the white or the black clock is running, false when both are stopped
+     * @return true if the white or the black clock is running
      */
     public boolean areClocksRunning() {
-        // a single running clock is enough
         return whiteClock.isRunning() || blackClock.isRunning();
     }
 
     /**
      * Tells whether one player's clock is currently counting down.
-     * <p>
-     * Tests and the UI need to know whose time is running, for example while a draw claim is on the
-     * screen. I return the running state of the requested clock.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
@@ -292,9 +336,6 @@ public class Board extends JPanel implements GameView {
     /**
      * Returns the time one player has left.
      * <p>
-     * Tests and features such as the result logic need the exact remaining time of a player. I ask
-     * the requested clock for its current value.
-     * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
      * @param pWhite true for White's clock, false for Black's
@@ -304,20 +345,35 @@ public class Board extends JPanel implements GameView {
         return pWhite ? whiteClock.getTimeMs() : blackClock.getTimeMs();
     }
 
-    public int toVisualX(int col) {
-        return (gc.isTurnOfWhite() ? col : 7 - col) * tileSize;
+    /**
+     * Turns a board column into the pixel where its square starts.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pCol column, 0 for the a-file up to 7 for the h-file
+     * @return the horizontal pixel of that column's left edge
+     */
+    public int toVisualX(int pCol) {
+        return (session.isWhiteToMove() ? pCol : 7 - pCol) * tileSize;
     }
 
-    public int toVisualY(int row) {
-        return clockHeight + (gc.isTurnOfWhite() ? row : 7 - row) * tileSize;
+    /**
+     * Turns a board row into the pixel where its square starts.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pRow row, 0 for rank 8 down to 7 for rank 1
+     * @return the vertical pixel of that row's upper edge
+     */
+    public int toVisualY(int pRow) {
+        return clockHeight + (session.isWhiteToMove() ? pRow : 7 - pRow) * tileSize;
     }
 
     /**
      * Tells whether a point on the panel lies on one of the 64 squares.
      * <p>
      * The panel also contains the two clock bars, and mouse events can be delivered for points
-     * outside the panel while a piece is dragged. I check that the point is inside the board width
-     * and between the top and bottom clock bars.
+     * outside the panel while a piece is dragged.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
@@ -334,150 +390,123 @@ public class Board extends JPanel implements GameView {
     /**
      * Converts a horizontal panel coordinate into a board column.
      * <p>
-     * The view is turned towards the player to move, so the same pixel belongs to a different
-     * column for Black. I divide by the tile size with Math.floorDiv, which rounds down instead of
-     * towards zero, so points left of the board never land on the first column, and mirror the
-     * result when Black is to move. Callers check isOnBoard first.
+     * The view is turned towards the player to move, so the same pixel belongs to a different column
+     * for Black. Math.floorDiv rounds down instead of towards zero, so points left of the board never
+     * land on the first column. Callers check isOnBoard first.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
      * @param pX horizontal panel coordinate in pixels
-     * @return the column, 0 to 7 for points on the board and outside that range otherwise
+     * @return the column, 0 to 7 for points on the board
      */
     public int toLogicalCol(int pX) {
-        // floorDiv keeps negative coordinates off the first column
-        int c = Math.floorDiv(pX, tileSize);
-        return gc.isTurnOfWhite() ? c : 7 - c;
+        int col = Math.floorDiv(pX, tileSize);
+        return session.isWhiteToMove() ? col : 7 - col;
     }
 
     /**
      * Converts a vertical panel coordinate into a board row.
      * <p>
-     * The squares start below the top clock bar and the view is turned towards the player to move. I
-     * subtract the clock bar height, divide with Math.floorDiv so points above the board never land
-     * on the first row, and mirror the result when Black is to move. Callers check isOnBoard first.
+     * The squares start below the top clock bar and the view is turned towards the player to move.
+     * Callers check isOnBoard first.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
      * @param pY vertical panel coordinate in pixels
-     * @return the row, 0 to 7 for points on the board and outside that range otherwise
+     * @return the row, 0 to 7 for points on the board
      */
     public int toLogicalRow(int pY) {
-        // floorDiv keeps points on the top clock bar off the first row
-        int r = Math.floorDiv(pY - clockHeight, tileSize);
-        return gc.isTurnOfWhite() ? r : 7 - r;
+        int row = Math.floorDiv(pY - clockHeight, tileSize);
+        return session.isWhiteToMove() ? row : 7 - row;
     }
 
     /**
-     * Remembers where the dragged piece is drawn.
+     * Turns a column and a row of the screen into the square the engine counts with.
      * <p>
-     * While a piece is dragged it hangs on the mouse instead of standing on a square, and that pixel
-     * position used to live in the piece itself, which gave every rules class a reason to know about
-     * screen coordinates. The board draws, so the board keeps the position. The values are only read
-     * while a piece is selected, so a stale position after a drop does no harm.
+     * The board draws rank eight at the top, so its row 0 is rank 8, while the engine numbers a1 as
+     * square 0 and counts upwards. Flipping the row is the whole difference between the two.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
-     * @param pX horizontal panel coordinate of the sprite's upper left corner, any value
-     * @param pY vertical panel coordinate of the sprite's upper left corner, any value
+     * @param pCol column, 0 to 7
+     * @param pRow row, 0 to 7 where 0 is rank 8
+     * @return the square number, 0 to 63
      */
-    public void setDragPosition(int pX, int pY) {
-        this.dragX = pX;
-        this.dragY = pY;
+    public static int squareAt(int pCol, int pRow) {
+        return Bitboards.square(pCol, 7 - pRow);
     }
 
     /**
-     * Returns the scaled piece images this board draws with.
-     * <p>
-     * The sprites are scaled once per board and tests check that they match the square size. I hand
-     * out the same instance the painting uses.
+     * Returns the column a square is drawn in.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
-     * @return the sprite source of this board, never null
+     * @param pSquare square number, 0 to 63
+     * @return the column, 0 to 7
      */
-    public PieceSprites getSprites() {
-        return sprites;
+    public static int colOf(int pSquare) {
+        return Bitboards.fileOf(pSquare);
     }
 
-    private void onTimeExpired(boolean isWhiteExpired) {
-        gc.flagFall(isWhiteExpired);
+    /**
+     * Returns the row a square is drawn in.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pSquare square number, 0 to 63
+     * @return the row, 0 for rank 8 down to 7 for rank 1
+     */
+    public static int rowOf(int pSquare) {
+        return 7 - Bitboards.rankOf(pSquare);
+    }
+
+    /**
+     * Ends the game because a clock ran out.
+     * <p>
+     * The clocks report a flag fall with the colour whose time is gone, and the session decides what
+     * that means, including the case where the other side could never mate and the game is drawn.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pIsWhiteExpired true if White's clock ran out, false if Black's did
+     */
+    private void onTimeExpired(boolean pIsWhiteExpired) {
+        session.flagFall(pIsWhiteExpired ? Pieces.WHITE : Pieces.BLACK);
     }
 
     // GETTER
 
-    public Piece getPiece(int col, int row) {
-        return state.getPiece(col, row);
+    public GameSession getSession() {
+        return session;
     }
 
     public int getTileSize() {
         return tileSize;
     }
 
-    public Piece getSelectedPiece() {
-        return selectedPiece;
+    public PieceSprites getSprites() {
+        return sprites;
     }
 
-    public int getTileNum(int col, int row) {
-        return state.getTileNum(col, row);
+    /**
+     * Returns the square the mouse picked a piece up on.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the selected square, or -1 while nothing is picked up
+     */
+    public int getSelectedSquare() {
+        return selectedSquare;
     }
 
-    public int getEnPassantTile() {
-        return state.getEnPassantTile();
-    }
-
-    public List<Piece> getPieces() {
-        return state.getPieces();
-    }
-
-    public GameController getGameController() {
-        return gc;
-    }
-
-    public BoardState getState() {
-        return state;
-    }
-
-    // SETTER
-
-    public void setSelectedPiece(Piece selectedPiece) {
-        this.selectedPiece = selectedPiece;
-        legalMoveTiles.clear();
-
-        if (selectedPiece != null) {
-            for (int r = 0; r < 8; r++) {
-                for (int c = 0; c < 8; c++) {
-                    if (gc.isValidMove(new Move(state, selectedPiece, c, r))) {
-                        legalMoveTiles.add(getTileNum(c, r));
-                    }
-                }
-            }
-        }
-    }
-
-    public void removePiece(Piece p) {
-        state.removePiece(p);
-    }
-
-    public void setPieces(ArrayList<Piece> pieces) {
-        state.setPieces(pieces);
-    }
-
-    public void setEnPassantTile(int enPassantTile) {
-        state.setEnPassantTile(enPassantTile);
-    }
-
-    public void addPiece(Piece p) {
-        state.addPiece(p);
-    }
-
-    // HELPER
-
-    public void capture(Move m) {
-        state.capture(m);
-    }
-
-    public void moveOnGrid(Piece p, int fromCol, int fromRow) {
-        state.moveOnGrid(p, fromCol, fromRow);
+    /**
+     * Returns how many squares the picked up piece may move to.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the number of highlighted squares, 0 when nothing is picked up
+     */
+    public int getTargetCount() {
+        return targetCount;
     }
 }

@@ -10,13 +10,14 @@ package ui.board;
  * Version: 1.0
  */
 
+import engine.core.GameSession;
 import engine.imports.MoveLogView;
 
 import javax.swing.*;
 import java.awt.*;
 import java.util.List;
 
-public class MoveLogPanel extends JPanel implements MoveLogView {
+public class MoveLogPanel extends JPanel implements MoveLogView, GameSession.MoveLog {
 
     private final JTextArea area = new JTextArea();
     private final JTextArea fenArea = new JTextArea();

@@ -11,7 +11,11 @@ package app;
  * Version: 1.0
  */
 
+import engine.core.GameResult;
+import engine.core.GameSession;
+import engine.core.Termination;
 import engine.model.GameConfig;
+import engine.model.GameRecord;
 import engine.persistence.PgnManager;
 import ui.board.Board;
 import ui.board.EndScreen;
@@ -123,11 +127,17 @@ public class Main {
             Rectangle usableArea = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
             Board board = new Board(cfg, Board.tileSizeFor(usableArea.width, usableArea.height));
             MoveLogPanel logPanel = new MoveLogPanel(board.getPreferredSize().height);
-            board.getGameController().setMoveLogView(logPanel);
+            GameSession session = board.getSession();
+            session.setMoveLogView(logPanel);
 
-            board.getGameController().setGameEndListener((record, displayMessage) -> {
+            session.setEndListener((pResult, pTermination) -> {
+                // the session owns the moves and the result, the names and the time control come from the config
+                GameRecord record = new GameRecord(cfg, pResult.pgnToken(),
+                        session.getMoveLog(), session.getFenHistory());
                 // a game that couldn't be written must not disappear without a word
                 boolean saved = PgnManager.save(record);
+                // the engine reports a result and a reason, the sentence the players read is built here
+                String displayMessage = endMessage(cfg, pResult, pTermination);
 
                 SwingUtilities.invokeLater(() -> {
                     if (!saved) {
@@ -154,6 +164,41 @@ public class Main {
             frame.revalidate();
             frame.repaint();
         });
+    }
+
+    /**
+     * Turns a result and the reason for it into the sentence the end screen shows.
+     * <p>
+     * The rules engine reports that a game ended and why, but it knows nothing about the players or
+     * the language they read, so the wording belongs here. I look up the winner's name for the three
+     * reasons that have one and build a sentence for every reason a game can end with. Because the
+     * reason is an enum, adding a new one makes this switch fail to compile instead of silently
+     * showing an empty end screen.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(n) for the returned sentence.
+     *
+     * @param pConfig      names of both players, never null
+     * @param pResult      how the game ended, never null and never ONGOING
+     * @param pTermination why the game ended, never null
+     * @return the sentence shown on the end screen, never null
+     * @throws NullPointerException if any argument is null
+     */
+    private static String endMessage(GameConfig pConfig, GameResult pResult, Termination pTermination) {
+        // only mate, a resignation and a flag fall have a winner to name
+        String winner = pResult == GameResult.WHITE_WINS ? pConfig.whiteName() : pConfig.blackName();
+        return switch (pTermination) {
+            case CHECKMATE -> winner + " wins by checkmate!";
+            case RESIGNATION -> winner + " wins by resignation!";
+            case TIME_OUT -> winner + " wins on time!";
+            case STALEMATE -> "Draw by stalemate!";
+            case INSUFFICIENT_MATERIAL -> "Draw: neither side has enough material to mate!";
+            case TIME_OUT_WITHOUT_MATING_MATERIAL -> "Draw: time ran out, but no mate was possible!";
+            case FIFTY_MOVE_RULE -> "Draw by the 50-move rule!";
+            case SEVENTY_FIVE_MOVE_RULE -> "Draw by the 75-move rule!";
+            case THREEFOLD_REPETITION -> "Draw by threefold repetition!";
+            case FIVEFOLD_REPETITION -> "Draw by fivefold repetition!";
+            case DRAW_AGREED -> "Draw by agreement!";
+        };
     }
 
     public static void showPastGames() {

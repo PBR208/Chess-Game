@@ -710,8 +710,7 @@ public class GameTest {
 
         test("BoardState: getPiece reflects the starting position", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     checkNotNull(state.getPiece(4, 7), "white king must be at e1");
                     check(state.getPiece(4, 7).isWhite(), "piece at e1 must be white");
                     checkNotNull(state.getPiece(4, 0), "black king must be at e8");
@@ -721,8 +720,8 @@ public class GameTest {
 
         test("BoardState: getPieces returns an unmodifiable view", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    List<Piece> pieces = board.getState().getPieces();
+                    BoardState state = newBoardState();
+                    List<Piece> pieces = state.getPieces();
                     boolean threw = false;
                     try {
                         pieces.clear();
@@ -734,8 +733,7 @@ public class GameTest {
 
         test("BoardState: removePiece clears both the list and the grid cell", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     Piece pawn = state.getPiece(0, 6);
                     state.removePiece(pawn);
                     check(state.getPiece(0, 6) == null, "grid cell must be cleared after removePiece");
@@ -744,9 +742,8 @@ public class GameTest {
 
         test("BoardState: addPiece places a piece into both the list and the grid", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
-                    Piece extraQueen = new Queen(board.getState(), 4, 4, true);
+                    BoardState state = newBoardState();
+                    Piece extraQueen = new Queen(state, 4, 4, true);
                     state.addPiece(extraQueen);
                     checkEqual(extraQueen, state.getPiece(4, 4), "grid must reflect the newly added piece");
                     check(state.getPieces().contains(extraQueen), "piece list must contain the newly added piece");
@@ -754,8 +751,7 @@ public class GameTest {
 
         test("BoardState: moveOnGrid vacates the old square and occupies the new one", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     Piece pawn = state.getPiece(0, 6);
                     pawn.setRow(4); // pretend it already moved logically to a4
                     state.moveOnGrid(pawn, 0, 6);
@@ -765,19 +761,17 @@ public class GameTest {
 
         test("BoardState: getTileNum/getEnPassantTile round-trip", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     state.setEnPassantTile(state.getTileNum(3, 2));
                     checkEqual(state.getTileNum(3, 2), state.getEnPassantTile(), "round trip through getTileNum");
                 }));
 
         test("BoardState: setPieces replaces the entire position at once", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
 
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece loneKing = new King(board.getState(), 4, 4, true);
+                    Piece loneKing = new King(state, 4, 4, true);
                     custom.add(loneKing);
                     state.setPieces(custom);
 
@@ -792,8 +786,7 @@ public class GameTest {
 
         test("Move: capture resolves directly from BoardState when the destination is occupied", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     Piece whitePawn = state.getPiece(4, 6);
                     Piece blackPawn = state.getPiece(3, 1);
                     Move m = new Move(state, whitePawn, 3, 1); // hypothetical capture, legality not checked here
@@ -802,8 +795,7 @@ public class GameTest {
 
         test("Move: destination square with no piece has a null capture", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     Piece whitePawn = state.getPiece(4, 6);
                     Move m = new Move(state, whitePawn, 4, 4);
                     check(m.getCapture() == null, "empty destination square must mean no capture");
@@ -811,20 +803,19 @@ public class GameTest {
 
         test("CheckScanner: neither king is in check at game start", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    CheckScanner cs = new CheckScanner(board.getState());
+                    BoardState state = newBoardState();
+                    CheckScanner cs = new CheckScanner(state);
                     check(!cs.isKingInCheckRN(true), "White king must not be in check at game start");
                     check(!cs.isKingInCheckRN(false), "Black king must not be in check at game start");
                 }));
 
         test("CheckScanner: detects check from an unobstructed rook", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
 
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board.getState(), 4, 7, true);
-                    Piece blackRook = new Rook(board.getState(), 4, 0, false);
+                    Piece whiteKing = new King(state, 4, 7, true);
+                    Piece blackRook = new Rook(state, 4, 0, false);
                     custom.add(whiteKing);
                     custom.add(blackRook);
                     state.setPieces(custom);
@@ -835,12 +826,11 @@ public class GameTest {
 
         test("CheckScanner: isKingLeftInCheck rejects a king move into an attacked square", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
 
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board.getState(), 0, 7, true);  // a1
-                    Piece blackRook = new Rook(board.getState(), 3, 7, false); // d1, attacks the whole 1st rank
+                    Piece whiteKing = new King(state, 0, 7, true);  // a1
+                    Piece blackRook = new Rook(state, 3, 7, false); // d1, attacks the whole 1st rank
                     custom.add(whiteKing);
                     custom.add(blackRook);
                     state.setPieces(custom);
@@ -856,15 +846,14 @@ public class GameTest {
 
         test("CheckScanner: isKingLeftInCheck detects a discovered check from a third piece", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
 
                     // White king on e1, White rook on e4 blocking a Black rook on e8.
                     // Sliding the White rook off the e-file must expose the king.
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board.getState(), 4, 7, true);   // e1
-                    Piece whiteRook = new Rook(board.getState(), 4, 4, true);   // e4
-                    Piece blackRook = new Rook(board.getState(), 4, 0, false);  // e8
+                    Piece whiteKing = new King(state, 4, 7, true);   // e1
+                    Piece whiteRook = new Rook(state, 4, 4, true);   // e4
+                    Piece blackRook = new Rook(state, 4, 0, false);  // e8
                     custom.add(whiteKing);
                     custom.add(whiteRook);
                     custom.add(blackRook);
@@ -883,16 +872,14 @@ public class GameTest {
 
         test("NotationHelper: simple pawn push has no piece letter or capture marker", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     Move m = new Move(state, state.getPiece(4, 6), 4, 4);
                     checkEqual("e4", new NotationHelper().toNotation(m, 4, 6), "pawn push e2-e4 must be notated 'e4'");
                 }));
 
         test("NotationHelper: pawn capture is notated with the origin file", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     Move m = new Move(state, state.getPiece(4, 6), 3, 1); // hypothetical capture on d7
                     checkEqual("exd7", new NotationHelper().toNotation(m, 4, 6),
                             "pawn capture must be notated with the origin file, e.g. 'exd7'");
@@ -900,16 +887,14 @@ public class GameTest {
 
         test("NotationHelper: knight move uses 'N' (K is reserved for King)", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     Move m = new Move(state, state.getPiece(1, 7), 2, 5); // Nc3
                     checkEqual("Nc3", new NotationHelper().toNotation(m, 1, 7), "knight move must be notated with 'N'");
                 }));
 
         test("NotationHelper: castling is notated O-O / O-O-O", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     Piece king = state.getPiece(4, 7);
                     NotationHelper nh = new NotationHelper();
 
@@ -926,33 +911,32 @@ public class GameTest {
 
         test("FenGenerator: starting position matches the standard FEN placement field", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    String fen = new FenGenerator(board.getState()).generate(true, 0, 1);
+                    BoardState state = newBoardState();
+                    String fen = new FenGenerator(state).generate(true, 0, 1);
                     check(fen.startsWith("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"),
                             "placement field must match the standard starting position, got: " + fen);
                 }));
 
         test("FenGenerator: active colour field reflects isWhiteTurn", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    FenGenerator fg = new FenGenerator(board.getState());
+                    BoardState state = newBoardState();
+                    FenGenerator fg = new FenGenerator(state);
                     check(fg.generate(true, 0, 1).contains(" w "), "white to move must produce ' w '");
                     check(fg.generate(false, 0, 1).contains(" b "), "black to move must produce ' b '");
                 }));
 
         test("FenGenerator: starting position has all four castling rights", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    String fen = new FenGenerator(board.getState()).generate(true, 0, 1);
+                    BoardState state = newBoardState();
+                    String fen = new FenGenerator(state).generate(true, 0, 1);
                     checkEqual("KQkq", fen.split(" ")[2], "all four castling rights must be present at game start");
                 }));
 
         test("FenGenerator: a moved king removes both of that side's castling rights", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    BoardState state = newBoardState();
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     state.removePiece(state.getPiece(5, 7)); // clear f1 so the king can step there
                     Move kingStep = new Move(state, state.getPiece(4, 7), 5, 7);
@@ -969,9 +953,8 @@ public class GameTest {
         test("FenGenerator: en passant target square appears after a double pawn push", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    BoardState state = newBoardState();
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // e2-e4
 
@@ -985,8 +968,7 @@ public class GameTest {
 
         test("MoveHistory: record adds one entry to both moveLog and fenHistory", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     MoveHistory history = new MoveHistory(state);
                     Move m = new Move(state, state.getPiece(4, 6), 4, 4);
 
@@ -999,8 +981,7 @@ public class GameTest {
 
         test("MoveHistory: clear empties both lists", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     MoveHistory history = new MoveHistory(state);
                     history.record(new Move(state, state.getPiece(4, 6), 4, 4), 4, 6, false, 1, 1);
                     history.clear();
@@ -1010,8 +991,8 @@ public class GameTest {
 
         test("MoveHistory: getMoveLog/getFenHistory return unmodifiable views", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    MoveHistory history = new MoveHistory(board.getState());
+                    BoardState state = newBoardState();
+                    MoveHistory history = new MoveHistory(state);
                     boolean threwOnMoveLog = false, threwOnFenHistory = false;
                     try {
                         history.getMoveLog().add("hack");
@@ -1029,8 +1010,7 @@ public class GameTest {
 
         test("MoveHistory: listener receives updates on record() and clear()", () ->
                 SwingUtilities.invokeAndWait(() -> {
-                    Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     MoveHistory history = new MoveHistory(state);
 
                     int[] updateCount = {0};
@@ -1086,24 +1066,25 @@ public class GameTest {
 
         test("PieceSprites: every sprite is scaled to the board's square size", () -> {
             PieceSprites sprites = new PieceSprites(64);
-            BufferedImage knight = sprites.spriteFor(PieceType.KNIGHT, true);
+            BufferedImage knight = sprites.spriteFor(Pieces.KNIGHT, true);
             checkEqual(64, knight.getWidth(), "a sprite must be as wide as one square");
             checkEqual(64, knight.getHeight(), "a sprite must be as high as one square");
         });
 
         test("PieceSprites: the same piece and colour comes back from the cache", () -> {
             PieceSprites sprites = new PieceSprites(40);
-            BufferedImage first = sprites.spriteFor(PieceType.QUEEN, false);
-            BufferedImage second = sprites.spriteFor(PieceType.QUEEN, false);
+            BufferedImage first = sprites.spriteFor(Pieces.QUEEN, false);
+            BufferedImage second = sprites.spriteFor(Pieces.QUEEN, false);
             check(first == second, "a repaint must reuse the scaled sprite instead of scaling it again");
-            check(first != sprites.spriteFor(PieceType.QUEEN, true), "black and white must not share a sprite");
+            check(first != sprites.spriteFor(Pieces.QUEEN, true), "black and white must not share a sprite");
         });
 
         test("PieceSprites: every piece type has its own column in the sheet", () -> {
             java.util.Set<Integer> columns = new java.util.HashSet<>();
-            for (PieceType type : PieceType.values()) {
+            // the sprites speak the engine's piece codes, so the types are counted the way it counts them
+            for (int type = 0; type < Pieces.TYPE_COUNT; type++) {
                 int column = PieceSprites.spriteColumn(type);
-                check(column >= 0 && column < 6, "the column of " + type + " must lie in the sheet, got " + column);
+                check(column >= 0 && column < 6, "the column of type " + type + " must lie in the sheet, got " + column);
                 check(columns.add(column), "two piece types must not share the sprite column " + column);
             }
             checkEqual(6, columns.size(), "all six piece types must have a column");
@@ -1252,8 +1233,8 @@ public class GameTest {
         test("Board: the player who just moved gets the increment", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(new GameConfig("Alice", "Bob", 120_000, 120_000, "Bullet 2+1", 1_000));
-                    BoardState state = board.getState();
-                    board.getGameController().makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // e2-e4
+                    GameSession session = board.getSession();
+                    session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
 
                     long whiteLeft = board.getRemainingTimeMs(true);
                     check(whiteLeft > 120_000, "White's clock must include the one second increment, got " + whiteLeft + " ms");
@@ -1279,7 +1260,7 @@ public class GameTest {
                     checkEqual(60, board.getTileSize(), "the board must use the given square size");
                     // eight squares wide, eight rows and two clock bars high
                     checkEqual(new Dimension(480, 600), board.getPreferredSize(), "the panel size must follow the squares");
-                    checkEqual(60, board.getSprites().spriteFor(PieceType.KNIGHT, true).getWidth(),
+                    checkEqual(60, board.getSprites().spriteFor(Pieces.KNIGHT, true).getWidth(),
                             "the piece sprites must be scaled to the smaller squares");
                 }));
 
@@ -1305,29 +1286,28 @@ public class GameTest {
         test("Input: a press on the bottom clock bar is ignored", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
-                    Input input = new Input(board, board.getGameController());
+                    Input input = new Input(board, board.getSession());
                     // below the first rank, on White's clock bar
                     input.mousePressed(new java.awt.event.MouseEvent(board, java.awt.event.MouseEvent.MOUSE_PRESSED,
                             System.currentTimeMillis(), 0, 40, 805, 1, false));
-                    check(board.getSelectedPiece() == null, "nothing may be selected from the clock bar");
+                    check(board.getSelectedSquare() < 0, "nothing may be selected from the clock bar");
                 }));
 
         test("Input: a press on the top clock bar doesn't pick up a piece", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
-                    Input input = new Input(board, board.getGameController());
+                    Input input = new Input(board, board.getSession());
                     // above the eighth rank, on Black's clock bar, right over the a8 rook
                     input.mousePressed(new java.awt.event.MouseEvent(board, java.awt.event.MouseEvent.MOUSE_PRESSED,
                             System.currentTimeMillis(), 0, 40, 40, 1, false));
-                    check(board.getSelectedPiece() == null, "the a8 rook must not be picked up from the clock bar");
+                    check(board.getSelectedSquare() < 0, "the a8 rook must not be picked up from the clock bar");
                 }));
 
         test("Input: releasing a piece left of the board cancels the move", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
-                    BoardState state = board.getState();
-                    Input input = new Input(board, board.getGameController());
-                    Piece knight = state.getPiece(1, 7); // b1
+                    GameSession session = board.getSession();
+                    Input input = new Input(board, session);
 
                     // pick up the b1 knight in the middle of its square
                     input.mousePressed(new java.awt.event.MouseEvent(board, java.awt.event.MouseEvent.MOUSE_PRESSED,
@@ -1336,9 +1316,9 @@ public class GameTest {
                     input.mouseReleased(new java.awt.event.MouseEvent(board, java.awt.event.MouseEvent.MOUSE_RELEASED,
                             System.currentTimeMillis(), 0, -50, 550, 1, false));
 
-                    checkEqual(1, knight.getCol(), "the knight must stay on the b-file");
-                    checkEqual(7, knight.getRow(), "the knight must stay on the first rank");
-                    check(board.getGameController().getMoveLog().isEmpty(), "no move may be played");
+                    checkEqual(Pieces.WHITE_KNIGHT, session.position().pieceAt(Bitboards.squareOf("b1")),
+                            "the knight must stay on b1");
+                    check(session.getMoveLog().isEmpty(), "no move may be played");
                 }));
 
         test("Main: a headless start explains the problem and exits with code 2", () -> {
@@ -1610,35 +1590,35 @@ public class GameTest {
         // dialog behavior itself is already covered above - these tests only
         // check the translation.
 
-        guiTest("SwingPromotionChooser: Queen selection maps to PieceType.QUEEN", () -> {
+        guiTest("SwingPromotionChooser: Queen selection maps to the engine's queen", () -> {
             scheduleClick("Queen");
-            PieceType[] result = {null};
+            int[] result = {Pieces.NONE};
             SwingUtilities.invokeAndWait(() -> {
                 JFrame testFrame = new JFrame();
                 Board board = new Board(GameConfig.unlimited());
                 testFrame.setContentPane(board);
                 testFrame.pack();
-                result[0] = new SwingPromotionChooser(board).choose(true);
+                result[0] = new SwingPromotionChooser(board).pick(true);
                 testFrame.dispose();
             });
-            checkEqual(PieceType.QUEEN, result[0], "clicking Queen must resolve to PieceType.QUEEN");
+            checkEqual(Pieces.QUEEN, result[0], "clicking Queen must resolve to the queen the engine counts with");
         });
 
-        guiTest("SwingPromotionChooser: Knight selection maps to PieceType.KNIGHT", () -> {
+        guiTest("SwingPromotionChooser: Knight selection maps to the engine's knight", () -> {
             scheduleClick("Knight");
-            PieceType[] result = {null};
+            int[] result = {Pieces.NONE};
             SwingUtilities.invokeAndWait(() -> {
                 JFrame testFrame = new JFrame();
                 Board board = new Board(GameConfig.unlimited());
                 testFrame.setContentPane(board);
                 testFrame.pack();
-                result[0] = new SwingPromotionChooser(board).choose(false);
+                result[0] = new SwingPromotionChooser(board).pick(false);
                 testFrame.dispose();
             });
-            checkEqual(PieceType.KNIGHT, result[0], "clicking Knight must resolve to PieceType.KNIGHT");
+            checkEqual(Pieces.KNIGHT, result[0], "clicking Knight must resolve to the knight the engine counts with");
         });
 
-        guiTest("SwingDrawOfferResolver: Claim Draw resolves offerDraw() to true", () -> {
+        guiTest("SwingDrawOfferResolver: Claim Draw resolves the fifty move claim to true", () -> {
             scheduleClick("Claim Draw");
             boolean[] result = {false};
             SwingUtilities.invokeAndWait(() -> {
@@ -1646,13 +1626,13 @@ public class GameTest {
                 Board board = new Board(GameConfig.unlimited());
                 testFrame.setContentPane(board);
                 testFrame.pack();
-                result[0] = new SwingDrawOfferResolver(board).offerDraw();
+                result[0] = new SwingDrawOfferResolver(board).offerFiftyMoveDraw();
                 testFrame.dispose();
             });
-            check(result[0], "clicking Claim Draw must resolve offerDraw() to true");
+            check(result[0], "clicking Claim Draw must resolve the fifty move claim to true");
         });
 
-        guiTest("SwingDrawOfferResolver: Decline resolves offerDraw() to false", () -> {
+        guiTest("SwingDrawOfferResolver: Decline resolves the fifty move claim to false", () -> {
             scheduleClick("Decline");
             boolean[] result = {true};
             SwingUtilities.invokeAndWait(() -> {
@@ -1660,10 +1640,10 @@ public class GameTest {
                 Board board = new Board(GameConfig.unlimited());
                 testFrame.setContentPane(board);
                 testFrame.pack();
-                result[0] = new SwingDrawOfferResolver(board).offerDraw();
+                result[0] = new SwingDrawOfferResolver(board).offerFiftyMoveDraw();
                 testFrame.dispose();
             });
-            check(!result[0], "clicking Decline must resolve offerDraw() to false");
+            check(!result[0], "clicking Decline must resolve the fifty move claim to false");
         });
 
         guiTest("SwingDrawOfferResolver: notifyForcedDraw shows and dismisses the forced-draw dialog", () -> {
@@ -2233,24 +2213,25 @@ public class GameTest {
         System.out.println("\n-- GameController: actions ------------------------------------");
         // =================================================================
 
-        test("GameController: new game starts with White to move", () ->
+        test("Board: a new game on the board starts with White to move", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());
-                    check(board.getGameController().isTurnOfWhite(), "White must move first");
+                    check(board.getSession().isWhiteToMove(), "White must move first");
                 }));
 
         test("GameController: flagFall(true) reports Black wins on time (0-1)", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = new GameConfig("Alice", "Bob", 100, 100, "Bullet");
-                    Board board = new Board(cfg);
+                    GameController gc = new GameController(noOpGameView(), newBoardState(), cfg,
+                            w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] captured = {null, null};
 
-                    board.getGameController().setGameEndListener((record, message) -> {
+                    gc.setGameEndListener((record, message) -> {
                         captured[0] = record.result;
                         captured[1] = message;
                     });
 
-                    board.getGameController().flagFall(true); // White's time expired
+                    gc.flagFall(true); // White's time expired
                     checkEqual("0-1", captured[0], "result when White flags");
                     check(captured[1].contains("Bob"), "message must name the winner (Bob)");
                     check(captured[1].contains("time"), "message must mention winning on time");
@@ -2259,86 +2240,105 @@ public class GameTest {
         test("GameController: flagFall(false) reports White wins on time (1-0)", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = new GameConfig("Alice", "Bob", 100, 100, "Bullet");
-                    Board board = new Board(cfg);
+                    GameController gc = new GameController(noOpGameView(), newBoardState(), cfg,
+                            w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] captured = {null, null};
 
-                    board.getGameController().setGameEndListener((record, message) -> {
+                    gc.setGameEndListener((record, message) -> {
                         captured[0] = record.result;
                         captured[1] = message;
                     });
 
-                    board.getGameController().flagFall(false); // Black's time expired
+                    gc.flagFall(false); // Black's time expired
                     checkEqual("1-0", captured[0], "result when Black flags");
                     check(captured[1].contains("Alice"), "message must name the winner (Alice)");
                 }));
 
-        test("GameController: flagFall stops both clocks", () ->
-                SwingUtilities.invokeAndWait(() -> {
-                    GameConfig cfg = new GameConfig("Alice", "Bob", 100, 100, "Bullet");
-                    Board board = new Board(cfg);
-                    board.getGameController().setGameEndListener((record, message) -> {
-                    });
-                    board.getGameController().flagFall(true);
-                    // stopClocks() has no direct getter, so this is verified indirectly:
-                    // no exception thrown and game state is consistent - a repaint after
-                    // game-end must not throw due to a running clock referencing stale state.
-                    board.repaint();
-                }));
+        test("GameController: flagFall stops both clocks", () -> {
+            GameConfig cfg = new GameConfig("Alice", "Bob", 100, 100, "Bullet");
+            // the rules only ask the view to stop the clocks, so counting that call is the check
+            int[] stops = {0};
+            GameView view = new GameView() {
+                @Override
+                public void switchClocks(boolean pWhiteToMove) {
+                }
+
+                @Override
+                public void stopClocks() {
+                    stops[0]++;
+                }
+
+                @Override
+                public void resetClocks() {
+                }
+
+                @Override
+                public void repaint() {
+                }
+            };
+
+            GameController gc = new GameController(view, newBoardState(), cfg,
+                    w -> PieceType.QUEEN, noOpDrawResolver());
+            gc.setGameEndListener((record, message) -> {
+            });
+            gc.flagFall(true);
+            checkEqual(1, stops[0], "a flag fall must stop the clocks exactly once");
+        });
 
         test("GameController: endGame fires listener exactly once per call", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = new GameConfig("Alice", "Bob", 100, 100, "Bullet");
-                    Board board = new Board(cfg);
+                    GameController gc = new GameController(noOpGameView(), newBoardState(), cfg,
+                            w -> PieceType.QUEEN, noOpDrawResolver());
                     int[] callCount = {0};
-                    board.getGameController().setGameEndListener((record, message) -> callCount[0]++);
-                    board.getGameController().flagFall(true);
+                    gc.setGameEndListener((record, message) -> callCount[0]++);
+                    gc.flagFall(true);
                     checkEqual(1, callCount[0], "listener must fire exactly once");
                 }));
 
         test("GameController: a second end condition after the game is over is ignored", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = new GameConfig("Alice", "Bob", 100, 100, "Bullet");
-                    Board board = new Board(cfg);
+                    GameController gc = new GameController(noOpGameView(), newBoardState(), cfg,
+                            w -> PieceType.QUEEN, noOpDrawResolver());
                     List<String> results = new ArrayList<>();
-                    board.getGameController().setGameEndListener((record, message) -> results.add(record.result));
+                    gc.setGameEndListener((record, message) -> results.add(record.result));
 
-                    board.getGameController().flagFall(true);  // White flags first
-                    board.getGameController().flagFall(false); // a late second flag must not count
+                    gc.flagFall(true);  // White flags first
+                    gc.flagFall(false); // a late second flag must not count
                     checkEqual(List.of("0-1"), results, "only the first result may be reported");
                 }));
 
-        test("GameController: checkmate leaves both clocks stopped so no flag can fall later", () -> {
+        test("Board: checkmate leaves both clocks stopped so no flag can fall later", () -> {
             GameConfig cfg = new GameConfig("Alice", "Bob", 400, 400, "Bullet");
-            List<String> endMessages = new java.util.concurrent.CopyOnWriteArrayList<>();
+            List<String> endReasons = new java.util.concurrent.CopyOnWriteArrayList<>();
             Board[] boardHolder = {null};
 
             SwingUtilities.invokeAndWait(() -> {
                 Board board = new Board(cfg);
-                BoardState state = board.getState();
-                GameController gc = board.getGameController();
-                gc.setGameEndListener((record, message) -> endMessages.add(message));
+                GameSession session = board.getSession();
+                session.setEndListener((pResult, pTermination) -> endReasons.add(pTermination.name()));
 
                 // Fool's mate
-                gc.makeMove(new Move(state, state.getPiece(5, 6), 5, 5)); // f2-f3
-                gc.makeMove(new Move(state, state.getPiece(4, 1), 4, 3)); // e7-e5
-                gc.makeMove(new Move(state, state.getPiece(6, 6), 6, 4)); // g2-g4
-                gc.makeMove(new Move(state, state.getPiece(3, 0), 7, 4)); // Qd8-h4#
+                session.play(session.moveFor(Bitboards.squareOf("f2"), Bitboards.squareOf("f3")));
+                session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+                session.play(session.moveFor(Bitboards.squareOf("g2"), Bitboards.squareOf("g4")));
+                session.play(session.moveFor(Bitboards.squareOf("d8"), Bitboards.squareOf("h4")));
                 boardHolder[0] = board;
             });
 
             check(!boardHolder[0].areClocksRunning(), "no clock may run once the game is over");
             // wait longer than the whole clock, a restarted clock would have flagged by now
             Thread.sleep(1_000);
-            checkEqual(1, endMessages.size(), "only the checkmate may end the game, got: " + endMessages);
-            check(endMessages.get(0).contains("checkmate"), "the single result must be the checkmate");
+            checkEqual(1, endReasons.size(), "only the checkmate may end the game, got: " + endReasons);
+            checkEqual(Termination.CHECKMATE.name(), endReasons.get(0), "the single result must be the checkmate");
         });
 
         test("GameController: no move is accepted after the game is over", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    BoardState state = newBoardState();
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     gc.setGameEndListener((record, message) -> {
                     });
                     gc.flagFall(true); // the game ends on time
@@ -2354,9 +2354,8 @@ public class GameTest {
         test("GameController: FEN full-move number grows after every Black move", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    BoardState state = newBoardState();
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     GameRecord[] finished = {null};
                     gc.setGameEndListener((record, message) -> finished[0] = record);
 
@@ -2379,9 +2378,8 @@ public class GameTest {
         test("GameController: SAN marks a check with +", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    BoardState state = newBoardState();
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // 1. e4
                     gc.makeMove(new Move(state, state.getPiece(5, 1), 5, 3)); // 1... f5
@@ -2392,9 +2390,8 @@ public class GameTest {
         test("GameController: SAN marks checkmate with #", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    BoardState state = newBoardState();
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     gc.makeMove(new Move(state, state.getPiece(5, 6), 5, 5)); // 1. f3
                     gc.makeMove(new Move(state, state.getPiece(4, 1), 4, 3)); // 1... e5
@@ -2406,9 +2403,8 @@ public class GameTest {
         test("GameController: SAN adds the origin file when two knights can reach the square", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    BoardState state = newBoardState();
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     gc.makeMove(new Move(state, state.getPiece(6, 7), 5, 5)); // 1. Nf3
                     gc.makeMove(new Move(state, state.getPiece(4, 1), 4, 3)); // 1... e5
@@ -2421,18 +2417,17 @@ public class GameTest {
         test("GameController: SAN adds the origin rank when the rivals share the file", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
 
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece lowerRook = new Rook(board.getState(), 0, 7, true); // a1
+                    Piece lowerRook = new Rook(state, 0, 7, true); // a1
                     custom.add(lowerRook);
-                    custom.add(new Rook(board.getState(), 0, 3, true));       // a5
-                    custom.add(new King(board.getState(), 7, 7, true));       // h1
-                    custom.add(new King(board.getState(), 7, 0, false));      // h8
+                    custom.add(new Rook(state, 0, 3, true));       // a5
+                    custom.add(new King(state, 7, 7, true));       // h1
+                    custom.add(new King(state, 7, 0, false));      // h8
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     gc.makeMove(new Move(state, lowerRook, 0, 5)); // Ra1-a3, the a5 rook could go there too
                     checkEqual("R1a3", gc.getMoveLog().get(0), "rooks on one file are told apart by rank");
                 }));
@@ -2440,19 +2435,18 @@ public class GameTest {
         test("GameController: SAN adds file and rank when neither alone is unique", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
 
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece movingQueen = new Queen(board.getState(), 0, 7, true); // a1
+                    Piece movingQueen = new Queen(state, 0, 7, true); // a1
                     custom.add(movingQueen);
-                    custom.add(new Queen(board.getState(), 2, 7, true));  // c1, same rank
-                    custom.add(new Queen(board.getState(), 0, 5, true));  // a3, same file
-                    custom.add(new King(board.getState(), 7, 7, true));   // h1
-                    custom.add(new King(board.getState(), 3, 0, false));  // d8
+                    custom.add(new Queen(state, 2, 7, true));  // c1, same rank
+                    custom.add(new Queen(state, 0, 5, true));  // a3, same file
+                    custom.add(new King(state, 7, 7, true));   // h1
+                    custom.add(new King(state, 3, 0, false));  // d8
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     gc.makeMove(new Move(state, movingQueen, 1, 6)); // Qa1-b2, c1 and a3 could go there too
                     checkEqual("Qa1b2", gc.getMoveLog().get(0), "file and rank are both needed when each is shared");
                 }));
@@ -2460,10 +2454,9 @@ public class GameTest {
         test("GameController: threefold repetition can be claimed", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(true);
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, resolver);
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, resolver);
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2485,10 +2478,9 @@ public class GameTest {
         test("GameController: fivefold repetition ends the game automatically", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // every claim is declined
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, resolver);
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, resolver);
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2509,10 +2501,9 @@ public class GameTest {
         test("GameController: an en passant square nobody can use does not hide a repetition", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(true);
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, resolver);
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, resolver);
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2534,16 +2525,15 @@ public class GameTest {
         test("GameController: king against king is an immediate draw", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board.getState(), 4, 7, true);   // e1
+                    Piece whiteKing = new King(state, 4, 7, true);   // e1
                     custom.add(whiteKing);
-                    custom.add(new King(board.getState(), 4, 0, false));         // e8
-                    custom.add(new Knight(board.getState(), 3, 6, false));       // d2, the last piece besides the kings
+                    custom.add(new King(state, 4, 0, false));         // e8
+                    custom.add(new Knight(state, 3, 6, false));       // d2, the last piece besides the kings
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2556,16 +2546,15 @@ public class GameTest {
         test("GameController: king and knight against king is a draw", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKnight = new Knight(board.getState(), 1, 7, true); // b1
-                    custom.add(new King(board.getState(), 4, 7, true));           // e1
+                    Piece whiteKnight = new Knight(state, 1, 7, true); // b1
+                    custom.add(new King(state, 4, 7, true));           // e1
                     custom.add(whiteKnight);
-                    custom.add(new King(board.getState(), 4, 0, false));          // e8
+                    custom.add(new King(state, 4, 0, false));          // e8
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2578,17 +2567,16 @@ public class GameTest {
         test("GameController: bishops on the same colour can't mate, so the game is drawn", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board.getState(), 4, 7, true);   // e1
+                    Piece whiteKing = new King(state, 4, 7, true);   // e1
                     custom.add(whiteKing);
-                    custom.add(new Bishop(board.getState(), 2, 7, true));        // c1, dark square
-                    custom.add(new King(board.getState(), 4, 0, false));         // e8
-                    custom.add(new Bishop(board.getState(), 5, 0, false));       // f8, dark square as well
+                    custom.add(new Bishop(state, 2, 7, true));        // c1, dark square
+                    custom.add(new King(state, 4, 0, false));         // e8
+                    custom.add(new Bishop(state, 5, 0, false));       // f8, dark square as well
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2601,17 +2589,16 @@ public class GameTest {
         test("GameController: bishops on opposite colours keep the game going", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board.getState(), 4, 7, true);   // e1
+                    Piece whiteKing = new King(state, 4, 7, true);   // e1
                     custom.add(whiteKing);
-                    custom.add(new Bishop(board.getState(), 2, 7, true));        // c1, dark square
-                    custom.add(new King(board.getState(), 4, 0, false));         // e8
-                    custom.add(new Bishop(board.getState(), 2, 0, false));       // c8, light square
+                    custom.add(new Bishop(state, 2, 7, true));        // c1, dark square
+                    custom.add(new King(state, 4, 0, false));         // e8
+                    custom.add(new Bishop(state, 2, 0, false));       // c8, light square
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2622,15 +2609,14 @@ public class GameTest {
         test("GameController: running out of time against a lone king is a draw", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board.getState(), 4, 7, true));   // e1
-                    custom.add(new Queen(board.getState(), 3, 7, true));  // d1
-                    custom.add(new King(board.getState(), 4, 0, false));  // e8, Black has nothing else
+                    custom.add(new King(state, 4, 7, true));   // e1
+                    custom.add(new Queen(state, 3, 7, true));  // d1
+                    custom.add(new King(state, 4, 0, false));  // e8, Black has nothing else
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] ending = {null};
                     gc.setGameEndListener((record, message) -> ending[0] = record.result + " " + message);
 
@@ -2642,60 +2628,21 @@ public class GameTest {
         test("GameController: the 50-move claim is offered once to each player, not after every move", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board.getState(), 0, 7, true));   // a1, start of the white king tour
-                    custom.add(new King(board.getState(), 5, 0, false));  // f8, start of the black king tour
-                    custom.add(new Pawn(board.getState(), 0, 4, true));   // a4, blocked by a5
-                    custom.add(new Pawn(board.getState(), 0, 3, false));  // a5
+                    custom.add(new King(state, 0, 7, true));   // a1, start of the white king tour
+                    custom.add(new King(state, 5, 0, false));  // f8, start of the black king tour
+                    custom.add(new Pawn(state, 0, 4, true));   // a4, blocked by a5
+                    custom.add(new Pawn(state, 0, 3, false));  // a5
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // both players decline
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, resolver);
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, resolver);
                     shuffleKings(gc, state, 120);
 
                     checkEqual(2, resolver.offerDrawCount,
                             "White and Black must each be asked once, not after all 21 moves past the limit");
                 }));
-
-        guiTest("GameController: the 50-move claim runs on the claiming player's clock", () -> {
-            boolean[] clocks = {false, false, false}; // claim seen, white running, black running
-            Board[] boardHolder = {null};
-            // read both clocks while the claim dialog is on screen, then decline it
-            Timer decline = new Timer(20, e -> {
-                for (Window w : Window.getWindows()) {
-                    if (w instanceof JDialog d && d.isVisible() && boardHolder[0] != null && hasButton(d, "Decline")) {
-                        clocks[0] = true;
-                        clocks[1] = boardHolder[0].isClockRunning(true);
-                        clocks[2] = boardHolder[0].isClockRunning(false);
-                        clickButton(d, "Decline");
-                        ((Timer) e.getSource()).stop();
-                    }
-                }
-            });
-            decline.start();
-
-            SwingUtilities.invokeAndWait(() -> {
-                Board board = new Board(new GameConfig("Alice", "Bob", 600_000, 600_000, "Rapid 10+0"));
-                boardHolder[0] = board;
-                ArrayList<Piece> custom = new ArrayList<>();
-                custom.add(new King(board.getState(), 0, 7, true));   // a1, start of the white king tour
-                custom.add(new King(board.getState(), 5, 0, false));  // f8, start of the black king tour
-                custom.add(new Pawn(board.getState(), 0, 4, true));   // a4, blocked by a5
-                custom.add(new Pawn(board.getState(), 0, 3, false));  // a5
-                board.getState().setPieces(custom);
-                board.getGameController().setGameEndListener((record, message) -> {
-                });
-                // Black's 50th move opens the claim for White on the board's own controller
-                shuffleKings(board.getGameController(), board.getState(), 100);
-            });
-            decline.stop();
-
-            check(clocks[0], "the 50-move claim must have been offered");
-            check(clocks[1], "White is the one to decide, so White's clock must run");
-            check(!clocks[2], "Black already moved, so Black's clock must be stopped");
-        });
 
         // =================================================================
         System.out.println("\n-- GameController: rules engine --------------------------------");
@@ -2713,9 +2660,8 @@ public class GameTest {
         test("GameController: makeMove executes a simple pawn push", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    BoardState state = newBoardState();
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     Piece pawn = state.getPiece(4, 6); // e2
                     Move m = new Move(state, pawn, 4, 4); // e2-e4
@@ -2732,9 +2678,8 @@ public class GameTest {
         test("GameController: makeMove captures an enemy piece", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    BoardState state = newBoardState();
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // e2-e4
                     gc.makeMove(new Move(state, state.getPiece(3, 1), 3, 3)); // d7-d5
@@ -2751,13 +2696,12 @@ public class GameTest {
         test("GameController: kingside castling moves both king and rook", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
 
                     state.removePiece(state.getPiece(5, 7)); // clear f1 (bishop)
                     state.removePiece(state.getPiece(6, 7)); // clear g1 (knight)
 
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     Piece king = state.getPiece(4, 7);
                     Piece rook = state.getPiece(7, 7);
 
@@ -2773,9 +2717,8 @@ public class GameTest {
         test("GameController: en passant capture removes the passed pawn", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    BoardState state = newBoardState();
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4)); // e2-e4
                     gc.makeMove(new Move(state, state.getPiece(0, 1), 0, 2)); // a7-a6 (waiting move)
@@ -2806,28 +2749,27 @@ public class GameTest {
         test("GameController: en passant that captures the checking pawn is legal, not checkmate", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
 
                     // FEN 5r1k/8/2p5/3pP3/p3K3/P7/8/2br4 w - d6 0 2, Black just played d7-d5 with check
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whitePawn = new Pawn(board.getState(), 4, 3, true);     // e5
-                    Piece checkingPawn = new Pawn(board.getState(), 3, 3, false); // d5
-                    custom.add(new King(board.getState(), 4, 4, true));           // e4
+                    Piece whitePawn = new Pawn(state, 4, 3, true);     // e5
+                    Piece checkingPawn = new Pawn(state, 3, 3, false); // d5
+                    custom.add(new King(state, 4, 4, true));           // e4
                     custom.add(whitePawn);
-                    custom.add(new Pawn(board.getState(), 0, 5, true));           // a3, blocked by a4
+                    custom.add(new Pawn(state, 0, 5, true));           // a3, blocked by a4
                     custom.add(checkingPawn);
-                    custom.add(new King(board.getState(), 7, 0, false));          // h8
-                    custom.add(new Rook(board.getState(), 5, 0, false));          // f8 covers the f-file
-                    custom.add(new Rook(board.getState(), 3, 7, false));          // d1 covers the d-file
-                    custom.add(new Bishop(board.getState(), 2, 7, false));        // c1 covers e3
-                    custom.add(new Pawn(board.getState(), 2, 2, false));          // c6 guards d5
-                    custom.add(new Pawn(board.getState(), 0, 4, false));          // a4
+                    custom.add(new King(state, 7, 0, false));          // h8
+                    custom.add(new Rook(state, 5, 0, false));          // f8 covers the f-file
+                    custom.add(new Rook(state, 3, 7, false));          // d1 covers the d-file
+                    custom.add(new Bishop(state, 2, 7, false));        // c1 covers e3
+                    custom.add(new Pawn(state, 2, 2, false));          // c6 guards d5
+                    custom.add(new Pawn(state, 0, 4, false));          // a4
                     for (Piece p : custom) if (p instanceof Pawn) p.setFirstMove(false);
                     state.setPieces(custom);
                     state.setEnPassantTile(state.getTileNum(3, 2));    // d6
 
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] endMessage = {null};
                     gc.setGameEndListener((record, msg) -> endMessage[0] = msg);
 
@@ -2844,23 +2786,22 @@ public class GameTest {
         test("GameController: en passant that exposes the own king along the rank is illegal", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
 
                     // FEN 4k3/8/8/KPp4r/8/7P/8/8 w - c6 0 2, Black just played c7-c5
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whitePawn = new Pawn(board.getState(), 1, 3, true); // b5
-                    custom.add(new King(board.getState(), 0, 3, true));        // a5
+                    Piece whitePawn = new Pawn(state, 1, 3, true); // b5
+                    custom.add(new King(state, 0, 3, true));        // a5
                     custom.add(whitePawn);
-                    custom.add(new Pawn(board.getState(), 7, 5, true));        // h3
-                    custom.add(new Pawn(board.getState(), 2, 3, false));       // c5
-                    custom.add(new Rook(board.getState(), 7, 3, false));       // h5, same rank as the king
-                    custom.add(new King(board.getState(), 4, 0, false));       // e8
+                    custom.add(new Pawn(state, 7, 5, true));        // h3
+                    custom.add(new Pawn(state, 2, 3, false));       // c5
+                    custom.add(new Rook(state, 7, 3, false));       // h5, same rank as the king
+                    custom.add(new King(state, 4, 0, false));       // e8
                     for (Piece p : custom) if (p instanceof Pawn) p.setFirstMove(false);
                     state.setPieces(custom);
                     state.setEnPassantTile(state.getTileNum(2, 2)); // c6
 
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     Move enPassant = new Move(state, whitePawn, 2, 2); // bxc6
                     check(!gc.isValidMove(enPassant),
                             "bxc6 en passant clears both pawns from the 5th rank and must be illegal");
@@ -2870,20 +2811,19 @@ public class GameTest {
         test("GameController: pawn promotion asks the PromotionChooser and replaces the piece", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
 
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board.getState(), 4, 7, true);
-                    Piece blackKing = new King(board.getState(), 4, 0, false);
-                    Piece whitePawn = new Pawn(board.getState(), 0, 1, true); // one step from promoting on a8
+                    Piece whiteKing = new King(state, 4, 7, true);
+                    Piece blackKing = new King(state, 4, 0, false);
+                    Piece whitePawn = new Pawn(state, 0, 1, true); // one step from promoting on a8
                     custom.add(whiteKing);
                     custom.add(blackKing);
                     custom.add(whitePawn);
                     state.setPieces(custom);
 
                     boolean[] askedWhite = {false};
-                    GameController gc = new GameController(board, board.getState(), cfg,
+                    GameController gc = new GameController(noOpGameView(), state, cfg,
                             white -> {
                                 askedWhite[0] = white;
                                 return PieceType.KNIGHT;
@@ -2904,23 +2844,22 @@ public class GameTest {
         test("GameController: detects checkmate and fires the end-of-game listener", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
 
                     // Ladder-mate final move: Rb1-b8#. Rook A already covers rank 7,
                     // Rook B slides onto rank 8 and the Black king has no escape square.
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board.getState(), 0, 7, true);   // a1
-                    Piece blackKing = new King(board.getState(), 7, 0, false); // h8
-                    Piece rookA = new Rook(board.getState(), 0, 1, true);      // a7
-                    Piece rookB = new Rook(board.getState(), 1, 7, true);      // b1
+                    Piece whiteKing = new King(state, 0, 7, true);   // a1
+                    Piece blackKing = new King(state, 7, 0, false); // h8
+                    Piece rookA = new Rook(state, 0, 1, true);      // a7
+                    Piece rookB = new Rook(state, 1, 7, true);      // b1
                     custom.add(whiteKing);
                     custom.add(blackKing);
                     custom.add(rookA);
                     custom.add(rookB);
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] result = {null};
                     String[] message = {null};
                     gc.setGameEndListener((record, msg) -> {
@@ -2940,20 +2879,19 @@ public class GameTest {
         test("GameController: detects stalemate (no legal moves, king not in check)", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
 
                     // Textbook queen stalemate final move: Qg5-g6.
                     ArrayList<Piece> custom = new ArrayList<>();
-                    Piece whiteKing = new King(board.getState(), 5, 1, true);   // f7
-                    Piece blackKing = new King(board.getState(), 7, 0, false); // h8
-                    Piece whiteQueen = new Queen(board.getState(), 6, 3, true); // g5
+                    Piece whiteKing = new King(state, 5, 1, true);   // f7
+                    Piece blackKing = new King(state, 7, 0, false); // h8
+                    Piece whiteQueen = new Queen(state, 6, 3, true); // g5
                     custom.add(whiteKing);
                     custom.add(blackKing);
                     custom.add(whiteQueen);
                     state.setPieces(custom);
 
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     String[] result = {null};
                     gc.setGameEndListener((record, msg) -> result[0] = record.result);
 
@@ -2969,8 +2907,8 @@ public class GameTest {
         test("GameController: mate and stalemate checks don't depend on whose turn it is", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    BoardState state = newBoardState();
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
 
                     // White is to move, but both sides have plenty of moves at the start
                     check(!gc.isStalemate(false), "Black can move in the starting position, so it isn't stalemated");
@@ -2982,16 +2920,15 @@ public class GameTest {
         test("GameController: a stalemated side is recognised even when it isn't its turn", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board.getState(), 5, 1, true));    // f7
-                    custom.add(new Queen(board.getState(), 6, 2, true));   // g6
-                    custom.add(new King(board.getState(), 7, 0, false));   // h8, no legal move but not in check
+                    custom.add(new King(state, 5, 1, true));    // f7
+                    custom.add(new Queen(state, 6, 2, true));   // g6
+                    custom.add(new King(state, 7, 0, false));   // h8, no legal move but not in check
                     state.setPieces(custom);
 
                     // a fresh controller has White to move
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     check(gc.isStalemate(false), "Black has no legal move and isn't in check");
                     check(!gc.isStalemate(true), "White still has moves");
                 }));
@@ -2999,18 +2936,17 @@ public class GameTest {
         test("GameController: 50-move rule offers a draw at half-move 100; accepting ends the game", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board.getState(), 0, 7, true));  // a1, start of the white king tour
-                    custom.add(new King(board.getState(), 5, 0, false)); // f8, start of the black king tour
+                    custom.add(new King(state, 0, 7, true));  // a1, start of the white king tour
+                    custom.add(new King(state, 5, 0, false)); // f8, start of the black king tour
                     // two pawns blocking each other, so the material never counts as insufficient
-                    custom.add(new Pawn(board.getState(), 0, 4, true));  // a4
-                    custom.add(new Pawn(board.getState(), 0, 3, false)); // a5
+                    custom.add(new Pawn(state, 0, 4, true));  // a4
+                    custom.add(new Pawn(state, 0, 3, false)); // a5
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(true);
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, resolver);
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, resolver);
                     String[] result = {null};
                     gc.setGameEndListener((record, msg) -> result[0] = record.result);
 
@@ -3024,18 +2960,17 @@ public class GameTest {
         test("GameController: 50-move rule offer can be declined, letting the game continue", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board.getState(), 0, 7, true));  // a1, start of the white king tour
-                    custom.add(new King(board.getState(), 5, 0, false)); // f8, start of the black king tour
+                    custom.add(new King(state, 0, 7, true));  // a1, start of the white king tour
+                    custom.add(new King(state, 5, 0, false)); // f8, start of the black king tour
                     // two pawns blocking each other, so the material never counts as insufficient
-                    custom.add(new Pawn(board.getState(), 0, 4, true));  // a4
-                    custom.add(new Pawn(board.getState(), 0, 3, false)); // a5
+                    custom.add(new Pawn(state, 0, 4, true));  // a4
+                    custom.add(new Pawn(state, 0, 3, false)); // a5
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false);
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, resolver);
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, resolver);
                     String[] result = {null};
                     gc.setGameEndListener((record, msg) -> result[0] = record.result);
 
@@ -3048,18 +2983,17 @@ public class GameTest {
         test("GameController: 75-move rule forces a draw even if declined all along", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
+                    BoardState state = newBoardState();
                     ArrayList<Piece> custom = new ArrayList<>();
-                    custom.add(new King(board.getState(), 0, 7, true));  // a1, start of the white king tour
-                    custom.add(new King(board.getState(), 5, 0, false)); // f8, start of the black king tour
+                    custom.add(new King(state, 0, 7, true));  // a1, start of the white king tour
+                    custom.add(new King(state, 5, 0, false)); // f8, start of the black king tour
                     // two pawns blocking each other, so the material never counts as insufficient
-                    custom.add(new Pawn(board.getState(), 0, 4, true));  // a4
-                    custom.add(new Pawn(board.getState(), 0, 3, false)); // a5
+                    custom.add(new Pawn(state, 0, 4, true));  // a4
+                    custom.add(new Pawn(state, 0, 3, false)); // a5
                     state.setPieces(custom);
 
                     FakeDrawOfferResolver resolver = new FakeDrawOfferResolver(false); // always decline
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, resolver);
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, resolver);
                     String[] result = {null};
                     String[] message = {null};
                     gc.setGameEndListener((record, msg) -> {
@@ -3077,9 +3011,8 @@ public class GameTest {
         test("GameController: getMoveLog returns an unmodifiable view", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     GameConfig cfg = GameConfig.unlimited();
-                    Board board = new Board(cfg);
-                    BoardState state = board.getState();
-                    GameController gc = new GameController(board, board.getState(), cfg, w -> PieceType.QUEEN, noOpDrawResolver());
+                    BoardState state = newBoardState();
+                    GameController gc = new GameController(noOpGameView(), state, cfg, w -> PieceType.QUEEN, noOpDrawResolver());
                     gc.makeMove(new Move(state, state.getPiece(4, 6), 4, 4));
 
                     boolean threw = false;
@@ -3823,6 +3756,51 @@ public class GameTest {
             checkEqual(GameResult.ONGOING, session.result(), "a declined claim leaves the game running");
         });
 
+        test("GameSession: the fifty move claim is asked after the clock has changed hands", () -> {
+            boolean[] clockHandedOverFirst = {false};
+            int[] switches = {0};
+            GameSession session = new GameSession(Fen.parse("4k3/8/8/8/8/8/8/R3K3 w - - 99 60"));
+            session.setView(new GameSession.View() {
+                @Override
+                public void switchClocks(boolean pWhiteToMove) {
+                    switches[0]++;
+                }
+
+                @Override
+                public void stopClocks() {
+                }
+
+                @Override
+                public void resetClocks() {
+                }
+
+                @Override
+                public void repaint() {
+                }
+            });
+            session.setDrawArbiter(new GameSession.DrawArbiter() {
+                @Override
+                public boolean offerFiftyMoveDraw() {
+                    // the player who has to decide must be the one whose clock is running by now
+                    clockHandedOverFirst[0] = switches[0] == 1;
+                    return false;
+                }
+
+                @Override
+                public boolean offerRepetitionDraw() {
+                    return false;
+                }
+
+                @Override
+                public void notifyForcedDraw() {
+                }
+            });
+
+            session.play(session.moveFor(Bitboards.squareOf("a1"), Bitboards.squareOf("a2")));
+            check(clockHandedOverFirst[0],
+                    "the claim must be raised after the clock went over, never on the mover's time");
+        });
+
         test("GameSession: a repeated position can be claimed as a draw", () -> {
             GameSession session = new GameSession();
             session.setDrawArbiter(new GameSession.DrawArbiter() {
@@ -3959,6 +3937,55 @@ public class GameTest {
             holder.set(new java.lang.ref.WeakReference<>(board));
         });
         return holder.get();
+    }
+
+    /**
+     * Builds a position with the 32 pieces of a new game standing on it.
+     * <p>
+     * The rules tests used to reach their position through a Swing board, which meant every one of
+     * them built a window's worth of objects and could not run without the old board handing its
+     * state out. The board now keeps its game in a GameSession instead, so the tests of the older
+     * rules classes create the position they work on themselves.
+     * <p>
+     * Time complexity: O(p) for the 32 pieces placed. Space complexity: O(p) for the position.
+     *
+     * @return a position in the standard starting arrangement, never null
+     */
+    private static BoardState newBoardState() {
+        BoardState state = new BoardState();
+        state.setPieces(StartPosition.create(state));
+        return state;
+    }
+
+    /**
+     * A GameView that answers the rules without drawing anything.
+     * <p>
+     * The older rules engine asks its view to hand the clock over and to repaint. Tests that only
+     * care about the rules have nothing to draw and no clocks to run, so they pass this instead of a
+     * real board, which is what lets them run on a machine without a display.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return a view that ignores every call, never null
+     */
+    private static GameView noOpGameView() {
+        return new GameView() {
+            @Override
+            public void switchClocks(boolean pWhiteToMove) {
+            }
+
+            @Override
+            public void stopClocks() {
+            }
+
+            @Override
+            public void resetClocks() {
+            }
+
+            @Override
+            public void repaint() {
+            }
+        };
     }
 
     /**
