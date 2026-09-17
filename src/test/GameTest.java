@@ -2130,6 +2130,54 @@ public class GameTest {
                     check(explained, "the reason must be shown on the screen");
                 }));
 
+        test("NewGamePanel: an untouched screen keeps the mode its time control implies", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    checkEqual(ClockMode.SUDDEN_DEATH, p.createConfig().clockMode(),
+                            "Rapid 10+0 has no increment, so it is played as sudden death");
+
+                    findButton(p, "Bullet 2+1").doClick();
+                    checkEqual(ClockMode.FISCHER, p.createConfig().clockMode(),
+                            "a preset with an increment is a Fischer clock");
+                }));
+
+        test("NewGamePanel: picking Bronstein trades the increment for a delay", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    // a preset that does have an increment, to prove the mode wins over it
+                    findButton(p, "Rapid 15+10").doClick();
+                    findButton(p, "Bronstein").doClick();
+                    // the delay field sits behind the two names and the two custom time fields
+                    findAllTextFields(p).get(4).setText("5");
+
+                    GameConfig cfg = p.createConfig();
+                    checkEqual(ClockMode.BRONSTEIN, cfg.clockMode(), "the mode the player picked must win");
+                    checkEqual(5_000L, cfg.delayMs(), "the delay is read from the delay field");
+                    checkEqual(0L, cfg.incrementMs(), "a Bronstein clock pays no increment");
+                }));
+
+        test("NewGamePanel: picking Delay reads the same field", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    findButton(p, "Delay").doClick();
+                    findAllTextFields(p).get(4).setText("3");
+
+                    GameConfig cfg = p.createConfig();
+                    checkEqual(ClockMode.SIMPLE_DELAY, cfg.clockMode(), "the delay mode must reach the game");
+                    checkEqual(3_000L, cfg.delayMs(), "with the seconds that were typed");
+                }));
+
+        test("NewGamePanel: Black can start with a time of their own", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    // the odds field is the last one on the screen
+                    findAllTextFields(p).get(5).setText("3");
+
+                    GameConfig cfg = p.createConfig();
+                    checkEqual(600_000L, cfg.whiteTimeMs(), "White keeps the time of the preset");
+                    checkEqual(180_000L, cfg.blackTimeMs(), "Black gets the time from the odds field");
+                }));
+
         // =================================================================
         System.out.println("\n-- PastGamesPanel -----------------------------------------------");
         // =================================================================
