@@ -536,6 +536,9 @@ public class GameTest {
             check(title.contains("Bob"), "title must contain black name");
             check(title.contains("1-0"), "title must contain result");
             check(title.contains("Blitz 5+0"), "title must contain time control");
+            // the separator has to be a real em dash rather than the text of its escape, which is
+            // what a doubled backslash in the source would silently turn it into
+            check(title.contains(String.valueOf((char) 0x2014)), "the parts must be separated by an em dash");
         });
 
         // =================================================================
