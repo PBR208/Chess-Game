@@ -269,6 +269,29 @@ public class ChessClock {
     }
 
     /**
+     * Writes a remaining time the way the clock bar shows it.
+     * <p>
+     * Above ten seconds a player thinks in minutes and seconds, and below it they count in tenths,
+     * so the display changes shape exactly there. An unlimited clock has no time to spend, so it
+     * keeps showing plain zeros instead of counting tenths of a time that never moves. I keep the
+     * rule out of the drawing itself, so it can be checked without a screen.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) for the text.
+     *
+     * @param pTimeMs      remaining time in milliseconds, 0 or more
+     * @param pStartTimeMs the time this clock started from, 0 for an unlimited clock
+     * @return the text shown on the clock bar, never null
+     */
+    public static String formatTime(long pTimeMs, long pStartTimeMs) {
+        long totalSec = pTimeMs / 1000;
+        // below ten seconds every tenth matters, and an unlimited clock never gets there
+        if (pStartTimeMs > 0 && pTimeMs < TENTHS_BELOW_MS) {
+            return String.format("%d.%d", totalSec, pTimeMs % 1000 / 100);
+        }
+        return String.format("%02d:%02d", totalSec / 60, totalSec % 60);
+    }
+
+    /**
      * Paints this player's clock bar.
      * <p>
      * Each player needs to see their remaining time, whose turn it is and which colour they play. I

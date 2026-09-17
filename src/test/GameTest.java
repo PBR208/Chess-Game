@@ -1220,6 +1220,80 @@ public class GameTest {
             check(!clock.isTicking(), "a stopped clock must stop its timer");
         });
 
+        test("ChessClock: a Fischer clock pays its increment after a move", () -> {
+            ChessClock clock = new ChessClock(true, 60_000, ClockMode.FISCHER, 2_000, 0, () -> {
+            }, w -> {
+            });
+            clock.onMoveFinished();
+            checkEqual(62_000L, clock.getTimeMs(), "the increment is paid whether the move needed it or not");
+        });
+
+        test("ChessClock: sudden death and a delay clock pay no increment", () -> {
+            ChessClock sudden = new ChessClock(true, 60_000, ClockMode.SUDDEN_DEATH, 0, 0, () -> {
+            }, w -> {
+            });
+            sudden.onMoveFinished();
+            checkEqual(60_000L, sudden.getTimeMs(), "sudden death gives a player nothing but their own time");
+
+            ChessClock delayed = new ChessClock(true, 60_000, ClockMode.SIMPLE_DELAY, 0, 3_000, () -> {
+            }, w -> {
+            });
+            delayed.onMoveFinished();
+            checkEqual(60_000L, delayed.getTimeMs(), "a delay is not an increment and is never paid out");
+        });
+
+        test("ChessClock: a simple delay charges nothing until the delay is used up", () -> {
+            ChessClock clock = new ChessClock(true, 10_000, ClockMode.SIMPLE_DELAY, 0, 5_000, () -> {
+            }, w -> {
+            });
+            clock.start();
+            Thread.sleep(200);
+            clock.stop();
+            // the whole think fitted inside the delay, so it cost nothing at all
+            checkEqual(10_000L, clock.getTimeMs(), "time spent inside the delay must not be charged");
+        });
+
+        test("ChessClock: a simple delay charges only what goes past it", () -> {
+            ChessClock clock = new ChessClock(true, 10_000, ClockMode.SIMPLE_DELAY, 0, 100, () -> {
+            }, w -> {
+            });
+            clock.start();
+            Thread.sleep(400);
+            clock.stop();
+
+            long left = clock.getTimeMs();
+            check(left < 10_000, "thinking past the delay has to cost time, got " + left);
+            check(left >= 9_000, "but only what went past it, got " + left);
+        });
+
+        test("ChessClock: Bronstein gives back what the move used, up to the delay", () -> {
+            ChessClock generous = new ChessClock(true, 10_000, ClockMode.BRONSTEIN, 0, 5_000, () -> {
+            }, w -> {
+            });
+            generous.start();
+            Thread.sleep(200);
+            generous.stop();
+            check(generous.getTimeMs() >= 9_990,
+                    "a move well inside the delay costs nothing once it is given back, got " + generous.getTimeMs());
+
+            ChessClock capped = new ChessClock(true, 10_000, ClockMode.BRONSTEIN, 0, 100, () -> {
+            }, w -> {
+            });
+            capped.start();
+            Thread.sleep(500);
+            capped.stop();
+            check(capped.getTimeMs() <= 9_700,
+                    "a move past the delay gets only the delay back, got " + capped.getTimeMs());
+        });
+
+        test("ChessClock: the display counts in tenths below ten seconds", () -> {
+            checkEqual("01:05", ChessClock.formatTime(65_000, 600_000), "minutes and seconds above ten seconds");
+            checkEqual("00:10", ChessClock.formatTime(10_000, 600_000), "ten seconds still reads as a clock");
+            checkEqual("9.4", ChessClock.formatTime(9_400, 600_000), "below ten seconds every tenth shows");
+            checkEqual("0.0", ChessClock.formatTime(0, 600_000), "a fallen flag shows no time left");
+            checkEqual("00:00", ChessClock.formatTime(0, 0), "an unlimited clock never counts tenths");
+        });
+
         test("Board: a board whose clocks are stopped can be garbage collected", () -> {
             java.lang.ref.WeakReference<Board> ref = boardWithStoppedClocks();
             // give the collector a few chances, a live timer would keep the board reachable forever
