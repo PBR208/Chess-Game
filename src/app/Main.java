@@ -131,6 +131,8 @@ public class Main {
             MoveLogPanel logPanel = new MoveLogPanel(board.getPreferredSize().height);
             GameSession session = board.getSession();
             session.setMoveLogView(logPanel);
+            // clicking a move in the log takes the game back to it, or forward again
+            logPanel.setPlySelectedListener(session::goToPly);
 
             session.setEndListener((pResult, pTermination) -> {
                 // the session owns the moves and the result, the names and the time control come from the config

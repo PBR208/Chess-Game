@@ -530,6 +530,37 @@ public final class GameSession {
     }
 
     /**
+     * Steps the game back or forward until a given number of moves is played.
+     * <p>
+     * Clicking a move in the log means "show me the game as it stood there", which can be several
+     * moves in either direction. I take moves back or play them again until the game is at that ply,
+     * so the position, the record, the repetition counts and both clocks all arrive there the same
+     * way they would one move at a time. A ply the game never reached is refused rather than walked
+     * towards, since there is nothing to walk to.
+     * <p>
+     * Time complexity: O(d * p) for a jump of d moves over stretches of p plies, because each step
+     * rebuilds the repetition counts. Space complexity: O(1).
+     *
+     * @param pPly how many moves should be played, 0 for the position the game started from
+     * @return true if the game moved to that ply, false when it is already there or cannot reach it
+     */
+    public boolean goToPly(int pPly) {
+        // a negative ply and one beyond the end of the game are both nothing to jump to
+        if (pPly < 0 || pPly > playedMoves.size() + redoMoves.size()) {
+            return false;
+        }
+
+        boolean moved = false;
+        while (playedMoves.size() > pPly && undo()) {
+            moved = true;
+        }
+        while (playedMoves.size() < pPly && redo()) {
+            moved = true;
+        }
+        return moved;
+    }
+
+    /**
      * Tells whether there is a move to take back.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
