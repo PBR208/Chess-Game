@@ -267,6 +267,60 @@ public class PgnManager {
         return records;
     }
 
+    /**
+     * Reads a PGN file the player picked and copies every game in it into the library.
+     * <p>
+     * Players have games from other programs, from a chess site or from a friend, and until now the
+     * only way into the library was playing a game here. I read the file with the same reader the
+     * library uses, so a file with comments, side lines or several games in it is understood, and
+     * write every game it holds into the games folder as its own file. The games keep their names and
+     * dates, and an existing file is never overwritten, because each one gets a free name.
+     * <p>
+     * Time complexity: O(c + g * m * l) for c characters, g games of m moves and l legal moves per
+     * position, plus the writing of g files.
+     * Space complexity: O(c) for the text and the games read from it.
+     *
+     * @param pFile the PGN file to read, never null
+     * @return the games that were imported, never null and empty when the file held none
+     * @throws IOException          if the file cannot be read or the library cannot be written to
+     * @throws NullPointerException if pFile is null
+     */
+    public static List<GameRecord> importFrom(Path pFile) throws IOException {
+        List<GameRecord> imported = PgnReader.readAll(Files.readString(pFile));
+        // a file without a single readable game leaves the library untouched
+        if (imported.isEmpty()) {
+            return imported;
+        }
+
+        Path dir = getGamesDirectory();
+        Files.createDirectories(dir);
+        for (GameRecord record : imported) {
+            // the same naming the game's own saves use, so the library stays consistent
+            String base = record.date + "_" + sanitize(record.whiteName) + "_vs_" + sanitize(record.blackName);
+            Files.writeString(uniquePath(dir, base, ".pgn"), PgnWriter.write(record));
+        }
+        return imported;
+    }
+
+    /**
+     * Writes one game of the library to a file the player chose.
+     * <p>
+     * A game is worth little if it cannot leave the program, so this writes the selected game as PGN
+     * wherever the player wants it, in the same standard form the library saves in. The file is
+     * written as a whole and replaces whatever was there, which is what a save dialog promises after
+     * it has asked about overwriting.
+     * <p>
+     * Time complexity: O(m) for the m moves written. Space complexity: O(m) for the text.
+     *
+     * @param pRecord the game to write, never null
+     * @param pFile   the file to write it to, never null
+     * @throws IOException          if the file cannot be written
+     * @throws NullPointerException if an argument is null
+     */
+    public static void exportTo(GameRecord pRecord, Path pFile) throws IOException {
+        Files.writeString(pFile, PgnWriter.write(pRecord));
+    }
+
     private static String sanitize(String s) {
         return s.replaceAll("[^a-zA-Z0-9_-]", "_");
     }
