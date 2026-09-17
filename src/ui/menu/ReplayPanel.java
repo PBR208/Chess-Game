@@ -11,7 +11,7 @@ package ui.menu;
  */
 
 import engine.persistence.FenLoader;
-import engine.pieces.Piece;
+import ui.board.PieceSprites;
 import ui.theme.Theme;
 import ui.theme.UiComponents;
 
@@ -261,8 +261,8 @@ public class ReplayPanel extends JPanel {
         int tileSize = Math.min(width, height) / 8;
 
         char[][] grid = FenLoader.parse(fens.get(cursor));
-        BufferedImage sheet = Piece.getSpritesheet();
-        int scale = Piece.getSpritesheetScale();
+        BufferedImage sheet = PieceSprites.getSheet();
+        int scale = PieceSprites.getSheetScale();
 
         for (int row = 0; row < 8; row++) {
             for (int col = 0; col < 8; col++) {

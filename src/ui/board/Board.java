@@ -14,7 +14,9 @@ package ui.board;
 import engine.imports.BoardState;
 import engine.model.GameConfig;
 import engine.imports.GameController;
+import engine.imports.GameView;
 import engine.imports.Move;
+import engine.imports.StartPosition;
 import engine.pieces.*;
 
 import javax.swing.*;
@@ -23,7 +25,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 
-public class Board extends JPanel {
+public class Board extends JPanel implements GameView {
 
     // edge length of one square in pixels when no size is given
     public static final int DEFAULT_TILE_SIZE = 85;
@@ -42,9 +44,15 @@ public class Board extends JPanel {
 
     private final BoardState state = new BoardState();
     private Piece selectedPiece;
+    // pixel position of the dragged piece, it follows the mouse instead of sitting on its square
+    private int dragX;
+    private int dragY;
     private final HashSet<Integer> legalMoveTiles = new HashSet<>();
 
     private final GameController gc;
+
+    // piece images scaled to this board's square size
+    private final PieceSprites sprites;
 
     private final ChessClock whiteClock;
     private final ChessClock blackClock;
@@ -94,7 +102,9 @@ public class Board extends JPanel {
         }
         this.tileSize = pTileSize;
         this.clockHeight = pTileSize;
-        this.gc = new GameController(this, pConfig, new SwingPromotionChooser(this), new SwingDrawOfferResolver(this));
+        // the board draws the pieces, so it owns their images
+        this.sprites = new PieceSprites(pTileSize);
+        this.gc = new GameController(this, state, pConfig, new SwingPromotionChooser(this), new SwingDrawOfferResolver(this));
         this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), this::repaint, this::onTimeExpired);
         this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), this::repaint, this::onTimeExpired);
         // the same increment applies to both players
@@ -134,33 +144,19 @@ public class Board extends JPanel {
         return Math.max(MIN_TILE_SIZE, Math.min(DEFAULT_TILE_SIZE, Math.min(byHeight, byWidth)));
     }
 
+    /**
+     * Returns the pieces of a new game.
+     * <p>
+     * The board used to build the 32 starting pieces itself, which made the rules engine call back
+     * into a Swing component whenever a game restarted. I forward to StartPosition, which places them
+     * on this board's position, and keep the method so existing callers and tests stay unchanged.
+     * <p>
+     * Time complexity: O(p) for the p pieces created. Space complexity: O(p) for the returned list.
+     *
+     * @return the pieces of the starting position, never null
+     */
     public ArrayList<Piece> addPieces() {
-
-        ArrayList<Piece> newGame = new ArrayList<>();
-
-        newGame.add(new Rook(this, 0, 0, false));
-        newGame.add(new Rook(this, 7, 0, false));
-        newGame.add(new Knight(this, 1, 0, false));
-        newGame.add(new Knight(this, 6, 0, false));
-        newGame.add(new Bishop(this, 2, 0, false));
-        newGame.add(new Bishop(this, 5, 0, false));
-        newGame.add(new Queen(this, 3, 0, false));
-        newGame.add(new King(this, 4, 0, false));
-
-        newGame.add(new Rook(this, 0, 7, true));
-        newGame.add(new Rook(this, 7, 7, true));
-        newGame.add(new Knight(this, 1, 7, true));
-        newGame.add(new Knight(this, 6, 7, true));
-        newGame.add(new Bishop(this, 2, 7, true));
-        newGame.add(new Bishop(this, 5, 7, true));
-        newGame.add(new Queen(this, 3, 7, true));
-        newGame.add(new King(this, 4, 7, true));
-
-        for (int i = 0; i <= 7; i++) {
-            newGame.add(new Pawn(this, i, 1, false));
-            newGame.add(new Pawn(this, i, 6, true));
-        }
-        return newGame;
+        return StartPosition.create(state);
     }
 
     public void paintComponent(Graphics g) {
@@ -200,10 +196,12 @@ public class Board extends JPanel {
         }
 
         for (Piece p : state.getPieces()) {
+            // the piece under the mouse follows the cursor, all others sit on their square
             if (p == selectedPiece) {
-                p.paint(g2d, p.getxPos(), p.getyPos());
+                g2d.drawImage(sprites.spriteFor(p.getType(), p.isWhite()), dragX, dragY, null);
             } else {
-                p.paint(g2d, toVisualX(p.getCol()), toVisualY(p.getRow()));
+                g2d.drawImage(sprites.spriteFor(p.getType(), p.isWhite()),
+                        toVisualX(p.getCol()), toVisualY(p.getRow()), null);
             }
         }
 
@@ -368,6 +366,38 @@ public class Board extends JPanel {
         // floorDiv keeps points on the top clock bar off the first row
         int r = Math.floorDiv(pY - clockHeight, tileSize);
         return gc.isTurnOfWhite() ? r : 7 - r;
+    }
+
+    /**
+     * Remembers where the dragged piece is drawn.
+     * <p>
+     * While a piece is dragged it hangs on the mouse instead of standing on a square, and that pixel
+     * position used to live in the piece itself, which gave every rules class a reason to know about
+     * screen coordinates. The board draws, so the board keeps the position. The values are only read
+     * while a piece is selected, so a stale position after a drop does no harm.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pX horizontal panel coordinate of the sprite's upper left corner, any value
+     * @param pY vertical panel coordinate of the sprite's upper left corner, any value
+     */
+    public void setDragPosition(int pX, int pY) {
+        this.dragX = pX;
+        this.dragY = pY;
+    }
+
+    /**
+     * Returns the scaled piece images this board draws with.
+     * <p>
+     * The sprites are scaled once per board and tests check that they match the square size. I hand
+     * out the same instance the painting uses.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the sprite source of this board, never null
+     */
+    public PieceSprites getSprites() {
+        return sprites;
     }
 
     private void onTimeExpired(boolean isWhiteExpired) {
