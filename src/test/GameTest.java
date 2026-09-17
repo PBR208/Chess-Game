@@ -704,6 +704,175 @@ public class GameTest {
         });
 
         // =================================================================
+        System.out.println();
+        System.out.println("-- PGN import and export ----------------------------------------");
+        // =================================================================
+
+        test("PgnWriter: the roster comes first, then the tags a saved game needs", () -> {
+            GameRecord record = new GameRecord("Alice", "Bob", "1-0", "2026.01.02", "Blitz 5+0",
+                    "300+5", GameRecord.TERMINATION_TIME_FORFEIT, null,
+                    List.of("e4", "e5"), List.of());
+
+            List<String> lines = PgnWriter.write(record).lines().toList();
+            List<String> tagNames = lines.stream()
+                    .filter(line -> line.startsWith("["))
+                    .map(line -> line.substring(1, line.indexOf(' ')))
+                    .toList();
+
+            checkEqual(List.of("Event", "Site", "Date", "Round", "White", "Black", "Result"),
+                    tagNames.subList(0, 7), "the seven tag roster must come first and in order");
+            check(tagNames.contains("TimeControl"), "a saved game must say what it was played at");
+            check(tagNames.contains("Termination"), "a finished game must say why it ended");
+            check(lines.contains("[TimeControl " + (char) 34 + "300+5" + (char) 34 + "]"),
+                    "the time control must be written the way PGN spells it");
+        });
+
+        test("PgnWriter: the moves wrap at eighty columns and carry no position comments", () -> {
+            List<String> manyMoves = new ArrayList<>();
+            // a game long enough that the movetext cannot fit on one line
+            for (int ply = 0; ply < 60; ply++) {
+                manyMoves.add("Nf3");
+            }
+            GameRecord record = new GameRecord("Alice", "Bob", "1/2-1/2", "2026.01.02", "Blitz 5+0",
+                    "300+0", GameRecord.TERMINATION_NORMAL, null, manyMoves, List.of());
+
+            String pgn = PgnWriter.write(record);
+            for (String line : pgn.lines().toList()) {
+                check(line.length() <= 80, "no line may pass eighty columns, got " + line.length() + ": " + line);
+            }
+            check(!pgn.contains("{"), "the position after every move no longer belongs in the file");
+            check(pgn.contains("1. Nf3"), "the first move must carry its number");
+            check(pgn.trim().endsWith("1/2-1/2"), "the movetext must end with the result");
+        });
+
+        test("PgnWriter: a game that was set up says so and keeps its own numbering", () -> {
+            GameRecord record = new GameRecord("Alice", "Bob", "*", "2026.01.02", "Unlimited",
+                    "-", null, "4k3/8/8/8/8/8/8/4K3 b - - 0 12",
+                    List.of("Ke7"), List.of());
+
+            String pgn = PgnWriter.write(record);
+            check(pgn.contains("[SetUp " + (char) 34 + "1" + (char) 34 + "]"),
+                    "a set up game must be marked as one");
+            check(pgn.contains("[FEN "), "a set up game must carry the position it started from");
+            check(pgn.contains("12... Ke7"),
+                    "a game that starts with Black must number from its own move, got: " + pgn);
+        });
+
+        test("PgnReader: comments, side lines, glyphs and move numbers are not moves", () -> {
+            String pgn = """
+                    [White "A"]
+                    [Black "B"]
+                    [Result "*"]
+
+                    1. e4 {the usual start} e5 ; and a line comment
+                    2. Nf3 (2. Nc3 Nf6) 2... Nc6 $1 *
+                    """;
+
+            GameRecord record = PgnReader.read(pgn);
+            checkNotNull(record, "the game must be readable");
+            checkEqual(List.of("e4", "e5", "Nf3", "Nc6"), record.moves,
+                    "only the moves that were played belong in the game");
+            checkEqual("*", record.result, "the result token must be picked up");
+        });
+
+        test("PgnReader: every game of a file with several games comes back", () -> {
+            String pgn = """
+                    [White "First White"]
+                    [Black "First Black"]
+                    [Result "1-0"]
+
+                    1. e4 e5 2. Nf3 1-0
+
+                    [White "Second White"]
+                    [Black "Second Black"]
+                    [Result "0-1"]
+
+                    1. d4 d5 0-1
+                    """;
+
+            List<GameRecord> games = PgnReader.readAll(pgn);
+            checkEqual(2, games.size(), "both games in the file must be read");
+            checkEqual("First White", games.get(0).whiteName, "the first game keeps its players");
+            checkEqual("Second Black", games.get(1).blackName, "the second game keeps its players");
+            checkEqual(List.of("d4", "d5"), games.get(1).moves, "the games must not run into each other");
+        });
+
+        test("PgnReader: castling with zeros and annotation marks become real moves", () -> {
+            String pgn = """
+                    [White "A"]
+                    [Black "B"]
+                    [Result "*"]
+
+                    1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. 0-0!? *
+                    """;
+
+            GameRecord record = PgnReader.read(pgn);
+            checkNotNull(record, "the game must be readable");
+            checkEqual(List.of("e4", "e5", "Nf3", "Nc6", "Bb5", "a6", "O-O"), record.moves,
+                    "castling written with zeros is still castling, and the marks say nothing about the move");
+            checkEqual(record.moves.size(), record.fenHistory.size(),
+                    "the positions are rebuilt from the moves, one per move");
+            // the last position has to be a position, which proves the replay really ran
+            Fen.parse(record.fenHistory.get(record.fenHistory.size() - 1));
+        });
+
+        test("PgnReader: a game saved in the old format keeps its positions", () -> {
+            // the writer used to put the position after every move into a comment
+            String pgn = """
+                    [White "Old"]
+                    [Black "Format"]
+                    [Result "1-0"]
+
+                    1. Zz9 {rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1} 1-0
+                    """;
+
+            GameRecord record = PgnReader.read(pgn);
+            checkNotNull(record, "a game from an older version must still open");
+            checkEqual(1, record.fenHistory.size(),
+                    "a move that cannot be replayed falls back on the position in its comment");
+            check(record.fenHistory.get(0).startsWith("rnbqkbnr"),
+                    "the position must be the one the file recorded");
+        });
+
+        test("PgnWriter and PgnReader: a game survives being written and read back", () -> {
+            // the two characters a tag value has to protect, built from their codes so this test
+            // cannot be broken by an escape being doubled somewhere along the way
+            String tricky = "Magnus " + (char) 34 + "The Hammer" + (char) 34 + " " + (char) 92;
+            GameRecord original = new GameRecord(tricky, "Bob [Blitz]", "1-0", "2026.01.02",
+                    "Blitz 5+0", "300+5", GameRecord.TERMINATION_NORMAL, null,
+                    List.of("e4", "e5", "Nf3"), List.of());
+
+            GameRecord reread = PgnReader.read(PgnWriter.write(original));
+
+            checkNotNull(reread, "a game I wrote myself must be readable again");
+            checkEqual(tricky, reread.whiteName, "quotes and backslashes in a name must survive");
+            checkEqual("Bob [Blitz]", reread.blackName, "brackets in a name must survive");
+            checkEqual("1-0", reread.result, "the result must survive");
+            checkEqual("300+5", reread.pgnTimeControl, "the time control must survive");
+            checkEqual(GameRecord.TERMINATION_NORMAL, reread.termination, "the reason must survive");
+            checkEqual(List.of("e4", "e5", "Nf3"), reread.moves, "the moves must survive");
+        });
+
+        test("GameRecord: the PGN termination and time control follow the standard", () -> {
+            checkEqual(GameRecord.TERMINATION_TIME_FORFEIT, GameRecord.pgnTermination(Termination.TIME_OUT),
+                    "a flag fall is a forfeit on time");
+            checkEqual(GameRecord.TERMINATION_TIME_FORFEIT,
+                    GameRecord.pgnTermination(Termination.TIME_OUT_WITHOUT_MATING_MATERIAL),
+                    "a flag fall without mating material is still a forfeit on time");
+            checkEqual(GameRecord.TERMINATION_NORMAL, GameRecord.pgnTermination(Termination.CHECKMATE),
+                    "a mate ends the game by the rules");
+            checkEqual(GameRecord.TERMINATION_NORMAL, GameRecord.pgnTermination(Termination.THREEFOLD_REPETITION),
+                    "PGN has no tag value per drawing rule");
+            check(GameRecord.pgnTermination(null) == null, "a game still running claims no reason");
+
+            checkEqual("300+5", GameRecord.pgnTimeControl(
+                            new GameConfig("A", "B", 300_000, 300_000, "Blitz 5+5", 5_000)),
+                    "the tag counts in seconds");
+            checkEqual(GameRecord.NO_TIME_CONTROL, GameRecord.pgnTimeControl(GameConfig.unlimited()),
+                    "a game without a clock has no time control at all");
+        });
+
+        // =================================================================
         System.out.println("\n-- BoardState ---------------------------------------------------");
         // =================================================================
         // BoardState holds the position data that used to live directly on
