@@ -75,6 +75,18 @@ public final class GameSession {
         void notifyForcedDraw();
     }
 
+    /** Asked whether a move may be taken back, which is the opponent's decision in a timed game. */
+    public interface TakebackArbiter {
+
+        /**
+         * Answers whether the player who just moved may have that move back.
+         *
+         * @param pWhiteAsks true when White made the last move and wants it back
+         * @return true if the move may be taken back
+         */
+        boolean agreesToTakeback(boolean pWhiteAsks);
+    }
+
     /** Told once when the game ends, with the result and the reason. */
     public interface EndListener {
         void onGameEnd(GameResult pResult, Termination pTermination);
@@ -113,6 +125,7 @@ public final class GameSession {
     private MoveLog moveLogView;
     private PromotionPicker promotionPicker;
     private DrawArbiter drawArbiter = NO_ARBITER;
+    private TakebackArbiter takebackArbiter = FREE_TAKEBACK;
     private EndListener endListener;
 
     // reused for every move generation, so playing a game allocates nothing per move
@@ -136,6 +149,9 @@ public final class GameSession {
         public void repaint() {
         }
     };
+
+    // a casual game takes moves back freely, which is what a session without an arbiter assumes
+    private static final TakebackArbiter FREE_TAKEBACK = pWhiteAsks -> true;
 
     // a session nobody can answer never agrees to a claimable draw
     private static final DrawArbiter NO_ARBITER = new DrawArbiter() {
@@ -410,6 +426,33 @@ public final class GameSession {
         if (moveLogView != null) {
             moveLogView.clear();
         }
+    }
+
+    /**
+     * Asks whether the last move may be taken back and takes it back when the answer is yes.
+     * <p>
+     * A move back is free between friends and not free at all on a clock, where the moves a player
+     * is allowed to unplay decide games. So the session does not decide it: it works out who is
+     * asking, which is whoever made the last move, and puts the question to the arbiter the screen
+     * installed. A casual game answers yes without asking anybody, a timed game asks the opponent.
+     * Only after a yes does the move actually come back, through the same undo a casual game uses.
+     * <p>
+     * Time complexity: O(p) for the p plies since the last capture or pawn move, as for any undo,
+     * plus however long the opponent takes to answer. Space complexity: O(1).
+     *
+     * @return true if the move was taken back, false when there is none or the answer was no
+     */
+    public boolean requestTakeback() {
+        // nothing to ask about before the first move
+        if (!canUndo()) {
+            return false;
+        }
+        // the player who just moved is the one who wants the move back, so the other one decides
+        boolean whiteAsks = position.sideToMove() != Pieces.WHITE;
+        if (!takebackArbiter.agreesToTakeback(whiteAsks)) {
+            return false;
+        }
+        return undo();
     }
 
     /**
@@ -804,6 +847,17 @@ public final class GameSession {
      */
     public void setDrawArbiter(DrawArbiter pArbiter) {
         this.drawArbiter = pArbiter == null ? NO_ARBITER : pArbiter;
+    }
+
+    /**
+     * Sets who decides whether a move may be taken back.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pArbiter asked before every takeback, or null to take moves back freely
+     */
+    public void setTakebackArbiter(TakebackArbiter pArbiter) {
+        this.takebackArbiter = pArbiter == null ? FREE_TAKEBACK : pArbiter;
     }
 
     /**
