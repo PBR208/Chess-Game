@@ -22,6 +22,8 @@ import ui.board.EndScreen;
 import ui.board.MoveLogPanel;
 import ui.menu.MainMenu;
 import ui.menu.PastGamesPanel;
+import ui.theme.Theme;
+import ui.theme.UiComponents;
 
 import javax.swing.*;
 import java.awt.*;
@@ -155,6 +157,7 @@ public class Main {
             gameContainer.setBackground(new Color(28, 28, 30));
             gameContainer.add(board, BorderLayout.CENTER);
             gameContainer.add(logPanel, BorderLayout.EAST);
+            gameContainer.add(pauseBar(board), BorderLayout.SOUTH);
 
             JPanel wrapper = new JPanel(new GridBagLayout());
             wrapper.setBackground(new Color(28, 28, 30));
@@ -164,6 +167,37 @@ public class Main {
             frame.revalidate();
             frame.repaint();
         });
+    }
+
+    /**
+     * Builds the row under the board that holds the pause button.
+     * <p>
+     * Players step away from a game, and stopping the clock should not mean ending it. The button
+     * pauses and resumes the board and says which of the two it will do next, so a player always
+     * reads the action rather than the state. Everything it needs is on the board itself, which stops
+     * the clocks and refuses moves while it is paused.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the panel and its button.
+     *
+     * @param pBoard the board of the running game, never null
+     * @return the row under the board, never null
+     * @throws NullPointerException if pBoard is null
+     */
+    private static JPanel pauseBar(Board pBoard) {
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 6));
+        bar.setBackground(Theme.PANEL_BG);
+
+        JButton pause = UiComponents.button("Pause", new Font(Font.SANS_SERIF, Font.PLAIN, 13),
+                Theme.BUTTON_SECONDARY);
+        pause.setName("pause");
+        pause.addActionListener(e -> {
+            pBoard.setPaused(!pBoard.isPaused());
+            // the button names what pressing it will do next, not what the game is doing now
+            pause.setText(pBoard.isPaused() ? "Resume" : "Pause");
+        });
+
+        bar.add(pause);
+        return bar;
     }
 
     /**

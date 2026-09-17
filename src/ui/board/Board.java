@@ -55,6 +55,11 @@ public class Board extends JPanel implements GameSession.View {
 
     private final ChessClock whiteClock;
     private final ChessClock blackClock;
+    // while a game is paused both clocks stand still and the board takes no moves
+    private boolean paused;
+
+    // laid over the squares while the game is paused, dark enough to say "not now"
+    private static final Color PAUSE_VEIL = new Color(0, 0, 0, 150);
 
     private final Color LIGHT_TILE = new Color(232, 235, 239);
     private final Color DARK_TILE = new Color(125, 135, 150);
@@ -207,6 +212,18 @@ public class Board extends JPanel implements GameSession.View {
         } else {
             blackClock.draw(g2d, bottomY, boardWidth, clockHeight);
         }
+
+        // a paused game has to look paused, or a player waits for a board that is ignoring them
+        if (paused) {
+            g2d.setColor(PAUSE_VEIL);
+            g2d.fillRect(0, clockHeight, boardWidth, rows * tileSize);
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font(Font.SANS_SERIF, Font.BOLD, tileSize / 2));
+            FontMetrics metrics = g2d.getFontMetrics();
+            String text = "PAUSED";
+            g2d.drawString(text, (boardWidth - metrics.stringWidth(text)) / 2,
+                    clockHeight + rows * tileSize / 2);
+        }
     }
 
     /**
@@ -304,6 +321,51 @@ public class Board extends JPanel implements GameSession.View {
         whiteClock.reset();
         blackClock.reset();
         whiteClock.start();
+    }
+
+    /**
+     * Pauses or resumes the game.
+     * <p>
+     * Players step away from a board, and until now the only way to stop the clock was to finish the
+     * game. Pausing stops both clocks and makes the board ignore the mouse, so a piece cannot be
+     * moved while nobody is watching the time. Resuming starts the clock of whoever is to move, and
+     * never starts one at all when the game is already over. Asking for the state the game is
+     * already in does nothing, so a pause cannot be stacked.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pPaused true to pause the game, false to let it run again
+     */
+    public void setPaused(boolean pPaused) {
+        // nothing to do, and pausing twice must not lose track of whose clock was running
+        if (pPaused == paused) {
+            return;
+        }
+        paused = pPaused;
+
+        if (paused) {
+            whiteClock.stop();
+            blackClock.stop();
+        } else if (!session.result().isFinished()) {
+            // the clock of the player to move is the one that carries on
+            if (session.isWhiteToMove()) {
+                whiteClock.start();
+            } else {
+                blackClock.start();
+            }
+        }
+        repaint();
+    }
+
+    /**
+     * Tells whether the game is paused.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return true while both clocks stand still and the board takes no moves
+     */
+    public boolean isPaused() {
+        return paused;
     }
 
     /**
