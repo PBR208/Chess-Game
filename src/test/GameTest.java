@@ -447,6 +447,57 @@ public class GameTest {
     }
 
     /**
+     * Presses the mouse in the middle of a named square.
+     * <p>
+     * The board turns round to face the side to move, so the pixel a square sits at changes during a
+     * game. Asking the board where it draws the square keeps a test readable and right after a move.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pInput  input handler under test, never null
+     * @param pBoard  board it belongs to, never null
+     * @param pSquare square name such as "e2", never null
+     */
+    private static void pressOn(Input pInput, Board pBoard, String pSquare) {
+        int square = Bitboards.squareOf(pSquare);
+        int half = pBoard.getTileSize() / 2;
+        pInput.mousePressed(new java.awt.event.MouseEvent(pBoard, java.awt.event.MouseEvent.MOUSE_PRESSED,
+                System.currentTimeMillis(), 0, pBoard.toVisualX(Board.colOf(square)) + half,
+                pBoard.toVisualY(Board.rowOf(square)) + half, 1, false));
+    }
+
+    /**
+     * Releases the mouse in the middle of a named square.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pInput  input handler under test, never null
+     * @param pBoard  board it belongs to, never null
+     * @param pSquare square name such as "e4", never null
+     */
+    private static void releaseOn(Input pInput, Board pBoard, String pSquare) {
+        int square = Bitboards.squareOf(pSquare);
+        int half = pBoard.getTileSize() / 2;
+        pInput.mouseReleased(new java.awt.event.MouseEvent(pBoard, java.awt.event.MouseEvent.MOUSE_RELEASED,
+                System.currentTimeMillis(), 0, pBoard.toVisualX(Board.colOf(square)) + half,
+                pBoard.toVisualY(Board.rowOf(square)) + half, 1, false));
+    }
+
+    /**
+     * Clicks a named square, which is a press and a release without moving in between.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pInput  input handler under test, never null
+     * @param pBoard  board it belongs to, never null
+     * @param pSquare square name such as "e2", never null
+     */
+    private static void clickOn(Input pInput, Board pBoard, String pSquare) {
+        pressOn(pInput, pBoard, pSquare);
+        releaseOn(pInput, pBoard, pSquare);
+    }
+
+    /**
      * Counts how many components of the given class exist in the tree.
      */
     private static int countComponents(Container c, Class<?> type) {
@@ -1384,6 +1435,62 @@ public class GameTest {
         // =================================================================
         System.out.println("\n-- Input and accessibility ---------------------------------------");
         // =================================================================
+
+        test("Input: clicking a piece and then a square plays the move", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    Input input = new Input(board, board.getSession());
+
+                    clickOn(input, board, "e2");
+                    checkEqual(Bitboards.squareOf("e2"), board.getSelectedSquare(),
+                            "the clicked piece must stay picked up, waiting for its target");
+                    check(board.getTargetCount() > 0, "and must keep showing where it may go");
+
+                    clickOn(input, board, "e4");
+                    checkEqual(1, board.getSession().getMoveLog().size(), "the second click must play the move");
+                    checkEqual("e4", board.getSession().getMoveLog().get(0), "and it must be the move that was meant");
+                    check(board.getSelectedSquare() < 0, "nothing may stay picked up afterwards");
+                }));
+
+        test("Input: clicking the picked up piece again puts it down", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    Input input = new Input(board, board.getSession());
+
+                    clickOn(input, board, "e2");
+                    clickOn(input, board, "e2");
+                    check(board.getSelectedSquare() < 0, "clicking it again must put the piece down");
+                    check(board.getSession().getMoveLog().isEmpty(), "and must not play anything");
+                }));
+
+        test("Input: clicking another of your own pieces picks that one up instead", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    Input input = new Input(board, board.getSession());
+
+                    clickOn(input, board, "e2");
+                    // d2 is no square the e2 pawn can reach, so it is a change of mind
+                    clickOn(input, board, "d2");
+                    checkEqual(Bitboards.squareOf("d2"), board.getSelectedSquare(),
+                            "the second piece must be the one that is picked up now");
+                    check(board.getSession().getMoveLog().isEmpty(), "and nothing may have been played");
+
+                    clickOn(input, board, "d4");
+                    checkEqual("d4", board.getSession().getMoveLog().get(0),
+                            "and it must be the second piece that moves");
+                }));
+
+        test("Input: dragging a piece still works as it always did", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    Input input = new Input(board, board.getSession());
+
+                    pressOn(input, board, "g1");
+                    releaseOn(input, board, "f3");
+                    checkEqual("Nf3", board.getSession().getMoveLog().get(0),
+                            "a drag must play the move without any clicking");
+                    check(board.getSelectedSquare() < 0, "and must leave nothing picked up");
+                }));
 
         test("Board: the move that was just played is remembered", () ->
                 SwingUtilities.invokeAndWait(() -> {
