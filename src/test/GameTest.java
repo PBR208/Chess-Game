@@ -17,6 +17,7 @@ import engine.model.*;
 import engine.persistence.*;
 import engine.pieces.*;
 import ui.board.*;
+import ui.i18n.*;
 import ui.menu.*;
 import ui.theme.*;
 
@@ -3869,6 +3870,68 @@ public class GameTest {
                     "and moves are accepted again");
         });
 
+        // =================================================================
+        System.out.println();
+        System.out.println("-- Languages ----------------------------------------------------");
+        // =================================================================
+
+        test("Messages: every text exists in both languages", () -> {
+            java.util.Properties english = loadBundle("/resources/messages.properties");
+            java.util.Properties german = loadBundle("/resources/messages_de.properties");
+
+            check(!english.isEmpty(), "the English bundle must not be empty");
+            // a key only one language has is a line that silently reads in the wrong language
+            for (String key : english.stringPropertyNames()) {
+                check(german.containsKey(key), "the German bundle is missing " + key);
+            }
+            for (String key : german.stringPropertyNames()) {
+                check(english.containsKey(key), "the English bundle is missing " + key);
+            }
+        });
+
+        test("Messages: a text comes back in the language that was chosen", () -> {
+            java.util.Locale previous = Messages.getLocale();
+            try {
+                Messages.setLocale(java.util.Locale.ENGLISH);
+                checkEqual("New Game", Messages.get("menu.newGame"), "English comes from the base bundle");
+
+                Messages.setLocale(java.util.Locale.GERMAN);
+                checkEqual("Neues Spiel", Messages.get("menu.newGame"), "German comes from its own bundle");
+
+                checkEqual("menu.nothingHasThisKey", Messages.get("menu.nothingHasThisKey"),
+                        "a key nobody wrote a text for shows itself rather than taking a screen down");
+            } finally {
+                // the rest of the suite reads English
+                Messages.setLocale(previous);
+            }
+        });
+
+        test("Messages: a sentence with a name in it is filled in for each language", () -> {
+            java.util.Locale previous = Messages.getLocale();
+            try {
+                Messages.setLocale(java.util.Locale.ENGLISH);
+                checkEqual("Alice wins by checkmate!", Messages.format("end.checkmate", "Alice"),
+                        "the name goes into the English sentence");
+
+                Messages.setLocale(java.util.Locale.GERMAN);
+                checkEqual("Alice gewinnt durch Schachmatt!", Messages.format("end.checkmate", "Alice"),
+                        "and into the German one, where the rest of the sentence differs");
+            } finally {
+                Messages.setLocale(previous);
+            }
+        });
+
+        test("Messages: the game ships the languages the menu offers", () -> {
+            check(Messages.supportedLocales().contains(java.util.Locale.ENGLISH), "English is shipped");
+            check(Messages.supportedLocales().contains(java.util.Locale.GERMAN), "German is shipped");
+            for (java.util.Locale supported : Messages.supportedLocales()) {
+                Messages.setLocale(supported);
+                checkEqual(true, !Messages.get("menu.newGame").equals("menu.newGame"),
+                        "every offered language must actually have text, missing: " + supported);
+            }
+            Messages.setLocale(java.util.Locale.ENGLISH);
+        });
+
         // -- Summary ------------------------------------------------------
         // the host frame is null on a headless run
         if (frame != null) SwingUtilities.invokeAndWait(frame::dispose);
@@ -3888,6 +3951,30 @@ public class GameTest {
     }
 
     // -- Test-only helpers ------------------------------------------------
+
+    /**
+     * Reads one language bundle straight from the classpath, without any fallback.
+     * <p>
+     * The missing key test has to compare what each file really holds, and a bundle loaded the
+     * normal way inherits every key from the English one, which would make the comparison pass
+     * whatever is missing. So I read the file itself, as UTF-8, because that is what properties
+     * files have been since Java 9 while the old stream based load still assumes ISO-8859-1 and
+     * would quietly turn every German umlaut into nonsense.
+     * <p>
+     * Time complexity: O(n) in the size of the file. Space complexity: O(n) for the entries.
+     *
+     * @param pResource classpath path of the bundle, such as /resources/messages.properties
+     * @return the entries of that file alone, never null
+     * @throws Exception if the file is missing or cannot be read
+     */
+    private static java.util.Properties loadBundle(String pResource) throws Exception {
+        java.util.Properties properties = new java.util.Properties();
+        try (java.io.InputStream stream = GameTest.class.getResourceAsStream(pResource)) {
+            checkNotNull(stream, "the bundle must be on the classpath: " + pResource);
+            properties.load(new java.io.InputStreamReader(stream, java.nio.charset.StandardCharsets.UTF_8));
+        }
+        return properties;
+    }
 
     /**
      * Reads the pixels of a button's icon so two icons can be compared.
