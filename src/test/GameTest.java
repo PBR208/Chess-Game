@@ -16,6 +16,7 @@ import engine.imports.*;
 import engine.model.*;
 import engine.persistence.*;
 import engine.pieces.*;
+import engine.search.*;
 import ui.board.*;
 import ui.menu.*;
 import ui.theme.*;
@@ -406,6 +407,70 @@ public class GameTest {
             }
         }
         return null;
+    }
+
+    /**
+     * Turns a position into its mirror image: the board upside down and the colours swapped.
+     * <p>
+     * Every evaluation term has to be written twice, once for each side, and forgetting one of them
+     * is the easiest mistake to make and the hardest to see. A mirrored position is the same position
+     * seen from the other side, so its score has to be the exact opposite. The side to move is left
+     * alone on purpose, which is what makes the score the opposite rather than the same: the same
+     * player is now looking at what used to be the other side's position.
+     * <p>
+     * Time complexity: O(c) in the length of the text. Space complexity: O(c) for the new text.
+     *
+     * @param pFen a position in Forsyth Edwards notation, never null
+     * @return the mirrored position, never null
+     */
+    private static String mirrorFen(String pFen) {
+        String[] fields = pFen.trim().split("\\s+");
+        String[] ranks = fields[0].split("/");
+
+        StringBuilder placement = new StringBuilder();
+        // the ranks come back in the opposite order and every piece changes colour
+        for (int index = ranks.length - 1; index >= 0; index--) {
+            if (placement.length() > 0) {
+                placement.append('/');
+            }
+            for (char symbol : ranks[index].toCharArray()) {
+                placement.append(swapCase(symbol));
+            }
+        }
+
+        String castling = "-";
+        if (!fields[2].equals("-")) {
+            StringBuilder rights = new StringBuilder();
+            // the rights change sides too, and have to come back in the order the standard asks for
+            for (char wanted : new char[]{'K', 'Q', 'k', 'q'}) {
+                if (fields[2].indexOf(swapCase(wanted)) >= 0) {
+                    rights.append(wanted);
+                }
+            }
+            castling = rights.length() == 0 ? "-" : rights.toString();
+        }
+
+        return placement + " " + fields[1] + " " + castling + " -"
+                + " " + (fields.length > 4 ? fields[4] : "0")
+                + " " + (fields.length > 5 ? fields[5] : "1");
+    }
+
+    /**
+     * Turns an upper case letter into a lower case one and the other way round.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pSymbol the character to swap, may be a digit or a slash
+     * @return the swapped letter, or the character itself when it is not a letter
+     */
+    private static char swapCase(char pSymbol) {
+        if (Character.isUpperCase(pSymbol)) {
+            return Character.toLowerCase(pSymbol);
+        }
+        if (Character.isLowerCase(pSymbol)) {
+            return Character.toUpperCase(pSymbol);
+        }
+        return pSymbol;
     }
 
     /**
@@ -1341,6 +1406,68 @@ public class GameTest {
             // 2 is the exit code Main uses for a missing display
             checkEqual(2, process.exitValue(), "a headless start must report a failure, output: " + text);
             check(text.contains("graphical display"), "the output must explain that a display is missing, got: " + text);
+        });
+
+        // =================================================================
+        System.out.println("\n-- Evaluation ----------------------------------------------------");
+        // =================================================================
+
+        test("Evaluator: a position is worth the exact opposite of its mirror image", () -> {
+            // turning the board round and swapping the colours has to turn the score round too,
+            // which catches every place a term was added for White but forgotten for Black
+            String[] positions = {
+                    Fen.START_POSITION,
+                    "4k3/8/8/8/8/8/8/3QK3 w - - 0 1",
+                    "r3k2r/pp3ppp/2n2n2/2bpp3/4P3/2NP1N2/PPP2PPP/R1B1KB1R w - - 4 8",
+                    "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+                    "4k3/pp4pp/8/8/8/8/PPP3PP/4K3 b - - 0 1",
+            };
+            for (String fen : positions) {
+                int score = Evaluator.evaluate(Fen.parse(fen));
+                int mirrored = Evaluator.evaluate(Fen.parse(mirrorFen(fen)));
+                checkEqual(-score, mirrored,
+                        "the mirror of " + fen + " must be worth the opposite, got " + score + " and " + mirrored);
+            }
+        });
+
+        test("Evaluator: the starting position is level", () -> {
+            // it is its own mirror image, so anything other than zero would mean a lopsided table
+            checkEqual(0, Evaluator.evaluate(Fen.parse(Fen.START_POSITION)),
+                    "neither side may start out better off");
+        });
+
+        test("Evaluator: a queen more is worth about a queen", () -> {
+            int score = Evaluator.evaluate(Fen.parse("4k3/8/8/8/8/8/8/3QK3 w - - 0 1"));
+            check(score > 800, "an extra queen must be worth a lot, got " + score);
+            check(score < 1400, "but not more than a queen and a half, got " + score);
+        });
+
+        test("Evaluator: the king belongs behind its pawns early and in the middle late", () -> {
+            // Both sides hold a queen, two rooks and eight pawns, and the two positions differ in
+            // nothing but the square the white king stands on, so only that can decide between
+            // them. Material has to match exactly here: an extra piece is worth several times what
+            // a king's shelter is, and would decide the comparison on its own.
+            int castled = Evaluator.evaluate(Fen.parse("r2qk2r/pppppppp/8/8/8/8/PPPPPPPP/R2Q1RK1 w kq - 0 1"));
+            int exposed = Evaluator.evaluate(Fen.parse("r2qk2r/pppppppp/8/8/4K3/8/PPPPPPPP/R2Q1R2 w kq - 0 1"));
+            check(castled > exposed,
+                    "a sheltered king must beat one in the open while the board is full, got "
+                            + castled + " and " + exposed);
+
+            // with the pieces gone it is the other way round, which is what tapering is for
+            int central = Evaluator.evaluate(Fen.parse("4k3/8/8/8/4K3/8/8/8 w - - 0 1"));
+            int corner = Evaluator.evaluate(Fen.parse("4k3/8/8/8/8/8/8/K7 w - - 0 1"));
+            check(central > corner,
+                    "a central king must beat one in the corner in an endgame, got "
+                            + central + " and " + corner);
+        });
+
+        test("Evaluator: a passed pawn is worth more the further it has come", () -> {
+            // the same material either way, so only how far the pawn has come can decide it
+            int advanced = Evaluator.evaluate(Fen.parse("4k3/p7/4P3/8/8/8/8/4K3 w - - 0 1"));
+            int athome = Evaluator.evaluate(Fen.parse("4k3/p7/8/8/8/8/4P3/4K3 w - - 0 1"));
+            check(advanced > athome,
+                    "a pawn two squares from queening must beat one still at home, got "
+                            + advanced + " and " + athome);
         });
 
         // =================================================================
