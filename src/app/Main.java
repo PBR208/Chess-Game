@@ -20,6 +20,7 @@ import engine.persistence.PgnManager;
 import ui.board.Board;
 import ui.board.EndScreen;
 import ui.board.MoveLogPanel;
+import ui.i18n.Messages;
 import ui.menu.MainMenu;
 import ui.menu.PastGamesPanel;
 
@@ -186,18 +187,20 @@ public class Main {
     private static String endMessage(GameConfig pConfig, GameResult pResult, Termination pTermination) {
         // only mate, a resignation and a flag fall have a winner to name
         String winner = pResult == GameResult.WHITE_WINS ? pConfig.whiteName() : pConfig.blackName();
+        // the three reasons with a winner put the name into the sentence, because where the name
+        // belongs in a sentence is not the same in every language
         return switch (pTermination) {
-            case CHECKMATE -> winner + " wins by checkmate!";
-            case RESIGNATION -> winner + " wins by resignation!";
-            case TIME_OUT -> winner + " wins on time!";
-            case STALEMATE -> "Draw by stalemate!";
-            case INSUFFICIENT_MATERIAL -> "Draw: neither side has enough material to mate!";
-            case TIME_OUT_WITHOUT_MATING_MATERIAL -> "Draw: time ran out, but no mate was possible!";
-            case FIFTY_MOVE_RULE -> "Draw by the 50-move rule!";
-            case SEVENTY_FIVE_MOVE_RULE -> "Draw by the 75-move rule!";
-            case THREEFOLD_REPETITION -> "Draw by threefold repetition!";
-            case FIVEFOLD_REPETITION -> "Draw by fivefold repetition!";
-            case DRAW_AGREED -> "Draw by agreement!";
+            case CHECKMATE -> Messages.format("end.checkmate", winner);
+            case RESIGNATION -> Messages.format("end.resignation", winner);
+            case TIME_OUT -> Messages.format("end.timeOut", winner);
+            case STALEMATE -> Messages.get("end.stalemate");
+            case INSUFFICIENT_MATERIAL -> Messages.get("end.insufficientMaterial");
+            case TIME_OUT_WITHOUT_MATING_MATERIAL -> Messages.get("end.timeOutNoMaterial");
+            case FIFTY_MOVE_RULE -> Messages.get("end.fiftyMoveRule");
+            case SEVENTY_FIVE_MOVE_RULE -> Messages.get("end.seventyFiveMoveRule");
+            case THREEFOLD_REPETITION -> Messages.get("end.threefoldRepetition");
+            case FIVEFOLD_REPETITION -> Messages.get("end.fivefoldRepetition");
+            case DRAW_AGREED -> Messages.get("end.drawAgreed");
         };
     }
 
