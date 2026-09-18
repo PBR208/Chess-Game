@@ -447,6 +447,49 @@ public class GameTest {
         return null;
     }
 
+    /**
+     * Paints any component into an image at a size of its own.
+     * <p>
+     * A panel inside split panes is left with no size at all when nothing has laid it out, and
+     * painting it then draws nothing, which makes a test of what it draws pass for the wrong reason.
+     * Giving it a size first is what makes the picture real. This goes through paint rather than
+     * paintComponent, which is not public on an ordinary panel.
+     * <p>
+     * Time complexity: O(n) for whatever the component draws. Space complexity: O(w * h).
+     *
+     * @param pComponent component to paint, never null
+     * @param pWidth     width in pixels, greater than 0
+     * @param pHeight    height in pixels, greater than 0
+     * @return the painted component, never null
+     */
+    /**
+     * Works out how bright a colour looks.
+     * <p>
+     * Telling two parts of a drawing apart by their exact colour values says only that they differ.
+     * Comparing how bright they look says which is which, which is what a bar with a light end and a
+     * dark end needs. The eye is far more sensitive to green than to red and least sensitive to
+     * blue, which is what the three weights of the standard luminance formula say.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pColour colour to measure, never null
+     * @return its brightness, 0 for black up to 255 for white
+     */
+    private static int brightnessOf(Color pColour) {
+        return (int) Math.round(0.2126 * pColour.getRed()
+                + 0.7152 * pColour.getGreen()
+                + 0.0722 * pColour.getBlue());
+    }
+
+    private static BufferedImage paintPanel(JComponent pComponent, int pWidth, int pHeight) {
+        pComponent.setSize(pWidth, pHeight);
+        BufferedImage image = new BufferedImage(pWidth, pHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        pComponent.paint(graphics);
+        graphics.dispose();
+        return image;
+    }
+
     private static BufferedImage paintBoard(Board pBoard, int pWidth, int pHeight) {
         BufferedImage image = new BufferedImage(pWidth, pHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = image.createGraphics();
@@ -1687,6 +1730,58 @@ public class GameTest {
                         "the blunder must be marked in the list, got: " + list.getText());
             });
         });
+
+        test("ReplayPanel: the bar says who is standing better", () -> {
+            // a position nobody has looked at is drawn level rather than guessed at
+            check(Math.abs(ReplayPanel.barShareForWhite(ReplayPanel.UNKNOWN_SCORE) - 0.5) < 1e-9,
+                    "an unscored position must be drawn level");
+
+            check(ReplayPanel.barShareForWhite(400) > 0.5, "White ahead must fill more than half");
+            check(ReplayPanel.barShareForWhite(-400) < 0.5, "and Black ahead must fill less");
+            check(ReplayPanel.barShareForWhite(400) > ReplayPanel.barShareForWhite(100),
+                    "and further ahead must fill more still");
+
+            check(Math.abs(ReplayPanel.barShareForWhite(Searcher.MATE_SCORE - 1) - 1.0) < 1e-9,
+                    "a mate for White must fill the bar");
+            check(Math.abs(ReplayPanel.barShareForWhite(-(Searcher.MATE_SCORE - 1))) < 1e-9,
+                    "and a mate against White must empty it");
+
+            // a winning position is not a finished one, so the other side keeps a sliver
+            check(ReplayPanel.barShareForWhite(5_000) <= 0.95,
+                    "a won position must still leave the other side something");
+            check(ReplayPanel.barShareForWhite(-5_000) >= 0.05, "and the same the other way round");
+        });
+
+        test("ReplayPanel: the bar is really drawn beside the board", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    ReplayPanel panel = new ReplayPanel(
+                            new ArrayList<>(List.of("e4")),
+                            new ArrayList<>(List.of("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1")));
+
+                    Component canvas = findByName(panel, "replayBoard");
+                    checkNotNull(canvas, "the replay must have a board to draw on");
+                    BufferedImage picture = paintPanel((JComponent) canvas, 400, 400);
+
+                    // At this size the board takes eight squares of 48 and the strip sits just past
+                    // it, so the bar is drawn around x 393 with its two halves meeting in the middle.
+                    int barX = 393;
+                    int blackEnd = picture.getRGB(barX, 20);
+                    int whiteEnd = picture.getRGB(barX, 360);
+
+                    check(blackEnd != whiteEnd, "the bar must have two ends that differ");
+                    check(brightnessOf(new Color(whiteEnd)) > brightnessOf(new Color(blackEnd)),
+                            "and White's end must be the lighter one, at the bottom where it belongs");
+                }));
+
+        test("ReplayPanel: a game with no positions still draws without complaining", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    ReplayPanel panel = new ReplayPanel(new ArrayList<>(), new ArrayList<>());
+                    Component canvas = findByName(panel, "replayBoard");
+                    checkNotNull(canvas, "there must still be a board to draw on");
+                    // an empty game has no score and no position, and must not throw over either
+                    checkNotNull(paintPanel((JComponent) canvas, 200, 200),
+                            "drawing an empty replay must produce a picture rather than an error");
+                }));
 
         test("Board: asking what to play offers a move the rules allow", () ->
                 SwingUtilities.invokeAndWait(() -> {

@@ -3,7 +3,8 @@ package ui.menu;
 /*
  * Purpose: ReplayPanel steps through a saved game position by position. It draws a small board from
  * the FEN recorded after every move and shows the move list and the current FEN next to it, and it
- * looks over the game in the background to mark the moves that threw something away. That work is
+ * looks over the game in the background to mark the moves that threw something away and to show who
+ * was standing better as a bar beside the board. That work is
  * given up whenever the reader moves on, because its answers would be about a position they have
  * already left, and whatever was worked out before is kept rather than started again. I keep the
  * replay separate from the live board, so looking at an old game can never change a running one.
@@ -54,8 +55,8 @@ public class ReplayPanel extends JPanel {
     private static final Color LIGHT_TILE = new Color(232, 235, 239);
     private static final Color DARK_TILE = new Color(125, 135, 150);
 
-    // stands for a position nobody has worked out a score for yet
-    private static final int UNKNOWN_SCORE = Integer.MIN_VALUE;
+    /** stands for a position nobody has worked out a score for yet */
+    public static final int UNKNOWN_SCORE = Integer.MIN_VALUE;
 
     // How hard to look at each position of a finished game. This runs over the whole game while
     // somebody is reading it, so it is shallow on purpose: a rough score for every move is worth
@@ -489,8 +490,12 @@ public class ReplayPanel extends JPanel {
             return;
         }
 
-        // Calculate tile size based on available space
-        int tileSize = Math.min(width, height) / 8;
+        // A strip down the side carries the evaluation bar, so the board gets what is left. The
+        // width comes from the canvas rather than from the tile size, which would be circular: the
+        // tile size is what is left once the strip has been taken off.
+        int barWidth = Math.max(8, Math.min(width, height) / 40);
+        int gap = Math.max(2, barWidth / 2);
+        int tileSize = Math.min(Math.max(0, width - barWidth - gap), height) / 8;
 
         char[][] grid = FenLoader.parse(fens.get(cursor));
         BufferedImage sheet = PieceSprites.getSheet();
@@ -513,6 +518,73 @@ public class ReplayPanel extends JPanel {
                 }
             }
         }
+
+        drawEvaluationBar(g2d, 8 * tileSize + gap, 0, barWidth, 8 * tileSize);
+    }
+
+    /**
+     * Draws the bar that says who is standing better, and by how much.
+     * <p>
+     * A number in hundredths of a pawn means nothing at a glance, while how far the bar has moved
+     * says it without being read. White fills from the bottom and Black from the top, which is the
+     * way round every chess program draws it, so nobody has to learn this one. A position nobody has
+     * scored yet is drawn level rather than guessed at, the same way an unscored move carries no
+     * mark, and neither side is ever squeezed out completely, because a bar with one colour missing
+     * reads as a finished game rather than a lost one.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pGraphics graphics context of the canvas, never null
+     * @param pX        left edge of the bar in pixels
+     * @param pY        top edge of the bar in pixels
+     * @param pWidth    width of the bar in pixels
+     * @param pHeight   height of the bar in pixels
+     */
+    private void drawEvaluationBar(Graphics2D pGraphics, int pX, int pY, int pWidth, int pHeight) {
+        if (pWidth <= 0 || pHeight <= 0) {
+            return;
+        }
+        double whiteShare = barShareForWhite(scoreAt(cursor));
+        int whiteHeight = (int) Math.round(pHeight * whiteShare);
+
+        // Black above, White below, and the outline keeps the bar readable against any background
+        pGraphics.setColor(new Color(45, 45, 48));
+        pGraphics.fillRect(pX, pY, pWidth, pHeight - whiteHeight);
+        pGraphics.setColor(new Color(235, 235, 235));
+        pGraphics.fillRect(pX, pY + pHeight - whiteHeight, pWidth, whiteHeight);
+        pGraphics.setColor(new Color(90, 90, 95));
+        pGraphics.drawRect(pX, pY, pWidth - 1, pHeight - 1);
+    }
+
+    /**
+     * Turns a score into how much of the bar White fills.
+     * <p>
+     * Scores run from a pawn or two in an ordinary game to tens of thousands for a forced mate, so
+     * showing them to scale would leave the bar pinned at one end for most of a game and useless for
+     * the rest. I treat eight pawns as the end of the scale, since a game that one sided is decided
+     * whatever the exact number is, and give a mate the whole bar. Both sides always keep a sliver,
+     * so the bar never reads as one side having disappeared from the board.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pWhiteScore the score from White's point of view, or UNKNOWN_SCORE when there is none
+     * @return how much of the bar belongs to White, between 0 and 1
+     */
+    public static double barShareForWhite(int pWhiteScore) {
+        // nobody has looked at this position yet, so it is drawn level rather than guessed at
+        if (pWhiteScore == UNKNOWN_SCORE) {
+            return 0.5;
+        }
+        if (pWhiteScore > Searcher.MATE_BOUND) {
+            return 1.0;
+        }
+        if (pWhiteScore < -Searcher.MATE_BOUND) {
+            return 0.0;
+        }
+        // eight pawns either way is as far as the scale goes
+        double clamped = Math.max(-800, Math.min(800, pWhiteScore));
+        double share = 0.5 + clamped / 1600.0;
+        return Math.max(0.05, Math.min(0.95, share));
     }
 
     /**
