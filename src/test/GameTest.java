@@ -3869,6 +3869,79 @@ public class GameTest {
                     "and moves are accepted again");
         });
 
+        // =================================================================
+        System.out.println();
+        System.out.println("-- Resigning, offering and claiming -----------------------------");
+        // =================================================================
+
+        test("GameSession: a draw can be claimed once the position has come back three times", () -> {
+            GameSession session = new GameSession();
+            // both knights out and back twice brings the starting position back for the third time
+            String[][] shuffle = {{"g1", "f3"}, {"g8", "f6"}, {"f3", "g1"}, {"f6", "g8"}};
+            for (int round = 0; round < 2; round++) {
+                for (String[] step : shuffle) {
+                    session.play(session.moveFor(Bitboards.squareOf(step[0]), Bitboards.squareOf(step[1])));
+                }
+            }
+
+            check(session.isRepetitionClaimable(), "the third occurrence may be claimed");
+            check(session.isDrawClaimable(), "so a draw is claimable at all");
+            check(session.claimDraw(), "and claiming it ends the game");
+            checkEqual(GameResult.DRAW, session.result(), "a claimed repetition is a draw");
+            checkEqual(Termination.THREEFOLD_REPETITION, session.termination(), "and says which rule drew it");
+        });
+
+        test("GameSession: the fifty move rule can be claimed once fifty moves have passed", () -> {
+            GameSession session = new GameSession(Fen.parse("4k3/8/8/8/8/8/8/R3K3 w - - 99 60"));
+            check(!session.isFiftyMoveClaimable(), "ninety nine half moves are not yet fifty moves");
+
+            session.play(session.moveFor(Bitboards.squareOf("a1"), Bitboards.squareOf("a2")));
+            check(session.isFiftyMoveClaimable(), "the hundredth half move makes it claimable");
+
+            check(session.claimDraw(), "claiming it ends the game");
+            checkEqual(GameResult.DRAW, session.result(), "the fifty move rule draws");
+            checkEqual(Termination.FIFTY_MOVE_RULE, session.termination(), "and names itself as the reason");
+        });
+
+        test("GameSession: a claim nobody is entitled to changes nothing", () -> {
+            GameSession session = new GameSession();
+            check(!session.isDrawClaimable(), "nothing is claimable in the starting position");
+            check(!session.claimDraw(), "so claiming does nothing");
+            checkEqual(GameResult.ONGOING, session.result(), "and the game carries on");
+        });
+
+        test("GameSession: an offered draw ends the game only when the opponent accepts", () -> {
+            GameSession session = new GameSession();
+            session.setDrawOfferArbiter(pWhiteOffers -> false);
+            check(!session.offerDraw(), "a refused offer draws nothing");
+            checkEqual(GameResult.ONGOING, session.result(), "and leaves the game running");
+
+            boolean[] whiteOffered = {false};
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.setDrawOfferArbiter(pWhiteOffers -> {
+                whiteOffered[0] = pWhiteOffers;
+                return true;
+            });
+
+            check(session.offerDraw(), "an accepted offer ends the game");
+            check(!whiteOffered[0], "Black is to move after e4, so Black is the one offering");
+            checkEqual(GameResult.DRAW, session.result(), "an agreed draw is a draw");
+            checkEqual(Termination.DRAW_AGREED, session.termination(), "and says it was agreed");
+        });
+
+        test("GameSession: the screen is told whenever the game changes", () -> {
+            int[] changes = {0};
+            GameSession session = new GameSession();
+            session.setStateListener(() -> changes[0]++);
+
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            check(changes[0] >= 1, "a played move changes the game");
+
+            int afterMove = changes[0];
+            session.resign(Pieces.WHITE);
+            check(changes[0] > afterMove, "and so does the end of it");
+        });
+
         // -- Summary ------------------------------------------------------
         // the host frame is null on a headless run
         if (frame != null) SwingUtilities.invokeAndWait(frame::dispose);
