@@ -24,6 +24,7 @@ import ui.board.EndScreen;
 import ui.board.MoveLogPanel;
 import ui.menu.MainMenu;
 import ui.menu.PastGamesPanel;
+import ui.menu.SetupPanel;
 
 import javax.swing.*;
 import java.awt.*;
@@ -230,6 +231,24 @@ public class Main {
     public static void showPastGames() {
         SwingUtilities.invokeLater(() -> {
             frame.setContentPane(new PastGamesPanel());
+            frame.revalidate();
+            frame.repaint();
+        });
+    }
+
+    /**
+     * Opens the position editor.
+     * <p>
+     * Setting a position up is a screen of its own, like the menu and the library, so the window
+     * swaps it in the same way. The editor starts a game itself once the position can be played,
+     * which is why nothing has to be handed back here.
+     * <p>
+     * Time complexity: O(64) for the board the editor opens on. Space complexity: O(1) beyond the
+     * new screen.
+     */
+    public static void showSetup() {
+        SwingUtilities.invokeLater(() -> {
+            frame.setContentPane(new SetupPanel());
             frame.revalidate();
             frame.repaint();
         });

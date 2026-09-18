@@ -852,6 +852,16 @@ public class GameTest {
                     "taking a right away must change the FEN");
         });
 
+        test("MainMenu: the menu leads to the position editor", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    MainMenu menu = new MainMenu();
+                    check(hasButton(menu, "Set Up Position"),
+                            "the menu must offer a way into the position editor");
+                    // the editor must be an addition rather than a replacement
+                    check(hasButton(menu, "New Game"), "the menu must still start a new game");
+                    check(hasButton(menu, "Past Games"), "and must still reach the library");
+                }));
+
         // =================================================================
         System.out.println("\n-- BoardState ---------------------------------------------------");
         // =================================================================
