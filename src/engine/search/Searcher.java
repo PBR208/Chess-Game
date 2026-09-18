@@ -7,7 +7,9 @@ package engine.search;
  * runs out. Captures are followed past the nominal depth until the position is quiet, because
  * stopping in the middle of an exchange values a board that nobody would ever agree to stop at. Every
  * array it uses exists before the search starts, so the hot path allocates nothing and the recursion
- * is bounded by a fixed maximum depth rather than by how much stack happens to be left.
+ * is bounded by a fixed maximum depth rather than by how much stack happens to be left. A search can
+ * also be told to judge the moves at the root a little carelessly, which is how a weaker level of
+ * play is built out of the same search rather than out of a second, worse one.
  *
  * Owner: PBR208 - https://github.com/PBR208/
  * Version: 1.0
@@ -73,6 +75,36 @@ public final class Searcher {
     private long nodeLimit;
     private boolean stopped;
 
+    // how far a root move's score may be out, and the seed that decides which way for each move
+    private int noiseCentipawns;
+    private final long noiseSeed;
+
+    /**
+     * Builds a searcher whose careless judgements differ from one game to the next.
+     * <p>
+     * Two games against the same level should not follow the same moves, so the seed comes from the
+     * clock. With no noise asked for this changes nothing at all and the search stays exact.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) beyond the preallocated arrays.
+     */
+    public Searcher() {
+        this(System.nanoTime());
+    }
+
+    /**
+     * Builds a searcher whose careless judgements are decided by a given seed.
+     * <p>
+     * A test cannot check a search that wanders differently on every run, so the seed can be fixed,
+     * which makes the whole search reproducible even with noise switched on.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) beyond the preallocated arrays.
+     *
+     * @param pNoiseSeed the seed deciding which way each root move's score is put out
+     */
+    public Searcher(long pNoiseSeed) {
+        this.noiseSeed = pNoiseSeed;
+    }
+
     /**
      * Purpose: Limits says when a search has to stop. A search can be bounded by how deep it looks,
      * by how many positions it visits or by how long it takes, and a level of play is exactly a
@@ -93,8 +125,11 @@ public final class Searcher {
         /** how long the search may take in milliseconds */
         public final long maxTimeMs;
 
+        /** how carelessly the moves at the root are judged, in hundredths of a pawn; 0 plays best */
+        public final int noiseCentipawns;
+
         /**
-         * Builds a set of limits.
+         * Builds a set of limits that always plays the best move it finds.
          * <p>
          * Time complexity: O(1). Space complexity: O(1).
          *
@@ -104,13 +139,39 @@ public final class Searcher {
          * @throws IllegalArgumentException if the depth is below 1 or not below MAX_PLY
          */
         public Limits(int pDepth, long pMaxNodes, long pMaxTimeMs) {
+            this(pDepth, pMaxNodes, pMaxTimeMs, 0);
+        }
+
+        /**
+         * Builds a set of limits that may judge the moves at the root carelessly.
+         * <p>
+         * A weaker opponent should play worse moves, not think less clearly, and the difference
+         * matters: a search cut short still plays the best move it found and simply misses deep
+         * ideas, which feels like an engine being slow rather than like an opponent one can beat.
+         * Judging each root move a little wrongly lets a plainly good move still win while a close
+         * decision can go either way, which is how a human plays badly.
+         * <p>
+         * Time complexity: O(1). Space complexity: O(1).
+         *
+         * @param pDepth            deepest iteration to finish, at least 1
+         * @param pMaxNodes         how many positions may be visited, Long.MAX_VALUE for no limit
+         * @param pMaxTimeMs        how long the search may take, Long.MAX_VALUE for no limit
+         * @param pNoiseCentipawns  how far a root move's score may be out, 0 to play the best move
+         * @throws IllegalArgumentException if the depth is below 1 or not below MAX_PLY, or the
+         *                                  noise is negative
+         */
+        public Limits(int pDepth, long pMaxNodes, long pMaxTimeMs, int pNoiseCentipawns) {
             // a depth past the preallocated rows would reach past the end of them
             if (pDepth < 1 || pDepth >= MAX_PLY) {
                 throw new IllegalArgumentException("depth " + pDepth + " must be between 1 and " + (MAX_PLY - 1));
             }
+            if (pNoiseCentipawns < 0) {
+                throw new IllegalArgumentException("noise " + pNoiseCentipawns + " must not be negative");
+            }
             this.depth = pDepth;
             this.maxNodes = pMaxNodes;
             this.maxTimeMs = pMaxTimeMs;
+            this.noiseCentipawns = pNoiseCentipawns;
         }
 
         /**
@@ -221,6 +282,7 @@ public final class Searcher {
     public Result search(Position pPosition, Limits pLimits) {
         nodes = 0;
         stopped = false;
+        noiseCentipawns = pLimits.noiseCentipawns;
         nodeLimit = pLimits.maxNodes;
         deadline = pLimits.maxTimeMs == Long.MAX_VALUE
                 ? Long.MAX_VALUE
@@ -385,6 +447,12 @@ public final class Searcher {
 
             if (stopped) {
                 return 0;
+            }
+            // only the moves actually on offer are judged carelessly. Doing it deeper down would
+            // make the same position worth different amounts in different branches, which is how a
+            // search talks itself into nonsense rather than how a weak player chooses.
+            if (pPly == 0 && noiseCentipawns > 0) {
+                score += noiseFor(move);
             }
             if (score >= pBeta) {
                 rememberCutoff(pPosition, move, depth, pPly, us);
@@ -608,6 +676,29 @@ public final class Searcher {
         long pawns = pPosition.pieces(Pieces.make(pColour, Pieces.PAWN));
         long king = pPosition.pieces(Pieces.make(pColour, Pieces.KING));
         return (pPosition.occupancy(pColour) & ~pawns & ~king) != 0L;
+    }
+
+    /**
+     * Works out how far this move's score is put out at the root.
+     * <p>
+     * The same move has to be judged the same way throughout one search, otherwise looking one move
+     * deeper would change its score for no reason and the search would chase its own noise from
+     * depth to depth. So this is worked out from the move and the seed rather than drawn fresh each
+     * time, which makes it stable within a search and different between searches.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pMove the root move being judged
+     * @return how much to add to its score, between minus and plus the noise asked for
+     */
+    private int noiseFor(int pMove) {
+        // a cheap mix, enough to scatter neighbouring move numbers into unrelated offsets
+        long mixed = (pMove * 0x9E3779B97F4A7C15L) ^ noiseSeed;
+        mixed ^= mixed >>> 29;
+        mixed *= 0xBF58476D1CE4E5B9L;
+        mixed ^= mixed >>> 32;
+        int span = 2 * noiseCentipawns + 1;
+        return (int) Math.floorMod(mixed, span) - noiseCentipawns;
     }
 
     /**

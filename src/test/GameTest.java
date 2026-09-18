@@ -1554,6 +1554,53 @@ public class GameTest {
                     "and must read as moves, got: " + result.lineText());
         });
 
+        test("Searcher: without noise the same position always gives the same move", () -> {
+            Position position = Fen.parse(Fen.START_POSITION);
+            int first = new Searcher(1L).search(position, Searcher.Limits.toDepth(3)).bestMove;
+            int second = new Searcher(999L).search(position, Searcher.Limits.toDepth(3)).bestMove;
+
+            // with no noise asked for, the seed must make no difference whatsoever
+            checkEqual(Moves.toUci(first), Moves.toUci(second),
+                    "an exact search must not depend on the seed");
+        });
+
+        test("Searcher: a careless level does not always play the same move", () -> {
+            Position position = Fen.parse(Fen.START_POSITION);
+            String best = Moves.toUci(new Searcher(1L).search(position, Searcher.Limits.toDepth(3)).bestMove);
+
+            // the seeds are fixed, so this is the same experiment on every run rather than a gamble
+            java.util.Set<String> chosen = new java.util.HashSet<>();
+            for (long seed = 1; seed <= 10; seed++) {
+                Searcher.Limits careless = new Searcher.Limits(3, Long.MAX_VALUE, Long.MAX_VALUE, 400);
+                chosen.add(Moves.toUci(new Searcher(seed).search(position, careless).bestMove));
+            }
+
+            check(chosen.size() > 1, "a careless search must not always pick the same move, got " + chosen);
+            check(!chosen.equals(java.util.Set.of(best)),
+                    "and must sometimes differ from the best move, got " + chosen);
+        });
+
+        test("Searcher: even a careless level still sees a mate in one", () -> {
+            // noise is meant to lose close decisions, not to miss something this plain
+            Position position = Fen.parse("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1");
+            for (long seed = 1; seed <= 5; seed++) {
+                Searcher.Limits careless = new Searcher.Limits(3, Long.MAX_VALUE, Long.MAX_VALUE, 200);
+                Searcher.Result result = new Searcher(seed).search(position, careless);
+                checkEqual("a1a8", Moves.toUci(result.bestMove),
+                        "mate must still be found with seed " + seed);
+            }
+        });
+
+        test("Searcher: noise has to be a number of centipawns that makes sense", () -> {
+            boolean refused = false;
+            try {
+                new Searcher.Limits(3, Long.MAX_VALUE, Long.MAX_VALUE, -1);
+            } catch (IllegalArgumentException e) {
+                refused = true;
+            }
+            check(refused, "a negative amount of carelessness means nothing and must be refused");
+        });
+
         test("Searcher: searching on its own thread leaves the original position alone", () -> {
             String fen = "r3k2r/pp3ppp/2n2n2/2bpp3/4P3/2NP1N2/PPP2PPP/R1B1KB1R w KQkq - 4 8";
             Position position = Fen.parse(fen);
