@@ -1510,6 +1510,38 @@ public class GameTest {
         System.out.println("\n-- Input and accessibility ---------------------------------------");
         // =================================================================
 
+        test("MoveSounds: a machine with no sound is silent rather than broken", () -> {
+            MoveSounds sounds = new MoveSounds();
+            check(sounds.isEnabled(), "moves must be heard unless somebody turns that off");
+
+            // this runs on build machines with no sound card at all, which must cost nothing
+            sounds.playMove();
+            sounds.playMove();
+
+            sounds.setEnabled(false);
+            check(!sounds.isEnabled(), "the sound must be possible to switch off");
+            sounds.playMove();
+
+            sounds.setEnabled(true);
+            check(sounds.isEnabled(), "and to switch back on");
+        });
+
+        test("Board: a move is played whether or not it can be heard", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    checkNotNull(board.getSounds(), "the board must own a move sound");
+
+                    board.getSounds().setEnabled(false);
+                    playMoveOn(board, "e2", "e4");
+                    checkEqual("e4", board.getSession().getMoveLog().get(0),
+                            "a silent move must still be a move");
+
+                    board.getSounds().setEnabled(true);
+                    playMoveOn(board, "e7", "e5");
+                    checkEqual(2, board.getSession().getMoveLog().size(),
+                            "and so must one that tries to make a sound");
+                }));
+
         test("Board: a move can be typed in algebraic notation", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     Board board = new Board(GameConfig.unlimited());

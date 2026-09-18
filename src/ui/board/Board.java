@@ -64,6 +64,9 @@ public class Board extends JPanel implements GameSession.View {
     private int lastMoveFrom = NO_SQUARE;
     private int lastMoveTo = NO_SQUARE;
 
+    // the click that says a move was accepted, silent on a machine with no audio
+    private final MoveSounds sounds = new MoveSounds();
+
     // the move a player is typing, empty while nobody is typing one
     private final StringBuilder typedMove = new StringBuilder();
 
@@ -335,6 +338,8 @@ public class Board extends JPanel implements GameSession.View {
         }
         lastMoveFrom = Moves.from(pMove);
         lastMoveTo = Moves.to(pMove);
+        // a move that was accepted should say so through more than one sense
+        sounds.playMove();
         repaint();
         return true;
     }
@@ -378,6 +383,17 @@ public class Board extends JPanel implements GameSession.View {
      */
     public int getLastMoveTo() {
         return lastMoveTo;
+    }
+
+    /**
+     * Returns the move sound of this board, so it can be switched off.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the move sound, never null
+     */
+    public MoveSounds getSounds() {
+        return sounds;
     }
 
     /**
