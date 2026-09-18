@@ -2,10 +2,12 @@ package ui.board;
 
 /*
  * Purpose: Board is the Swing panel that shows a running game. It paints the tiles, the pieces, the
- * legal move hints and both player clocks, and it translates between screen pixels and the squares
- * the engine counts in, while turning the view towards the player to move. The game itself lives in
- * a GameSession on the bitboard core, so this class holds no position data of its own and only asks
- * the session what stands where and which squares a picked up piece may go to.
+ * legal move hints, the move that was just played, a king in check and both player clocks, and it
+ * translates between screen pixels and the squares the engine counts in, while turning the view
+ * towards the player to move. A move can also be typed rather than moved with the mouse, which is
+ * why this panel takes the keyboard focus. The game itself lives in a GameSession on the bitboard
+ * core, so this class holds no position data of its own and only asks the session what stands where
+ * and which squares a picked up piece may go to.
  *
  * Owner: PBR208 - https://github.com/PBR208/
  * Version: 2.0
@@ -16,11 +18,17 @@ import engine.core.GameSession;
 import engine.core.MoveGen;
 import engine.core.Moves;
 import engine.core.Pieces;
+import engine.core.San;
 import engine.model.GameConfig;
 import ui.theme.Theme;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.Locale;
 
 public class Board extends JPanel implements GameSession.View {
 
@@ -55,6 +63,16 @@ public class Board extends JPanel implements GameSession.View {
     // the two squares of the move that was played last, or NO_SQUARE before anybody has moved
     private int lastMoveFrom = NO_SQUARE;
     private int lastMoveTo = NO_SQUARE;
+
+    // the move a player is typing, empty while nobody is typing one
+    private final StringBuilder typedMove = new StringBuilder();
+
+    // longer than any move ever written, so a key held down cannot grow this without end
+    private static final int MAX_TYPED_LENGTH = 10;
+
+    // the characters moves are written with, in algebraic notation and in the plain square to
+    // square form. Everything else, including the keys that mean enter and backspace, is ignored.
+    private static final String MOVE_CHARACTERS = "abcdefgh12345678NBRQKOox=-+#0";
 
     // piece images scaled to this board's square size
     private final PieceSprites sprites;
@@ -127,6 +145,34 @@ public class Board extends JPanel implements GameSession.View {
         Input input = new Input(this, session);
         this.addMouseListener(input);
         this.addMouseMotionListener(input);
+
+        // typing only reaches a component that holds the keyboard focus, and a player who clicks
+        // the board has said plainly enough that this is what they are working with
+        this.setFocusable(true);
+        this.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent pEvent) {
+                requestFocusInWindow();
+            }
+        });
+        this.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyTyped(KeyEvent pEvent) {
+                typeCharacter(pEvent.getKeyChar());
+            }
+
+            @Override
+            public void keyPressed(KeyEvent pEvent) {
+                switch (pEvent.getKeyCode()) {
+                    case KeyEvent.VK_ENTER -> submitTypedMove();
+                    case KeyEvent.VK_BACK_SPACE -> backspaceTypedMove();
+                    case KeyEvent.VK_ESCAPE -> clearTypedMove();
+                    default -> {
+                        // every other key is either a move character or none of my business
+                    }
+                }
+            }
+        });
 
         whiteClock.start();
     }
@@ -230,6 +276,9 @@ public class Board extends JPanel implements GameSession.View {
         } else {
             blackClock.draw(g2d, bottomY, boardWidth, clockHeight);
         }
+
+        // last, so a move being typed is never hidden behind a piece
+        drawTypedMove(g2d);
     }
 
     /**
@@ -329,6 +378,218 @@ public class Board extends JPanel implements GameSession.View {
      */
     public int getLastMoveTo() {
         return lastMoveTo;
+    }
+
+    /**
+     * Adds one typed character to the move being entered.
+     * <p>
+     * Moving with the mouse asks a player to place a piece inside a square, which is a demand a
+     * keyboard does not make. Typing the move is also how anybody reading the move log already
+     * thinks about it. Characters that appear in no move are dropped, which is what the keys that
+     * mean enter or backspace look like from here, and a finished game accepts nothing at all.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1), the text has a fixed limit.
+     *
+     * @param pCharacter the character that was typed
+     */
+    public void typeCharacter(char pCharacter) {
+        boolean acceptable = MOVE_CHARACTERS.indexOf(pCharacter) >= 0;
+        if (!acceptable || session.result().isFinished() || typedMove.length() >= MAX_TYPED_LENGTH) {
+            return;
+        }
+        typedMove.append(pCharacter);
+        repaint();
+    }
+
+    /**
+     * Removes the last typed character.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
+    public void backspaceTypedMove() {
+        if (typedMove.length() > 0) {
+            typedMove.setLength(typedMove.length() - 1);
+            repaint();
+        }
+    }
+
+    /**
+     * Throws away the move being typed.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
+    public void clearTypedMove() {
+        if (typedMove.length() > 0) {
+            typedMove.setLength(0);
+            repaint();
+        }
+    }
+
+    /**
+     * Returns the move that is being typed.
+     * <p>
+     * Time complexity: O(n) in the length of the text. Space complexity: O(n) for the copy.
+     *
+     * @return what has been typed so far, empty when nothing is being typed; never null
+     */
+    public String getTypedMove() {
+        return typedMove.toString();
+    }
+
+    /**
+     * Plays the move that was typed, if it is one.
+     * <p>
+     * A move that was played clears the line, ready for the next one. A move that means nothing in
+     * this position leaves the text alone, because throwing away what somebody typed over a single
+     * wrong character is a poor answer when the fix is one backspace away.
+     * <p>
+     * Time complexity: O(m) for the m legal moves of the position. Space complexity: O(1).
+     *
+     * @return true if a move was played
+     */
+    public boolean submitTypedMove() {
+        int move = moveForText(getTypedMove());
+        if (!playMove(move)) {
+            return false;
+        }
+        typedMove.setLength(0);
+        repaint();
+        return true;
+    }
+
+    /**
+     * Works out which legal move a piece of text names.
+     * <p>
+     * Two ways of writing a move are worth understanding. The square to square form, e2e4, needs no
+     * knowledge of the position at all and is what a chess engine speaks, so I try it first. Failing
+     * that the text is read as algebraic notation, which is what the move log shows, so a player can
+     * type back exactly what they have just read. I compare against the notation of every legal move
+     * rather than taking the text apart, which means the one place that writes notation is also the
+     * one place that decides what it means. Check and mate marks are ignored, because a player who
+     * types them is right and should not be punished for it, and a castling written with zeros is
+     * read as the letter O that the standard actually asks for.
+     * <p>
+     * Time complexity: O(m) for the m legal moves of the position, each written out once.
+     * Space complexity: O(m) for the generated moves.
+     *
+     * @param pText the move as it was typed, may be anything; may be null
+     * @return the packed move, or Moves.NONE when the text names no legal move
+     */
+    public int moveForText(String pText) {
+        if (pText == null || pText.isBlank() || session.result().isFinished()) {
+            return Moves.NONE;
+        }
+        String wanted = pText.trim();
+
+        int[] legalMoves = new int[MoveGen.MAX_MOVES];
+        int count = MoveGen.generateLegal(session.position(), legalMoves, 0);
+
+        int square = squareToSquareMove(wanted, legalMoves, count);
+        if (square != Moves.NONE) {
+            return square;
+        }
+
+        String normalised = withoutMarks(wanted);
+        for (int index = 0; index < count; index++) {
+            if (withoutMarks(San.of(session.position(), legalMoves[index])).equals(normalised)) {
+                return legalMoves[index];
+            }
+        }
+        return Moves.NONE;
+    }
+
+    /**
+     * Reads a move written as the two squares it joins, such as e2e4 or e7e8q.
+     * <p>
+     * This is the form a chess engine speaks, and it is unambiguous without knowing the position.
+     * A promotion needs the letter of the piece, because the same two squares stand for four
+     * different moves, and without it I return nothing rather than guessing at a queen.
+     * <p>
+     * Time complexity: O(m) for the m legal moves. Space complexity: O(1).
+     *
+     * @param pText       the typed text, never null
+     * @param pMoves      the legal moves of this position, never null
+     * @param pCount      how many of them there are
+     * @return the packed move, or Moves.NONE when the text is not this form or names no legal move
+     */
+    private int squareToSquareMove(String pText, int[] pMoves, int pCount) {
+        if (pText.length() < 4 || pText.length() > 5) {
+            return Moves.NONE;
+        }
+        String lower = pText.toLowerCase(Locale.ROOT);
+        int from;
+        int to;
+        try {
+            from = Bitboards.squareOf(lower.substring(0, 2));
+            to = Bitboards.squareOf(lower.substring(2, 4));
+        } catch (IllegalArgumentException e) {
+            // not two square names, so this is not the square to square form
+            return Moves.NONE;
+        }
+
+        String promotion = lower.length() == 5 ? "=" + lower.substring(4) : "";
+        for (int index = 0; index < pCount; index++) {
+            int move = pMoves[index];
+            if (Moves.from(move) != from || Moves.to(move) != to) {
+                continue;
+            }
+            if (promotion.isEmpty()) {
+                // the same two squares mean four moves for a promoting pawn, so it has to be said
+                if (!Moves.isPromotion(move)) {
+                    return move;
+                }
+            } else if (San.of(session.position(), move).toLowerCase(Locale.ROOT).contains(promotion)) {
+                return move;
+            }
+        }
+        return Moves.NONE;
+    }
+
+    /**
+     * Strips the marks that say nothing about which move was meant.
+     * <p>
+     * Check and mate marks describe what the move does rather than which move it is, and zeros are
+     * what a keyboard offers somebody trying to write the letter O of a castling.
+     * <p>
+     * Time complexity: O(n) in the length of the text. Space complexity: O(n) for the result.
+     *
+     * @param pText move text, never null
+     * @return the text without check marks and with castling zeros turned into letters
+     */
+    private static String withoutMarks(String pText) {
+        return pText.replace("+", "").replace("#", "").replace('0', 'O');
+    }
+
+    /**
+     * Draws the move that is being typed along the bottom of the board.
+     * <p>
+     * A player typing a move has to see what the program thinks they typed, otherwise a mistyped
+     * character is only discovered when the move is refused. I draw nothing at all while nobody is
+     * typing, so the board is unchanged for anybody using the mouse.
+     * <p>
+     * Time complexity: O(n) in the length of the typed text. Space complexity: O(1).
+     *
+     * @param pGraphics graphics context of this panel, never null
+     */
+    private void drawTypedMove(Graphics2D pGraphics) {
+        if (typedMove.length() == 0) {
+            return;
+        }
+        String text = typedMove.toString();
+        // logical fonts exist on every platform, and a fixed width one keeps the box from jumping
+        pGraphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, Math.max(12, tileSize / 3)));
+        FontMetrics metrics = pGraphics.getFontMetrics();
+
+        int padding = Math.max(4, tileSize / 6);
+        int boxWidth = metrics.stringWidth(text) + padding * 2;
+        int boxHeight = metrics.getHeight() + padding;
+        int x = (cols * tileSize - boxWidth) / 2;
+        int y = clockHeight + rows * tileSize - boxHeight - padding;
+
+        pGraphics.setColor(new Color(0, 0, 0, 190));
+        pGraphics.fillRect(x, y, boxWidth, boxHeight);
+        pGraphics.setColor(Theme.FG);
+        pGraphics.drawString(text, x + padding, y + padding / 2 + metrics.getAscent());
     }
 
     /**
