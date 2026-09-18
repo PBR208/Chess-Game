@@ -1934,6 +1934,35 @@ public class GameTest {
                     check(hasTitle, "Must show the 'CHESS' title label");
                 }));
 
+        test("MainMenu: the menu is written in the language that was chosen", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    java.util.Locale previous = Messages.getLocale();
+                    try {
+                        Messages.setLocale(java.util.Locale.GERMAN);
+                        MainMenu german = new MainMenu();
+                        check(hasButton(german, "Neues Spiel"), "the German menu offers a new game in German");
+                        boolean germanTitle = findAllLabels(german).stream()
+                                .anyMatch(l -> "SCHACH".equals(l.getText()));
+                        check(germanTitle, "and carries the German title");
+
+                        Messages.setLocale(java.util.Locale.ENGLISH);
+                        check(hasButton(new MainMenu(), "New Game"), "the English menu reads as it always did");
+                    } finally {
+                        // the rest of the suite reads English
+                        Messages.setLocale(previous);
+                    }
+                }));
+
+        test("MainMenu: every shipped language can be picked from the menu", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    MainMenu menu = new MainMenu();
+                    // the buttons keep their names whatever language they are written in
+                    for (java.util.Locale supported : Messages.supportedLocales()) {
+                        check(hasButton(menu, "language-" + supported.getLanguage()),
+                                "the menu must offer " + supported.getDisplayLanguage());
+                    }
+                }));
+
         guiTest("MainMenu: New Game navigates to NewGamePanel via ancestor frame", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     JFrame testFrame = new JFrame();
