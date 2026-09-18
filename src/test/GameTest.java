@@ -1674,6 +1674,80 @@ public class GameTest {
                     }
                 }));
 
+        test("NewGamePanel: the screen offers a person or the computer, and starts on a person", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel panel = new NewGamePanel();
+                    check(hasButton(panel, "opponentPerson"), "it must offer another person");
+                    check(hasButton(panel, "opponentComputer"), "and the computer");
+                    check(hasButton(panel, "sideWhite"), "and a side to play");
+                    check(hasButton(panel, "level1"), "and a level to play it at");
+
+                    check(!panel.createEngineSettings().engineOpponent(),
+                            "a screen nobody has touched must start a game between two people");
+                }));
+
+        test("NewGamePanel: choosing the computer gives it the colour the person did not take", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel panel = new NewGamePanel();
+                    findButton(panel, "opponentComputer").doClick();
+
+                    EngineSettings asWhite = panel.createEngineSettings();
+                    check(asWhite.engineOpponent(), "the computer must be the opponent now");
+                    checkEqual(Pieces.BLACK, asWhite.engineColour(),
+                            "a person playing White leaves the computer Black");
+                    checkEqual(Pieces.WHITE, asWhite.humanColour(), "and the person White");
+
+                    findButton(panel, "sideBlack").doClick();
+                    EngineSettings asBlack = panel.createEngineSettings();
+                    checkEqual(Pieces.WHITE, asBlack.engineColour(),
+                            "and a person playing Black leaves the computer White");
+                }));
+
+        test("NewGamePanel: the level that was clicked is the level that is played", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel panel = new NewGamePanel();
+                    findButton(panel, "opponentComputer").doClick();
+
+                    findButton(panel, "level1").doClick();
+                    EngineSettings weakest = panel.createEngineSettings();
+                    checkEqual(EngineSettings.level(1, Pieces.BLACK).depth(), weakest.depth(),
+                            "the weakest level must be the one that was clicked");
+
+                    findButton(panel, "level5").doClick();
+                    EngineSettings strongest = panel.createEngineSettings();
+                    checkEqual(EngineSettings.level(5, Pieces.BLACK).depth(), strongest.depth(),
+                            "and so must the strongest");
+                    check(strongest.depth() > weakest.depth(), "which must not be the same thing");
+                }));
+
+        test("NewGamePanel: the side and level mean nothing against another person", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel panel = new NewGamePanel();
+                    // a choice that changes nothing is worse than no choice at all
+                    check(!findButton(panel, "sideWhite").isEnabled(),
+                            "the side must be switched off while another person is playing");
+                    check(!findButton(panel, "level3").isEnabled(), "and so must the level");
+
+                    findButton(panel, "opponentComputer").doClick();
+                    check(findButton(panel, "sideWhite").isEnabled(),
+                            "choosing the computer must offer the side");
+                    check(findButton(panel, "level3").isEnabled(), "and the level");
+
+                    findButton(panel, "opponentPerson").doClick();
+                    check(!findButton(panel, "sideWhite").isEnabled(), "and going back must put them away");
+                    check(!panel.createEngineSettings().engineOpponent(),
+                            "and must leave a game between two people");
+                }));
+
+        test("NewGamePanel: the names and clocks still come through untouched", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel panel = new NewGamePanel();
+                    GameConfig config = panel.createConfig();
+                    checkNotNull(config, "the screen must still build a game configuration");
+                    checkEqual("White", config.whiteName(), "with the default white name");
+                    checkEqual("Rapid 10+0", config.timeLabel(), "and the preset it opens on");
+                }));
+
         test("EngineSettings: a game between two people has no engine in it", () -> {
             EngineSettings human = EngineSettings.humanOpponent();
             check(!human.engineOpponent(), "nobody is playing the computer");
