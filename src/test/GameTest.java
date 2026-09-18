@@ -1505,6 +1505,28 @@ public class GameTest {
                     d.dispose();
                 }));
 
+        guiTest("PromoteGUI: the buttons keep their names and are described in the chosen language", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    java.util.Locale previous = Messages.getLocale();
+                    try {
+                        Messages.setLocale(java.util.Locale.GERMAN);
+                        PromoteGUI dialog = new PromoteGUI(frame, TILE_SIZE);
+
+                        // the name is how a test finds an icon with no text, so it stays English
+                        AbstractButton queen = findButton(dialog, "Queen");
+                        checkNotNull(queen, "the button must still be found by its English name");
+                        // what a player reads, and what a screen reader says, follows the language
+                        checkEqual("Dame", queen.getToolTipText(), "a German player reads the German name");
+                        checkEqual("Dame", queen.getAccessibleContext().getAccessibleName(),
+                                "and a screen reader announces the same");
+
+                        dialog.dispose();
+                    } finally {
+                        // the rest of the suite reads English
+                        Messages.setLocale(previous);
+                    }
+                }));
+
         guiTest("PromoteGUI: Queen -> Choice.QUEEN", () -> {
             scheduleClick("Queen");
             PromoteGUI.Choice[] choice = {null};
