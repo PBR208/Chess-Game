@@ -53,7 +53,7 @@ public class PastGamesPanel extends JPanel {
         title.setForeground(Theme.FG);
         title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 20));
 
-        JButton backBtn = styledButton("\u2190 Back to Menu", "< Back to Menu", "backToMenu");
+        JButton backBtn = styledButton("\u2190 " + Messages.get("common.backToMenu"), "< " + Messages.get("common.backToMenu"), "backToMenu");
         backBtn.addActionListener(e -> Main.showMenu());
 
         topBar.add(title, BorderLayout.WEST);
@@ -111,7 +111,7 @@ public class PastGamesPanel extends JPanel {
         toggleBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(60, 60, 65)));
 
         JButton showLog = styledButton(Messages.get("past.moveLog"));
-        JButton showReplay = styledButton("Replay \u25b6", "Replay >", "replay");
+        JButton showReplay = styledButton(Messages.get("past.replay") + " \u25b6", Messages.get("past.replay") + " >", "replay");
         toggleBar.add(showLog);
         toggleBar.add(showReplay);
         showLog.addActionListener(e -> rightCards.show(rightPanel, "log"));

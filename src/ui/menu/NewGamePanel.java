@@ -170,8 +170,8 @@ public class NewGamePanel extends JPanel {
         JPanel buttons = new JPanel(new GridLayout(1, 2, 12, 0));
         buttons.setBackground(Theme.PANEL_BG);
 
-        JButton backBtn = actionButton("\u2190 Back", "< Back", "back", false);
-        JButton startBtn = actionButton("Start \u25b6", "Start >", "start", true);
+        JButton backBtn = actionButton("\u2190 " + Messages.get("common.back"), "< " + Messages.get("common.back"), "back", false);
+        JButton startBtn = actionButton(Messages.get("common.start") + " \u25b6", Messages.get("common.start") + " >", "start", true);
 
         backBtn.addActionListener(e -> Main.showMenu());
         // start the game with everything selected on this screen, unless the custom time is unusable
