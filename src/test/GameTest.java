@@ -1294,6 +1294,38 @@ public class GameTest {
             checkEqual("00:00", ChessClock.formatTime(0, 0), "an unlimited clock never counts tenths");
         });
 
+        test("ClockStage: a tournament control is read the way players write it", () -> {
+            List<ClockStage> classical = ClockStage.parse("40/90, 30");
+            checkEqual(2, classical.size(), "forty moves in ninety minutes, then thirty minutes");
+            checkEqual(40, classical.get(0).moves(), "the first stage covers forty moves");
+            checkEqual(5_400_000L, classical.get(0).timeMs(), "ninety minutes, in milliseconds");
+            check(classical.get(1).runsToTheEnd(), "the last stage has no move count of its own");
+            checkEqual(1_800_000L, classical.get(1).timeMs(), "thirty minutes for the rest of the game");
+
+            checkEqual(1, ClockStage.parse("30").size(), "a control without a slash is a single stage");
+            check(ClockStage.parse("").isEmpty(), "no text means no stages");
+            check(ClockStage.parse(null).isEmpty(), "and neither does nothing at all");
+            check(ClockStage.parse("40/ninety").isEmpty(), "a control nobody can read gives no stages at all");
+        });
+
+        test("ChessClock: a staged control hands out its time when the stage is played out", () -> {
+            ChessClock clock = new ChessClock(true, 60_000, ClockMode.SUDDEN_DEATH, 0, 0, () -> {
+            }, w -> {
+            });
+            // two moves at a minute, then a minute and a half for whatever is left
+            clock.setStages(List.of(new ClockStage(2, 60_000),
+                    new ClockStage(ClockStage.UNTIL_THE_END, 30_000)));
+
+            clock.onMoveFinished();
+            checkEqual(60_000L, clock.getTimeMs(), "a move inside the stage brings nothing with it");
+
+            clock.onMoveFinished();
+            checkEqual(90_000L, clock.getTimeMs(), "playing the stage out brings the next stage's time");
+
+            clock.onMoveFinished();
+            checkEqual(90_000L, clock.getTimeMs(), "the last stage runs to the end and brings no more");
+        });
+
         test("Board: a board whose clocks are stopped can be garbage collected", () -> {
             java.lang.ref.WeakReference<Board> ref = boardWithStoppedClocks();
             // give the collector a few chances, a live timer would keep the board reachable forever
@@ -1346,6 +1378,35 @@ public class GameTest {
                 // the size is checked before anything else is created
             }
         });
+
+        test("Board: pausing stops both clocks and resuming starts the one to move", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(new GameConfig("Alice", "Bob", 120_000, 120_000, "Bullet 2+1", 1_000));
+                    check(board.areClocksRunning(), "a new game runs White's clock");
+
+                    board.setPaused(true);
+                    check(board.isPaused(), "the board has to know it is paused");
+                    check(!board.areClocksRunning(), "a paused game stops both clocks");
+
+                    board.setPaused(true);
+                    check(board.isPaused(), "pausing an already paused game changes nothing");
+
+                    board.setPaused(false);
+                    check(!board.isPaused(), "the game runs again");
+                    check(board.isClockRunning(true), "and the clock of the player to move carries on");
+                }));
+
+        test("Board: a paused board takes no moves", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    Input input = new Input(board, board.getSession());
+                    board.setPaused(true);
+
+                    // the middle of e2, which holds a pawn in the starting position
+                    input.mousePressed(new java.awt.event.MouseEvent(board, java.awt.event.MouseEvent.MOUSE_PRESSED,
+                            System.currentTimeMillis(), 0, 382, 637, 1, false));
+                    check(board.getSelectedSquare() < 0, "nothing may be picked up while the game is paused");
+                }));
 
         test("Main: the window size is cut down to the usable screen area", () -> {
             Rectangle laptop = new Rectangle(0, 0, 1366, 728);
