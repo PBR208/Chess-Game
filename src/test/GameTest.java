@@ -419,6 +419,34 @@ public class GameTest {
      * @param pHeight height in pixels, greater than 0
      * @return the painted board, never null
      */
+    /**
+     * Finds a component by the name it was given.
+     * <p>
+     * Screens hold several text areas, and picking one by its position in the tree breaks as soon as
+     * anything is laid out differently. A name says which one is meant.
+     * <p>
+     * Time complexity: O(n) for the n components below pRoot. Space complexity: O(d) for a tree d
+     * levels deep.
+     *
+     * @param pRoot container to search, never null
+     * @param pName the name the component was given, never null
+     * @return the component with that name, or null when there is none
+     */
+    private static Component findByName(Container pRoot, String pName) {
+        for (Component child : pRoot.getComponents()) {
+            if (pName.equals(child.getName())) {
+                return child;
+            }
+            if (child instanceof Container nested) {
+                Component found = findByName(nested, pName);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
     private static BufferedImage paintBoard(Board pBoard, int pWidth, int pHeight) {
         BufferedImage image = new BufferedImage(pWidth, pHeight, BufferedImage.TYPE_INT_ARGB);
         Graphics2D graphics = image.createGraphics();
@@ -1611,6 +1639,54 @@ public class GameTest {
         // =================================================================
         System.out.println("\n-- Analysis ------------------------------------------------------");
         // =================================================================
+
+        test("ReplayPanel: a move that threw the queen away is marked as a blunder", () -> {
+            // 1. e4 e5 2. Qh5 Nc6 3. Qxf7+ and the king simply takes the queen
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+            session.play(session.moveFor(Bitboards.squareOf("d1"), Bitboards.squareOf("h5")));
+            session.play(session.moveFor(Bitboards.squareOf("b8"), Bitboards.squareOf("c6")));
+            session.play(session.moveFor(Bitboards.squareOf("h5"), Bitboards.squareOf("f7")));
+            checkEqual(5, session.getMoveLog().size(), "the game must have gone as intended");
+
+            List<String> playedMoves = new ArrayList<>(session.getMoveLog());
+            List<String> playedFens = new ArrayList<>(session.getFenHistory());
+
+            ReplayPanel[] holder = new ReplayPanel[1];
+            SwingUtilities.invokeAndWait(() -> holder[0] = new ReplayPanel(playedMoves, playedFens));
+            ReplayPanel panel = holder[0];
+
+            panel.reviewNow();
+            checkEqual("??", panel.markerFor(4), "giving the queen away must be marked as a blunder");
+            checkEqual("", panel.markerFor(0), "and an ordinary opening move must not be marked");
+        });
+
+        test("ReplayPanel: the marks reach the move list a reader actually sees", () -> {
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+            session.play(session.moveFor(Bitboards.squareOf("d1"), Bitboards.squareOf("h5")));
+            session.play(session.moveFor(Bitboards.squareOf("b8"), Bitboards.squareOf("c6")));
+            session.play(session.moveFor(Bitboards.squareOf("h5"), Bitboards.squareOf("f7")));
+
+            List<String> playedMoves = new ArrayList<>(session.getMoveLog());
+            List<String> playedFens = new ArrayList<>(session.getFenHistory());
+
+            ReplayPanel[] holder = new ReplayPanel[1];
+            SwingUtilities.invokeAndWait(() -> holder[0] = new ReplayPanel(playedMoves, playedFens));
+            ReplayPanel panel = holder[0];
+
+            panel.reviewNow();
+            // a mark that is worked out but never written down would pass the easier test
+            SwingUtilities.invokeAndWait(() -> {
+                Component found = findByName(panel, "replayMoveList");
+                checkNotNull(found, "the replay must show a move list");
+                JTextArea list = (JTextArea) found;
+                check(list.getText().contains("??"),
+                        "the blunder must be marked in the list, got: " + list.getText());
+            });
+        });
 
         test("Board: asking what to play offers a move the rules allow", () ->
                 SwingUtilities.invokeAndWait(() -> {

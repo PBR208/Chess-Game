@@ -2,15 +2,22 @@ package ui.menu;
 
 /*
  * Purpose: ReplayPanel steps through a saved game position by position. It draws a small board from
- * the FEN recorded after every move and shows the move list and the current FEN next to it. I keep
- * the replay separate from the live board, so looking at an old game can never change a running
- * one. The text uses logical font names, which every platform provides.
+ * the FEN recorded after every move and shows the move list and the current FEN next to it, and it
+ * looks over the game in the background to mark the moves that threw something away. That work is
+ * given up whenever the reader moves on, because its answers would be about a position they have
+ * already left, and whatever was worked out before is kept rather than started again. I keep the
+ * replay separate from the live board, so looking at an old game can never change a running one.
+ * The text uses logical font names, which every platform provides.
  *
  * Owner: PBR208 - https://github.com/PBR208/
  * Version: 1.0
  */
 
+import engine.core.Fen;
+import engine.core.Pieces;
 import engine.persistence.FenLoader;
+import engine.search.Analyst;
+import engine.search.Searcher;
 import ui.board.PieceSprites;
 import ui.theme.Theme;
 import ui.theme.UiComponents;
@@ -47,9 +54,37 @@ public class ReplayPanel extends JPanel {
     private static final Color LIGHT_TILE = new Color(232, 235, 239);
     private static final Color DARK_TILE = new Color(125, 135, 150);
 
+    // stands for a position nobody has worked out a score for yet
+    private static final int UNKNOWN_SCORE = Integer.MIN_VALUE;
+
+    // How hard to look at each position of a finished game. This runs over the whole game while
+    // somebody is reading it, so it is shallow on purpose: a rough score for every move is worth
+    // far more here than a deep one for the first two.
+    private static final Searcher.Limits REVIEW_LIMITS = new Searcher.Limits(3, 40_000, 400);
+
     private final List<String> moves;
     private final List<String> fens;
     private int cursor = 0;
+
+    // the canvas the position is drawn on, kept so a score arriving later can redraw it
+    private JPanel boardCanvas;
+
+    // The review running right now, kept so it can be called off. Every run gets one of its own,
+    // because a search keeps its working state in arrays it reuses: two runs sharing one would tread
+    // on each other, and a run that has been replaced can still be finishing the position it was on.
+    private volatile Analyst currentReview;
+
+    // What each position is worth, always from White's point of view. The search answers from the
+    // point of view of whoever is to move, which is not comparable between one position and the
+    // next, and comparing them is the whole point of looking for a move that threw something away.
+    private final int[] frameScores;
+
+    // what the board was worth before anybody moved, which no frame holds
+    private volatile int startScore = UNKNOWN_SCORE;
+
+    // Counts the times the analysis has been restarted. A score that arrives from an older run is
+    // about a game somebody has already stopped reading, so it is dropped rather than shown.
+    private volatile int analysisRun;
 
     private final JLabel moveLabel;
     private final JTextArea moveHistoryArea;
@@ -71,6 +106,8 @@ public class ReplayPanel extends JPanel {
     public ReplayPanel(List<String> pMoves, List<String> pFens) {
         this.moves = pMoves;
         this.fens = pFens;
+        this.frameScores = new int[pFens.size()];
+        java.util.Arrays.fill(frameScores, UNKNOWN_SCORE);
         setBackground(Theme.BG);
         setLayout(new BorderLayout());
 
@@ -78,7 +115,7 @@ public class ReplayPanel extends JPanel {
         JPanel boardPanel = new JPanel(new BorderLayout());
         boardPanel.setBackground(Theme.BG);
 
-        JPanel boardCanvas = new JPanel() {
+        boardCanvas = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
@@ -86,6 +123,8 @@ public class ReplayPanel extends JPanel {
             }
         };
         boardCanvas.setBackground(Theme.BG);
+        // named so what is actually drawn can be looked at without a window around it
+        boardCanvas.setName("replayBoard");
 
         JPanel nav = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 4));
         nav.setBackground(Theme.BG);
@@ -97,22 +136,22 @@ public class ReplayPanel extends JPanel {
         JButton first = navButton("\u21e4", "|<", "first");
         first.addActionListener(e -> {
             cursor = 0;
-            refresh(boardCanvas);
+            refresh();
         });
         JButton prev = navButton("\u2190", "<", "previous");
         prev.addActionListener(e -> {
             if (cursor > 0) cursor--;
-            refresh(boardCanvas);
+            refresh();
         });
         JButton next = navButton("\u2192", ">", "next");
         next.addActionListener(e -> {
             if (cursor < fens.size() - 1) cursor++;
-            refresh(boardCanvas);
+            refresh();
         });
         JButton last = navButton("\u21e5", ">|", "last");
         last.addActionListener(e -> {
             cursor = fens.size() - 1;
-            refresh(boardCanvas);
+            refresh();
         });
 
         nav.add(first);
@@ -143,6 +182,8 @@ public class ReplayPanel extends JPanel {
         moveHistoryArea.setForeground(new Color(210, 210, 210));
         moveHistoryArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         moveHistoryArea.setMargin(new Insets(8, 8, 8, 8));
+        // named because this panel has two text areas, and the moves are the one worth finding
+        moveHistoryArea.setName("replayMoveList");
 
         JScrollPane moveScroll = new JScrollPane(moveHistoryArea);
         moveScroll.setBorder(BorderFactory.createEmptyBorder());
@@ -213,17 +254,26 @@ public class ReplayPanel extends JPanel {
             }
         });
 
-        refresh(boardCanvas);
+        refresh();
     }
 
-    private void refresh(JPanel canvas) {
+    private void refresh() {
         moveLabel.setText(moveText());
         updateMoveHistory();
         if (!fens.isEmpty()) {
             fenArea.setText(fens.get(cursor));
             fenArea.setCaretPosition(0);
         }
-        canvas.repaint();
+        boardCanvas.repaint();
+
+        // The reader has moved, so whatever was being worked out is about a position they have left.
+        // Stopping it and starting again is not wasteful: every score already found is kept, and
+        // only the positions still missing one are looked at.
+        Analyst running = currentReview;
+        if (running != null) {
+            running.cancel();
+        }
+        reviewInBackground();
     }
 
     private void updateMoveHistory() {
@@ -231,14 +281,196 @@ public class ReplayPanel extends JPanel {
 
         for (int i = 0; i < moves.size(); i += 2) {
             int moveNum = i / 2 + 1;
-            String white = moves.get(i);
-            String black = (i + 1 < moves.size()) ? moves.get(i + 1) : "...";
+            String white = moves.get(i) + markerFor(i);
+            String black = (i + 1 < moves.size()) ? moves.get(i + 1) + markerFor(i + 1) : "...";
 
             sb.append(String.format("%3d.  %-9s %s%n", moveNum, white, black));
         }
 
         moveHistoryArea.setText(sb.toString());
         moveHistoryArea.setCaretPosition(0);
+    }
+
+    /**
+     * Works out the mark that belongs after a move, if any.
+     * <p>
+     * A move is judged by what the position was worth before it against what it was worth after,
+     * both read from the point of view of the player who made it. That turning round is the part
+     * worth getting right: the stored scores are all from White's point of view, so for a black move
+     * both numbers have to be negated before they mean anything about the player who chose it.
+     * A position nobody has scored yet is marked with nothing rather than guessed at.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pPly the move, counted in half moves from 0 for White's first
+     * @return "??" for a blunder, "?" for a mistake, or an empty string
+     */
+    public String markerFor(int pPly) {
+        int before = scoreBefore(pPly);
+        int after = scoreAfter(pPly);
+        if (before == UNKNOWN_SCORE || after == UNKNOWN_SCORE) {
+            return "";
+        }
+        // White wants the score high and Black wants it low, so Black reads both the other way up
+        boolean whiteMoved = pPly % 2 == 0;
+        int beforeForMover = whiteMoved ? before : -before;
+        int afterForMover = whiteMoved ? after : -after;
+
+        if (Analyst.isBlunder(beforeForMover, afterForMover)) {
+            return "??";
+        }
+        return Analyst.isMistake(beforeForMover, afterForMover) ? "?" : "";
+    }
+
+    /**
+     * Returns what the position before a move was worth, from White's point of view.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pPly the move, counted in half moves from 0
+     * @return the score, or UNKNOWN_SCORE when nobody has worked it out yet
+     */
+    private int scoreBefore(int pPly) {
+        // the board before the first move is the one no frame holds
+        return pPly == 0 ? startScore : scoreAt(pPly - 1);
+    }
+
+    /**
+     * Returns what the position after a move was worth, from White's point of view.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pPly the move, counted in half moves from 0
+     * @return the score, or UNKNOWN_SCORE when nobody has worked it out yet
+     */
+    private int scoreAfter(int pPly) {
+        return scoreAt(pPly);
+    }
+
+    /**
+     * Returns what one recorded position was worth, from White's point of view.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pFrame which recorded position, 0 for the one after the first move
+     * @return the score, or UNKNOWN_SCORE when it is outside the game or not worked out yet
+     */
+    public int scoreAt(int pFrame) {
+        if (pFrame < 0 || pFrame >= frameScores.length) {
+            return UNKNOWN_SCORE;
+        }
+        return frameScores[pFrame];
+    }
+
+    /**
+     * Looks at every position of the game and waits for the answers.
+     * <p>
+     * This is the waiting version, which is what makes the marks testable without anybody having to
+     * watch for them to appear. The screen uses the version that does not wait.
+     * <p>
+     * Time complexity: O(f) searches for f recorded positions, each bounded by the review limits.
+     * Space complexity: O(f) for the scores.
+     */
+    public void reviewNow() {
+        // its own, so waiting for the answers here cannot collide with the run the screen started
+        Analyst review = new Analyst();
+        scoreStart(review);
+        for (int frame = 0; frame < frameScores.length; frame++) {
+            scoreFrame(frame, review);
+        }
+        // The list was written before any of these scores existed, so it still shows a game with
+        // nothing marked. A review that finished and left that standing would be no review at all.
+        SwingUtilities.invokeLater(this::updateMoveHistory);
+    }
+
+    /**
+     * Looks at every position of the game in the background, and gives up when the reader moves on.
+     * <p>
+     * The scores are worth having but nobody should wait for them, so they are filled in one at a
+     * time and the marks appear as they arrive. Positions already scored are left alone, so stepping
+     * through a game does not start the whole job again each time: the work already done is kept and
+     * only what is missing is worked out.
+     * <p>
+     * Time complexity: O(f) searches for f positions, spread over a background thread.
+     * Space complexity: O(1) beyond the scores.
+     */
+    private void reviewInBackground() {
+        int run = ++analysisRun;
+        Analyst review = new Analyst();
+        currentReview = review;
+        Thread thread = new Thread(() -> {
+            scoreStart(review);
+            for (int frame = 0; frame < frameScores.length; frame++) {
+                // somebody has moved on, so these answers are about a game nobody is reading
+                if (run != analysisRun) {
+                    return;
+                }
+                if (frameScores[frame] == UNKNOWN_SCORE) {
+                    scoreFrame(frame, review);
+                    SwingUtilities.invokeLater(() -> {
+                        if (run == analysisRun) {
+                            updateMoveHistory();
+                            boardCanvas.repaint();
+                        }
+                    });
+                }
+            }
+        }, "replay review");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    /**
+     * Works out what one recorded position is worth and writes it down.
+     * <p>
+     * Time complexity: as for a search with the review limits. Space complexity: O(1).
+     *
+     * @param pFrame   which recorded position, 0 for the one after the first move
+     * @param pAnalyst the analysis belonging to this run, never null
+     */
+    private void scoreFrame(int pFrame, Analyst pAnalyst) {
+        if (frameScores[pFrame] != UNKNOWN_SCORE) {
+            return;
+        }
+        frameScores[pFrame] = whiteScoreOf(fens.get(pFrame), pAnalyst);
+    }
+
+    /**
+     * Works out what the board before the first move is worth.
+     * <p>
+     * Time complexity: as for a search with the review limits. Space complexity: O(1).
+     *
+     * @param pAnalyst the analysis belonging to this run, never null
+     */
+    private void scoreStart(Analyst pAnalyst) {
+        if (startScore == UNKNOWN_SCORE) {
+            startScore = whiteScoreOf(Fen.START_POSITION, pAnalyst);
+        }
+    }
+
+    /**
+     * Scores one position from White's point of view.
+     * <p>
+     * The search answers from the point of view of whoever is to move, so a position with Black to
+     * move comes back the other way up and has to be turned round before it can be compared with
+     * the one before it. A position that cannot be read at all scores nothing rather than throwing,
+     * because one unreadable line of an old file must not stop the rest of the game being looked at.
+     * <p>
+     * Time complexity: as for a search with the review limits. Space complexity: O(1).
+     *
+     * @param pFen     the position to score, never null
+     * @param pAnalyst the analysis belonging to this run, never null
+     * @return the score from White's point of view, or UNKNOWN_SCORE when it could not be read
+     */
+    private int whiteScoreOf(String pFen, Analyst pAnalyst) {
+        try {
+            engine.core.Position position = Fen.parse(pFen);
+            int score = pAnalyst.analyse(position, REVIEW_LIMITS).score;
+            return position.sideToMove() == Pieces.WHITE ? score : -score;
+        } catch (RuntimeException e) {
+            // a saved game from an older version may hold something this cannot read
+            return UNKNOWN_SCORE;
+        }
     }
 
     private String moveText() {
