@@ -1613,6 +1613,131 @@ public class GameTest {
         });
 
         // =================================================================
+        System.out.println("\n-- Playing the computer ------------------------------------------");
+        // =================================================================
+
+        test("EngineSettings: a game between two people has no engine in it", () -> {
+            EngineSettings human = EngineSettings.humanOpponent();
+            check(!human.engineOpponent(), "nobody is playing the computer");
+            check(!human.playsFor(Pieces.WHITE), "so it plays neither White");
+            check(!human.playsFor(Pieces.BLACK), "nor Black");
+            check(human.autoFlip(), "and the board turns to face whoever is to move");
+        });
+
+        test("EngineSettings: the levels get stronger and less careless", () -> {
+            int previousDepth = 0;
+            int previousNoise = Integer.MAX_VALUE;
+            for (int level = EngineSettings.MIN_LEVEL; level <= EngineSettings.MAX_LEVEL; level++) {
+                EngineSettings settings = EngineSettings.level(level, Pieces.BLACK);
+                check(settings.depth() >= previousDepth,
+                        "level " + level + " must look at least as deep as the one below");
+                check(settings.noiseCentipawns() <= previousNoise,
+                        "and must judge at least as carefully");
+                check(settings.maxTimeMs() < Long.MAX_VALUE, "every level must be capped in time");
+                check(settings.maxNodes() < Long.MAX_VALUE, "and in positions");
+                check(!settings.autoFlip(), "and must hold the board still against an engine");
+                previousDepth = settings.depth();
+                previousNoise = settings.noiseCentipawns();
+            }
+            checkEqual(0, EngineSettings.level(EngineSettings.MAX_LEVEL, Pieces.WHITE).noiseCentipawns(),
+                    "the strongest level must play the best move it finds");
+        });
+
+        test("EngineSettings: it knows which side is whose", () -> {
+            EngineSettings asBlack = EngineSettings.level(3, Pieces.BLACK);
+            check(asBlack.playsFor(Pieces.BLACK), "the engine plays the colour it was given");
+            check(!asBlack.playsFor(Pieces.WHITE), "and not the other one");
+            checkEqual(Pieces.WHITE, asBlack.humanColour(), "which leaves the person the other side");
+
+            checkEqual(3, asBlack.limits().depth, "the limits must carry the level's depth");
+            checkEqual(asBlack.noiseCentipawns(), asBlack.limits().noiseCentipawns,
+                    "and its carelessness");
+        });
+
+        test("EngineSettings: settings that mean nothing are refused", () -> {
+            boolean badColour = false;
+            try {
+                new EngineSettings(true, 7, 3, 1000, 1000, 0, false);
+            } catch (IllegalArgumentException e) {
+                badColour = true;
+            }
+            check(badColour, "a colour that is neither side must be refused");
+
+            boolean badLevel = false;
+            try {
+                EngineSettings.level(EngineSettings.MAX_LEVEL + 1, Pieces.WHITE);
+            } catch (IllegalArgumentException e) {
+                badLevel = true;
+            }
+            check(badLevel, "a level nobody offers must be refused");
+        });
+
+        test("EnginePlayer: it moves only when the turn is its own", () -> {
+            GameSession session = new GameSession();
+            EnginePlayer asWhite = new EnginePlayer(EngineSettings.level(1, Pieces.WHITE));
+            EnginePlayer asBlack = new EnginePlayer(EngineSettings.level(1, Pieces.BLACK));
+            EnginePlayer human = new EnginePlayer(EngineSettings.humanOpponent());
+
+            check(asWhite.isEngineTurn(session), "White is to move at the start");
+            check(!asBlack.isEngineTurn(session), "so Black's engine must wait");
+            check(!human.isEngineTurn(session), "and a game between two people never has an engine turn");
+        });
+
+        test("EnginePlayer: a finished game has no turn left", () -> {
+            // the quickest mate there is, so the game is over after four half moves
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("f2"), Bitboards.squareOf("f3")));
+            session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+            session.play(session.moveFor(Bitboards.squareOf("g2"), Bitboards.squareOf("g4")));
+            session.play(session.moveFor(Bitboards.squareOf("d8"), Bitboards.squareOf("h4")));
+
+            check(session.result().isFinished(), "the game must really be over");
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(1, Pieces.WHITE));
+            check(!player.isEngineTurn(session), "a finished game must not ask for another move");
+        });
+
+        test("EnginePlayer: it chooses a move it is allowed to play", () -> {
+            GameSession session = new GameSession();
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(2, Pieces.WHITE));
+
+            int move = player.chooseMove(session);
+            check(move != Moves.NONE, "it must find something to play from the starting position");
+            check(session.isLegal(move), "and it must be a move the rules allow");
+            checkEqual(Fen.START_POSITION, Fen.write(session.position()),
+                    "thinking must not have changed the game it was thinking about");
+            check(session.getMoveLog().isEmpty(), "and must not have played anything by itself");
+        });
+
+        test("EnginePlayer: even the weakest level takes a mate in one", () -> {
+            GameSession session = new GameSession(Fen.parse("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1"));
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(1, Pieces.WHITE));
+
+            checkEqual("a1a8", Moves.toUci(player.chooseMove(session)),
+                    "a mate in one is not a close decision, so carelessness must not lose it");
+        });
+
+        test("EnginePlayer: it plays its move without holding anybody up", () -> {
+            GameSession session = new GameSession();
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(1, Pieces.WHITE));
+
+            CountDownLatch played = new CountDownLatch(1);
+            check(player.moveIfItsTurn(session, played::countDown), "it must take its turn");
+            check(played.await(30, TimeUnit.SECONDS), "and must finish thinking in good time");
+
+            checkEqual(1, session.getMoveLog().size(), "exactly one move must have been played");
+            check(!session.isWhiteToMove(), "and the turn must have passed to the other side");
+            check(!player.isThinking(), "and it must not still be thinking");
+        });
+
+        test("EnginePlayer: it stays out of a turn that is not its own", () -> {
+            GameSession session = new GameSession();
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(1, Pieces.BLACK));
+
+            check(!player.moveIfItsTurn(session, null), "Black must not move while White is to move");
+            check(session.getMoveLog().isEmpty(), "and nothing may have been played");
+        });
+
+        // =================================================================
         System.out.println("\n-- EndScreen ----------------------------------------------------");
         // =================================================================
 
