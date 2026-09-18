@@ -16,6 +16,7 @@ import engine.core.GameSession;
 import engine.core.MoveGen;
 import engine.core.Pieces;
 import engine.model.GameConfig;
+import ui.theme.Theme;
 
 import javax.swing.*;
 import java.awt.*;
@@ -60,7 +61,9 @@ public class Board extends JPanel implements GameSession.View {
 
     private final Color LIGHT_TILE = new Color(232, 235, 239);
     private final Color DARK_TILE = new Color(125, 135, 150);
-    private final Color HINT_COLOR = new Color(81, 168, 0, 200);
+    // the square markings live in the theme, because which colours can be told apart is a decision
+    // about the whole program rather than about this panel
+    private final Color HINT_COLOR = Theme.HINT;
 
     /**
      * Builds the game board for a new game with squares of the default size.

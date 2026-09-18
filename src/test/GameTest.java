@@ -409,6 +409,25 @@ public class GameTest {
     }
 
     /**
+     * Works out how bright a colour looks.
+     * <p>
+     * Two markings that differ only in hue fall together on a monochrome screen and for a player who
+     * sees no colour, so a test of the palette has to compare brightness rather than the raw values.
+     * The eye is far more sensitive to green than to red and least sensitive to blue, which is what
+     * the three weights of the standard luminance formula say.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pColour colour to measure, never null
+     * @return its brightness, 0 for black up to 255 for white
+     */
+    private static int brightnessOf(Color pColour) {
+        return (int) Math.round(0.2126 * pColour.getRed()
+                + 0.7152 * pColour.getGreen()
+                + 0.0722 * pColour.getBlue());
+    }
+
+    /**
      * Counts how many components of the given class exist in the tree.
      */
     private static int countComponents(Container c, Class<?> type) {
@@ -1341,6 +1360,43 @@ public class GameTest {
             // 2 is the exit code Main uses for a missing display
             checkEqual(2, process.exitValue(), "a headless start must report a failure, output: " + text);
             check(text.contains("graphical display"), "the output must explain that a display is missing, got: " + text);
+        });
+
+        // =================================================================
+        System.out.println("\n-- Input and accessibility ---------------------------------------");
+        // =================================================================
+
+        test("Theme: the board markings can be told apart without seeing colour", () -> {
+            Color[] markings = {Theme.HINT, Theme.LAST_MOVE, Theme.CHECK};
+            String[] names = {"the hint", "the last move", "the check"};
+
+            for (int first = 0; first < markings.length; first++) {
+                for (int second = first + 1; second < markings.length; second++) {
+                    // two markings that only differ in hue vanish into each other on a monochrome
+                    // screen, and for somebody who sees no colour at all
+                    int difference = Math.abs(brightnessOf(markings[first]) - brightnessOf(markings[second]));
+                    check(difference >= 15, names[first] + " and " + names[second]
+                            + " must differ in brightness as well as in hue, got " + difference);
+                }
+            }
+        });
+
+        test("Theme: the hints are no longer the green that disappeared against a red marker", () -> {
+            // green against red is the pair a red green blind player cannot separate, and the hints
+            // used to be exactly the accent green
+            check(Theme.HINT.getBlue() > Theme.HINT.getGreen(),
+                    "the hint must lean blue rather than green, got: " + Theme.HINT);
+            check(Theme.HINT.getRed() < Theme.HINT.getBlue(),
+                    "and must not lean red either, got: " + Theme.HINT);
+            check(!Theme.HINT.equals(Theme.ACCENT), "the hint must not be the accent green any more");
+        });
+
+        test("Theme: every board marking lets the piece underneath show through", () -> {
+            // a marking that covered its square would hide the piece standing on it
+            check(Theme.HINT.getAlpha() < 255, "the hint must be see through, got: " + Theme.HINT.getAlpha());
+            check(Theme.LAST_MOVE.getAlpha() < 255,
+                    "the last move must be see through, got: " + Theme.LAST_MOVE.getAlpha());
+            check(Theme.CHECK.getAlpha() < 255, "the check must be see through, got: " + Theme.CHECK.getAlpha());
         });
 
         // =================================================================
