@@ -131,9 +131,11 @@ public class Main {
             session.setMoveLogView(logPanel);
 
             session.setEndListener((pResult, pTermination) -> {
-                // the session owns the moves and the result, the names and the time control come from the config
-                GameRecord record = new GameRecord(cfg, pResult.pgnToken(),
-                        session.getMoveLog(), session.getFenHistory());
+                // the session owns the moves and the result, the names and the clock come from the config,
+                // and the reason it ended is what the PGN Termination tag gets written from. The board
+                // always starts a game from the usual position, so there is no starting FEN to record.
+                GameRecord record = new GameRecord(cfg, pResult.pgnToken(), pTermination,
+                        session.getMoveLog(), session.getFenHistory(), null);
                 // a game that couldn't be written must not disappear without a word
                 boolean saved = PgnManager.save(record);
                 // the engine reports a result and a reason, the sentence the players read is built here
