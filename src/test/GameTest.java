@@ -2265,6 +2265,134 @@ public class GameTest {
             cleanupSavedGame(uniqueWhite);
         });
 
+        test("PastGamesPanel: searching narrows the list down to the matching games", () -> {
+            String white = "SearchWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(white, "SearchBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+
+            SwingUtilities.invokeAndWait(() -> {
+                PastGamesPanel p = new PastGamesPanel();
+                JList<String> list = findList(p);
+                checkNotNull(list, "Must find the game list");
+                Component field = findByName(p, "librarySearch");
+                checkNotNull(field, "the library must have a search field");
+                JTextField search = (JTextField) field;
+
+                int everything = list.getModel().getSize();
+                check(everything >= 1, "the library must list the game that was just saved");
+
+                // typing filters straight away, there is nothing to confirm
+                search.setText(white);
+                checkEqual(1, list.getModel().getSize(), "only the searched game may be left");
+                check(list.getModel().getElementAt(0).contains(white),
+                        "the one left must be the searched game, got: " + list.getModel().getElementAt(0));
+
+                search.setText("no game is ever called this");
+                check(list.getModel().getElementAt(0).contains("No games match"),
+                        "a search that finds nothing must say so, got: " + list.getModel().getElementAt(0));
+
+                search.setText("");
+                checkEqual(everything, list.getModel().getSize(),
+                        "clearing the search must bring the whole library back");
+            });
+
+            cleanupSavedGame(white);
+        });
+
+        test("PastGamesPanel: renaming the selected game shows the new name in the list", () -> {
+            String white = "PanelRenameWhite" + System.nanoTime();
+            String name = "Sunday club final";
+            PgnManager.save(new GameRecord(white, "PanelRenameBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+
+            SwingUtilities.invokeAndWait(() -> {
+                PastGamesPanel p = new PastGamesPanel();
+                JTextField search = (JTextField) findByName(p, "librarySearch");
+                search.setText(white);
+                JList<String> list = findList(p);
+
+                // answering in code instead of in a dialog, which a test run has nobody to click
+                String[] asked = {null};
+                p.setPrompts(new PastGamesPanel.LibraryPrompts() {
+                    @Override
+                    public boolean confirmDelete(String pTitle) {
+                        check(false, "renaming must never ask about deleting");
+                        return false;
+                    }
+
+                    @Override
+                    public String askName(String pTitle, String pCurrentName) {
+                        asked[0] = pCurrentName;
+                        return name;
+                    }
+
+                    @Override
+                    public void sayFailed(String pMessage) {
+                        check(false, "nothing must fail here, got: " + pMessage);
+                    }
+                });
+
+                check(!p.renameSelected(), "renaming with nothing selected must do nothing");
+                list.setSelectedIndex(0);
+                check(p.renameSelected(), "renaming must report success");
+                checkEqual("", asked[0], "a game nobody named yet must offer an empty name");
+                check(list.getModel().getElementAt(0).contains(name),
+                        "the list must show the new name, got: " + list.getModel().getElementAt(0));
+                check(list.getModel().getElementAt(0).contains(white),
+                        "and must still show who played, got: " + list.getModel().getElementAt(0));
+            });
+
+            cleanupSavedGame(white);
+        });
+
+        test("PastGamesPanel: deleting asks first and then takes the game out of the library", () -> {
+            String white = "PanelDeleteWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(white, "PanelDeleteBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+
+            SwingUtilities.invokeAndWait(() -> {
+                PastGamesPanel p = new PastGamesPanel();
+                JTextField search = (JTextField) findByName(p, "librarySearch");
+                search.setText(white);
+                JList<String> list = findList(p);
+                list.setSelectedIndex(0);
+
+                boolean[] answer = {false};
+                p.setPrompts(new PastGamesPanel.LibraryPrompts() {
+                    @Override
+                    public boolean confirmDelete(String pTitle) {
+                        check(pTitle.contains(white), "the question must name the game, got: " + pTitle);
+                        return answer[0];
+                    }
+
+                    @Override
+                    public String askName(String pTitle, String pCurrentName) {
+                        check(false, "deleting must never ask for a name");
+                        return null;
+                    }
+
+                    @Override
+                    public void sayFailed(String pMessage) {
+                        check(false, "nothing must fail here, got: " + pMessage);
+                    }
+                });
+
+                // saying no has to leave the game exactly where it was
+                check(!p.deleteSelected(), "a game must survive being declined");
+                check(list.getModel().getElementAt(0).contains(white),
+                        "the declined game must still be listed, got: " + list.getModel().getElementAt(0));
+
+                answer[0] = true;
+                check(p.deleteSelected(), "deleting must report success");
+                for (int i = 0; i < list.getModel().getSize(); i++) {
+                    check(!list.getModel().getElementAt(i).contains(white),
+                            "the deleted game must be gone from the list, got: " + list.getModel().getElementAt(i));
+                }
+                check(PgnManager.loadLibrary().stream().noneMatch(g -> g.record.whiteName.equals(white)),
+                        "the deleted game must be gone from the disk as well");
+            });
+        });
+
         test("PastGamesPanel: selecting a game populates the move log", () -> {
             String uniqueWhite = "SelectTestWhite" + System.nanoTime();
             GameRecord record = new GameRecord(uniqueWhite, "SelectTestBlack", "0-1",
