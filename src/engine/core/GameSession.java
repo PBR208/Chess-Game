@@ -52,6 +52,18 @@ public final class GameSession {
         void notifyForcedDraw();
     }
 
+    /** Asked whether the opponent accepts a draw that one player has offered. */
+    public interface DrawOfferArbiter {
+
+        /**
+         * Answers whether the offered draw is accepted.
+         *
+         * @param pWhiteOffers true when White is the player offering the draw
+         * @return true if the opponent agrees to a draw
+         */
+        boolean acceptsDrawOffer(boolean pWhiteOffers);
+    }
+
     /** Told once when the game ends, with the result and the reason. */
     public interface EndListener {
         void onGameEnd(GameResult pResult, Termination pTermination);
@@ -79,7 +91,11 @@ public final class GameSession {
     private MoveLog moveLogView;
     private PromotionPicker promotionPicker;
     private DrawArbiter drawArbiter = NO_ARBITER;
+    private DrawOfferArbiter drawOfferArbiter = NO_DRAW_OFFER;
     private EndListener endListener;
+    // run after every change to the game, so the actions beside the board can follow it
+    private Runnable stateListener = () -> {
+    };
 
     // reused for every move generation, so playing a game allocates nothing per move
     private final int[] moveBuffer = new int[MoveGen.MAX_MOVES];
@@ -102,6 +118,9 @@ public final class GameSession {
         public void repaint() {
         }
     };
+
+    // nobody to ask means nobody agreed, which leaves the game running rather than drawing it
+    private static final DrawOfferArbiter NO_DRAW_OFFER = pWhiteOffers -> false;
 
     // a session nobody can answer never agrees to a claimable draw
     private static final DrawArbiter NO_ARBITER = new DrawArbiter() {
@@ -197,6 +216,8 @@ public final class GameSession {
         view.repaint();
 
         checkForEnd(repetitions);
+        // whatever this move changed, the actions beside the board may have to look different now
+        notifyStateChanged();
         return true;
     }
 
@@ -336,6 +357,134 @@ public final class GameSession {
     }
 
     /**
+     * Tells whether the position on the board has come back for the third time.
+     * <p>
+     * A threefold repetition is a draw a player may claim rather than one that happens on its own,
+     * and until now the only moment anybody was asked was the instant the third occurrence appeared.
+     * A player who wants to claim a move later has to be able to, so the right to claim has to be a
+     * question that can be asked at any time rather than an event that passes.
+     * <p>
+     * Time complexity: O(1), one lookup by position key. Space complexity: O(1).
+     *
+     * @return true if the current position has occurred three times or more in a running game
+     */
+    public boolean isRepetitionClaimable() {
+        return !result.isFinished() && positionCounts.getOrDefault(position.key(), 0) >= 3;
+    }
+
+    /**
+     * Tells whether fifty moves have passed without a capture or a pawn move.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return true if the fifty move rule may be claimed in a running game
+     */
+    public boolean isFiftyMoveClaimable() {
+        return !result.isFinished() && position.halfmoveClock() >= FIFTY_MOVE_PLIES;
+    }
+
+    /**
+     * Tells whether a draw may be claimed right now.
+     * <p>
+     * The claim button is only worth pressing while one of the two claimable rules applies, so the
+     * screen asks this to decide whether the action is live at all.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return true if either the repetition or the fifty move rule is claimable
+     */
+    public boolean isDrawClaimable() {
+        return isRepetitionClaimable() || isFiftyMoveClaimable();
+    }
+
+    /**
+     * Claims the draw the rules allow at this moment.
+     * <p>
+     * Both claimable rules end the game as a draw, but they are different reasons and a saved game
+     * has to say which one it was. A repeated position is named first when both apply, because it is
+     * the more specific of the two. A claim nobody is entitled to changes nothing at all, so a stray
+     * click cannot end a game.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return true if the game was drawn by this claim, false when there was nothing to claim
+     */
+    public boolean claimDraw() {
+        if (isRepetitionClaimable()) {
+            end(GameResult.DRAW, Termination.THREEFOLD_REPETITION);
+            return true;
+        }
+        if (isFiftyMoveClaimable()) {
+            end(GameResult.DRAW, Termination.FIFTY_MOVE_RULE);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Offers the opponent a draw and ends the game when they accept.
+     * <p>
+     * Agreeing to a draw is how most games between players of similar strength actually end, and it
+     * was the one ending this game could not produce. The player to move is the one offering, which
+     * is the moment a draw is normally offered, so the other player is the one who answers through
+     * the arbiter the screen installed. A session nobody can ask declines, which leaves the game
+     * exactly as it was.
+     * <p>
+     * Time complexity: O(1) apart from waiting for the opponent. Space complexity: O(1).
+     *
+     * @return true if the opponent accepted and the game is now drawn
+     */
+    public boolean offerDraw() {
+        // a finished game cannot be drawn again
+        if (result.isFinished()) {
+            return false;
+        }
+        // the player to move offers, so the player who is not to move decides
+        boolean whiteOffers = position.sideToMove() == Pieces.WHITE;
+        if (!drawOfferArbiter.acceptsDrawOffer(whiteOffers)) {
+            return false;
+        }
+        end(GameResult.DRAW, Termination.DRAW_AGREED);
+        return true;
+    }
+
+    /**
+     * Sets who answers a draw one player offers the other.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pArbiter asked on every draw offer, or null to decline every one of them
+     */
+    public void setDrawOfferArbiter(DrawOfferArbiter pArbiter) {
+        this.drawOfferArbiter = pArbiter == null ? NO_DRAW_OFFER : pArbiter;
+    }
+
+    /**
+     * Sets who is told that something about the game changed.
+     * <p>
+     * The actions beside the board are only worth pressing at certain moments, and only the session
+     * knows when those are. Rather than having the screen ask after every click it might have
+     * missed, the session says when something changed and the screen looks again.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pListener run after every change to the game, or null for nobody
+     */
+    public void setStateListener(Runnable pListener) {
+        this.stateListener = pListener == null ? () -> {
+        } : pListener;
+    }
+
+    /**
+     * Tells the listener that something about the game changed.
+     * <p>
+     * Time complexity: O(1) beyond whatever the listener does. Space complexity: O(1).
+     */
+    private void notifyStateChanged() {
+        stateListener.run();
+    }
+
+    /**
      * Starts a new game from the standard starting position.
      * <p>
      * A restart has to clear every piece of state, including the result, otherwise the new game
@@ -360,6 +509,7 @@ public final class GameSession {
         if (moveLogView != null) {
             moveLogView.clear();
         }
+        notifyStateChanged();
     }
 
     /**
@@ -444,6 +594,8 @@ public final class GameSession {
         if (endListener != null) {
             endListener.onGameEnd(result, termination);
         }
+        // every action beside the board is dead once the game is over
+        notifyStateChanged();
     }
 
     /**
