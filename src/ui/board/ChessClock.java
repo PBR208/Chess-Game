@@ -50,6 +50,9 @@ public class ChessClock {
     // which stage is being played, an index into the list above
     private int currentStage;
 
+    // set once this clock has warned its player, cleared when time comes back above the mark
+    private boolean lowTimeWarned;
+
     private final Runnable onRepaint;
     private final TimeExpiredCallback onExpired;
     private final Timer timer;
@@ -209,6 +212,8 @@ public class ChessClock {
         // a new game plays the control from its first stage again
         movesInStage = 0;
         currentStage = 0;
+        // and it is nowhere near low on time yet
+        lowTimeWarned = false;
     }
 
     /**
@@ -229,6 +234,10 @@ public class ChessClock {
         }
         bankedMs += pExtraMs;
         timeMs = currentTimeMs();
+        // time back above the mark means the next dip under it is worth warning about again
+        if (timeMs >= LOW_TIME_MS) {
+            lowTimeWarned = false;
+        }
     }
 
     /**
@@ -300,6 +309,12 @@ public class ChessClock {
 
         timeMs = currentTimeMs();
         onRepaint.run();
+
+        // the warning comes once, at the moment the time first drops under the low mark
+        if (!lowTimeWarned && timeMs < LOW_TIME_MS) {
+            lowTimeWarned = true;
+            LowTimeSound.play();
+        }
 
         if (timeMs == 0) {
             stop();
@@ -439,6 +454,21 @@ public class ChessClock {
      */
     public boolean isTicking() {
         return timer.isRunning();
+    }
+
+    /**
+     * Tells whether this clock has already warned its player about the time.
+     * <p>
+     * The warning itself is a sound, which a test cannot listen for, so the clock records that it
+     * gave one. That also makes the rule visible: one warning per dip under the mark, and another
+     * one only after time has been added back above it.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return true once the warning has been given for the current dip under the low mark
+     */
+    public boolean isLowTimeWarned() {
+        return lowTimeWarned;
     }
 
     /**

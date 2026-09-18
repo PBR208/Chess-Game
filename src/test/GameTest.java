@@ -1326,6 +1326,28 @@ public class GameTest {
             checkEqual(90_000L, clock.getTimeMs(), "the last stage runs to the end and brings no more");
         });
 
+        test("LowTimeSound: a warning never throws, with or without a sound card", () -> {
+            // a build server has no sound card, and a warning must never take a game down with it
+            checkEqual(!GraphicsEnvironment.isHeadless(), LowTimeSound.isAvailable(),
+                    "a machine without a screen is treated as one without sound");
+            LowTimeSound.play();
+        });
+
+        test("ChessClock: the low time warning comes once, and again after time is added", () -> {
+            ChessClock clock = new ChessClock(true, 2_000, () -> {
+            }, w -> {
+            });
+            check(!clock.isLowTimeWarned(), "a fresh clock has nothing to warn about yet");
+
+            clock.start();
+            Thread.sleep(250);
+            check(clock.isLowTimeWarned(), "a clock under the low mark warns its player");
+            clock.stop();
+
+            clock.addTime(120_000);
+            check(!clock.isLowTimeWarned(), "time back above the mark earns another warning later on");
+        });
+
         test("Board: a board whose clocks are stopped can be garbage collected", () -> {
             java.lang.ref.WeakReference<Board> ref = boardWithStoppedClocks();
             // give the collector a few chances, a live timer would keep the board reachable forever
