@@ -1861,6 +1861,64 @@ public class GameTest {
             check(!player.isThinking(), "and it must not still be thinking");
         });
 
+        test("EnginePlayer: it answers as soon as a move is played", () -> {
+            GameSession session = new GameSession();
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(1, Pieces.BLACK));
+
+            CountDownLatch answered = new CountDownLatch(1);
+            session.setMoveLogView(player.watching(session, null, answered::countDown));
+
+            // the move is played the way the board plays one, on the thread that draws it
+            SwingUtilities.invokeAndWait(() ->
+                    session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4"))));
+
+            check(answered.await(30, TimeUnit.SECONDS), "the program must answer in good time");
+            checkEqual(2, session.getMoveLog().size(), "one move each must have been played");
+            check(session.isWhiteToMove(), "and the turn must be back with the person");
+        });
+
+        test("EnginePlayer: it does not answer a game that has just ended", () -> {
+            // White mates with the move that is played, so there is nothing left to answer
+            GameSession session = new GameSession(Fen.parse("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1"));
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(1, Pieces.BLACK));
+            session.setMoveLogView(player.watching(session, null, null));
+
+            SwingUtilities.invokeAndWait(() ->
+                    session.play(session.moveFor(Bitboards.squareOf("a1"), Bitboards.squareOf("a8"))));
+
+            // the session writes a move down before it works out that the game is over, so an answer
+            // made on the spot would be an answer to a position that is already mate
+            check(session.result().isFinished(), "the game must be over");
+            SwingUtilities.invokeAndWait(() -> { });
+            checkEqual(1, session.getMoveLog().size(), "the mating move must be the last one");
+        });
+
+        test("EnginePlayer: it keeps showing whatever was showing the move log", () -> {
+            GameSession session = new GameSession();
+            EnginePlayer player = new EnginePlayer(EngineSettings.humanOpponent());
+
+            List<String> seen = new ArrayList<>();
+            GameSession.MoveLog delegate = new GameSession.MoveLog() {
+                @Override
+                public void update(List<String> pMoveLog, String pCurrentFen) {
+                    seen.clear();
+                    seen.addAll(pMoveLog);
+                }
+
+                @Override
+                public void clear() {
+                    seen.clear();
+                }
+            };
+            session.setMoveLogView(player.watching(session, delegate, null));
+
+            SwingUtilities.invokeAndWait(() ->
+                    session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4"))));
+
+            checkEqual(1, seen.size(), "the move log behind it must still be told about the move");
+            checkEqual("e4", seen.get(0), "and told the right one");
+        });
+
         test("EnginePlayer: it stays out of a turn that is not its own", () -> {
             GameSession session = new GameSession();
             EnginePlayer player = new EnginePlayer(EngineSettings.level(1, Pieces.BLACK));

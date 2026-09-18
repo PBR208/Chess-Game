@@ -235,7 +235,7 @@ public class NewGamePanel extends JPanel {
         startBtn.addActionListener(e -> {
             GameConfig config = createConfig();
             if (config != null) {
-                Main.startGame(config);
+                Main.startGame(config, createEngineSettings());
             }
         });
 

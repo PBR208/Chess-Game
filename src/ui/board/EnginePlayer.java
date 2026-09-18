@@ -131,6 +131,46 @@ public class EnginePlayer {
     }
 
     /**
+     * Wraps the move log so that the program answers as soon as a move is written down.
+     * <p>
+     * Something has to notice that a move has been played, and the move log is told about every one
+     * of them, so it is the seam that already exists rather than another one added to the board or
+     * the session. The answer is deferred rather than made on the spot, and that matters: the
+     * session writes the move down before it works out whether the game has just ended, so asking
+     * straight away would have the program answering a position that is already mate. By the time a
+     * deferred call runs, the move is finished and the result is settled.
+     * <p>
+     * Time complexity: O(1) here, the thinking costs what the settings allow on another thread.
+     * Space complexity: O(1).
+     *
+     * @param pSession   the running game, never null
+     * @param pDelegate  the move log to keep showing, may be null when nothing shows it
+     * @param pAfterMove run once the program has moved, may be null
+     * @return a move log that forwards everything and then takes the program's turn, never null
+     * @throws NullPointerException if pSession is null
+     */
+    public GameSession.MoveLog watching(GameSession pSession, GameSession.MoveLog pDelegate,
+                                        Runnable pAfterMove) {
+        return new GameSession.MoveLog() {
+            @Override
+            public void update(java.util.List<String> pMoveLog, String pCurrentFen) {
+                if (pDelegate != null) {
+                    pDelegate.update(pMoveLog, pCurrentFen);
+                }
+                // after the move is finished and the game knows whether it is over
+                SwingUtilities.invokeLater(() -> moveIfItsTurn(pSession, pAfterMove));
+            }
+
+            @Override
+            public void clear() {
+                if (pDelegate != null) {
+                    pDelegate.clear();
+                }
+            }
+        };
+    }
+
+    /**
      * Returns the settings this player was built with.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).

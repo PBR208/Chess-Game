@@ -14,11 +14,13 @@ package app;
 import engine.core.GameResult;
 import engine.core.GameSession;
 import engine.core.Termination;
+import engine.model.EngineSettings;
 import engine.model.GameConfig;
 import engine.model.GameRecord;
 import engine.persistence.PgnManager;
 import ui.board.Board;
 import ui.board.EndScreen;
+import ui.board.EnginePlayer;
 import ui.board.MoveLogPanel;
 import ui.menu.MainMenu;
 import ui.menu.PastGamesPanel;
@@ -119,16 +121,37 @@ public class Main {
      * @param pConfig names, times and increment of the new game; null starts an unlimited game
      */
     public static void startGame(GameConfig pConfig) {
+        startGame(pConfig, EngineSettings.humanOpponent());
+    }
+
+    /**
+     * Opens the game screen for a new game against a given opponent.
+     * <p>
+     * A game against the program needs three things a game between two people does not: the board
+     * has to stop turning round, somebody has to answer each move, and the program has to move first
+     * when it has the white pieces. The answering hangs off the move log, which is told about every
+     * move that is played, so nothing else had to grow a hook for it.
+     * <p>
+     * Time complexity: O(p) for the starting pieces. Space complexity: O(p) for the new board.
+     *
+     * @param pConfig   names, times and increment of the new game; null starts an unlimited game
+     * @param pSettings who the second player is; null means another person
+     */
+    public static void startGame(GameConfig pConfig, EngineSettings pSettings) {
         // no configuration means a casual game without clocks
         final GameConfig cfg = pConfig == null ? GameConfig.unlimited() : pConfig;
+        final EngineSettings opponent = pSettings == null ? EngineSettings.humanOpponent() : pSettings;
 
         SwingUtilities.invokeLater(() -> {
             // squares small enough for the whole game screen to fit on this screen
             Rectangle usableArea = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
-            Board board = new Board(cfg, Board.tileSizeFor(usableArea.width, usableArea.height));
+            Board board = new Board(cfg, Board.tileSizeFor(usableArea.width, usableArea.height), opponent);
             MoveLogPanel logPanel = new MoveLogPanel(board.getPreferredSize().height);
             GameSession session = board.getSession();
-            session.setMoveLogView(logPanel);
+
+            EnginePlayer engine = new EnginePlayer(opponent);
+            // the log hears about every move, so that is where the answer hangs off
+            session.setMoveLogView(engine.watching(session, logPanel, board::repaint));
 
             session.setEndListener((pResult, pTermination) -> {
                 // the session owns the moves and the result, the names and the time control come from the config
@@ -163,6 +186,9 @@ public class Main {
             frame.setContentPane(wrapper);
             frame.revalidate();
             frame.repaint();
+
+            // with the white pieces the program has to open the game rather than wait to be asked
+            engine.moveIfItsTurn(session, board::repaint);
         });
     }
 
