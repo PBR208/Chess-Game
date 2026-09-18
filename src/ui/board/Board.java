@@ -117,6 +117,9 @@ public class Board extends JPanel implements GameSession.View {
                 pConfig.incrementMs(), pConfig.delayMs(), this::repaint, this::onTimeExpired);
         this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), pConfig.clockMode(),
                 pConfig.incrementMs(), pConfig.delayMs(), this::repaint, this::onTimeExpired);
+        // both players play the same tournament control, each counting their own moves through it
+        this.whiteClock.setStages(pConfig.stages());
+        this.blackClock.setStages(pConfig.stages());
 
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
 

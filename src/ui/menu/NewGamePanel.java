@@ -12,6 +12,7 @@ package ui.menu;
  */
 
 import engine.model.ClockMode;
+import engine.model.ClockStage;
 import engine.model.GameConfig;
 import app.Main;
 import ui.theme.Theme;
@@ -62,6 +63,8 @@ public class NewGamePanel extends JPanel {
     private final JTextField delaySec = new JTextField("0", 4);
     // Black's own starting time in minutes for a game at odds, empty for the same as White
     private final JTextField blackOddsMin = new JTextField("", 4);
+    // a tournament control written the way players write it, such as "40/90, 30"
+    private final JTextField stagesField = new JTextField("", 10);
 
     /**
      * Builds the New Game screen with player names, time controls and the start and back buttons.
@@ -193,6 +196,15 @@ public class NewGamePanel extends JPanel {
         extraRow.add(fieldLabel("min"));
         card.add(extraRow);
 
+        // the stages field comes last, for the same reason the two above it do
+        JPanel stageRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        stageRow.setBackground(Theme.PANEL_BG);
+        styleField(stagesField);
+        stageRow.add(fieldLabel("Stages"));
+        stageRow.add(stagesField);
+        stageRow.add(fieldLabel("such as 40/90, 30"));
+        card.add(stageRow);
+
         // tells the player why a custom time can't be used
         customError.setForeground(new Color(210, 90, 90));
         customError.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 12));
@@ -321,6 +333,18 @@ public class NewGamePanel extends JPanel {
         // a game at odds gives Black a time of their own, an empty field gives both the same
         blackMs = readBlackTimeMs(whiteMs);
 
+        // a tournament control starts on the time of its first stage, whatever the preset said
+        java.util.List<ClockStage> stages = ClockStage.parse(stagesField.getText());
+        if (!stages.isEmpty()) {
+            whiteMs = stages.get(0).timeMs();
+            blackMs = whiteMs;
+            label = "Stages " + stagesField.getText().trim();
+        }
+        // a game at odds gives Black a time of their own, and an empty field reads back as White's,
+        // which leaves whatever the stages or the preset already put there
+        long blackOddsMs = readBlackTimeMs(whiteMs);
+        blackMs = blackOddsMs == whiteMs ? blackMs : blackOddsMs;
+
         return new GameConfig(
                 whiteField.getText().trim(),
                 blackField.getText().trim(),
@@ -329,7 +353,8 @@ public class NewGamePanel extends JPanel {
                 label,
                 increment,
                 mode,
-                delayMs);
+                delayMs,
+                stages);
     }
 
     /**

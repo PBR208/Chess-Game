@@ -12,9 +12,11 @@ package ui.board;
  */
 
 import engine.model.ClockMode;
+import engine.model.ClockStage;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.List;
 
 public class ChessClock {
 
@@ -40,6 +42,13 @@ public class ChessClock {
     private final long delayMs;
     // how much of this turn's delay has not been used up yet, only meaningful while running
     private long delayLeftMs;
+
+    // the sections of a tournament control, empty for a control that is one time and nothing else
+    private List<ClockStage> stages = List.of();
+    // moves this player has finished inside the current stage
+    private int movesInStage;
+    // which stage is being played, an index into the list above
+    private int currentStage;
 
     private final Runnable onRepaint;
     private final TimeExpiredCallback onExpired;
@@ -115,6 +124,26 @@ public class ChessClock {
     }
 
     /**
+     * Gives this clock the sections of a tournament time control.
+     * <p>
+     * Classical chess hands out time in stages: forty moves in ninety minutes, then thirty minutes
+     * for the rest. The clock starts on the time of the first stage, which the game was built with,
+     * and every later stage arrives when its predecessor's moves have all been played. An empty list
+     * is the normal case of one time for the whole game. I take the stages after construction rather
+     * than as another constructor argument, because most games have none and a constructor with
+     * seven arguments is already long enough to misread.
+     * <p>
+     * Time complexity: O(s) for the s stages copied. Space complexity: O(s).
+     *
+     * @param pStages the stages in the order they are played, may be null or empty
+     */
+    public void setStages(List<ClockStage> pStages) {
+        this.stages = pStages == null ? List.of() : List.copyOf(pStages);
+        this.movesInStage = 0;
+        this.currentStage = 0;
+    }
+
+    /**
      * Starts counting down this player's time.
      * <p>
      * A player's time runs from the moment it is their turn. I remember that moment from the
@@ -177,6 +206,9 @@ public class ChessClock {
         timer.stop();
         timeMs = START_TIME_MS;
         bankedMs = START_TIME_MS;
+        // a new game plays the control from its first stage again
+        movesInStage = 0;
+        currentStage = 0;
     }
 
     /**
@@ -214,6 +246,36 @@ public class ChessClock {
         // Bronstein settles up when the clock stops, the other two modes owe nothing
         if (mode == ClockMode.FISCHER) {
             addTime(incrementMs);
+        }
+        // a tournament control also counts the move towards the end of the current stage
+        movesInStage++;
+        advanceStageIfReached();
+    }
+
+    /**
+     * Moves on to the next stage of a tournament control once this one is played out.
+     * <p>
+     * A stage ends when the player has made the moves it covers, and the time of the stage that
+     * follows arrives at that moment rather than at the start of the game. A control without stages,
+     * and the last stage of one, have no boundary left to reach, so nothing happens there. The count
+     * starts over, because the next stage counts its own moves.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
+    private void advanceStageIfReached() {
+        // nothing to advance towards without stages, or once the last one is being played
+        if (currentStage >= stages.size() || stages.get(currentStage).runsToTheEnd()) {
+            return;
+        }
+        if (movesInStage < stages.get(currentStage).moves()) {
+            return;
+        }
+
+        currentStage++;
+        movesInStage = 0;
+        // the new stage brings its own time with it
+        if (currentStage < stages.size()) {
+            addTime(stages.get(currentStage).timeMs());
         }
     }
 

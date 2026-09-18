@@ -19,7 +19,7 @@ package engine.model;
  * @param delayMs     the delay a Bronstein or simple delay clock works with, 0 for none
  */
 public record GameConfig(String whiteName, String blackName, long whiteTimeMs, long blackTimeMs, String timeLabel,
-                         long incrementMs, ClockMode clockMode, long delayMs) {
+                         long incrementMs, ClockMode clockMode, long delayMs, java.util.List<ClockStage> stages) {
 
     /**
      * Normalises the settings of every new configuration.
@@ -45,6 +45,32 @@ public record GameConfig(String whiteName, String blackName, long whiteTimeMs, l
         }
         // a clock cannot wait for less than no time
         delayMs = Math.max(0, delayMs);
+        // most games have no stages at all, and a copy keeps a configuration from changing later
+        stages = stages == null ? java.util.List.of() : java.util.List.copyOf(stages);
+    }
+
+    /**
+     * Creates a configuration for a time control that has no stages.
+     * <p>
+     * Only a tournament control hands out more time part way through a game, and almost nothing
+     * does. I let every other caller leave the stages out entirely.
+     * <p>
+     * Time complexity: O(n) in the length of the names. Space complexity: O(n) for the names.
+     *
+     * @param pWhiteName   White's name, blank for the default "White"; never null
+     * @param pBlackName   Black's name, blank for the default "Black"; never null
+     * @param pWhiteTimeMs White's starting time in milliseconds, 0 for unlimited
+     * @param pBlackTimeMs Black's starting time in milliseconds, 0 for unlimited
+     * @param pTimeLabel   label of the time control such as "Blitz 5+0", never null
+     * @param pIncrementMs time added after each move in milliseconds, 0 for none
+     * @param pClockMode   how the clock treats the time around a move, or null to follow the increment
+     * @param pDelayMs     the delay of a Bronstein or simple delay clock, 0 for none
+     * @throws NullPointerException if one of the names is null
+     */
+    public GameConfig(String pWhiteName, String pBlackName, long pWhiteTimeMs, long pBlackTimeMs,
+                      String pTimeLabel, long pIncrementMs, ClockMode pClockMode, long pDelayMs) {
+        this(pWhiteName, pBlackName, pWhiteTimeMs, pBlackTimeMs, pTimeLabel, pIncrementMs, pClockMode, pDelayMs,
+                java.util.List.of());
     }
 
     /**
