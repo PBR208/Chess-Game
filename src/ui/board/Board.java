@@ -19,6 +19,7 @@ import engine.model.GameConfig;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.ArrayList;
 
 public class Board extends JPanel implements GameSession.View {
 
@@ -57,6 +58,11 @@ public class Board extends JPanel implements GameSession.View {
     private final ChessClock blackClock;
     // added to a player's clock after each of their moves
     private final long incrementMs;
+    // what both clocks showed after each ply, index 0 being the start of the game
+    private final ArrayList<long[]> clockSnapshots = new ArrayList<>();
+    // told after every change the session makes, so the buttons around the board can follow along
+    private Runnable onGameChanged = () -> {
+    };
 
     private final Color LIGHT_TILE = new Color(232, 235, 239);
     private final Color DARK_TILE = new Color(125, 135, 150);
@@ -108,11 +114,15 @@ public class Board extends JPanel implements GameSession.View {
         session.setView(this);
         session.setPromotionPicker(new SwingPromotionChooser(this));
         session.setDrawArbiter(new SwingDrawOfferResolver(this));
+        // a game on a clock asks the opponent before a move is taken back, a casual one does not
+        session.setTakebackArbiter(new SwingTakebackArbiter(this, pConfig.whiteTimeMs() > 0));
 
         this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), this::repaint, this::onTimeExpired);
         this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), this::repaint, this::onTimeExpired);
         // the same increment applies to both players
         this.incrementMs = pConfig.incrementMs();
+        // the times before a single move was played, which is where taking back the first move leads
+        clockSnapshots.add(new long[]{pConfig.whiteTimeMs(), pConfig.blackTimeMs()});
 
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
 
@@ -282,6 +292,7 @@ public class Board extends JPanel implements GameSession.View {
             whiteClock.addTime(incrementMs);
             blackClock.start();
         }
+        fireGameChanged();
     }
 
     /**
@@ -293,6 +304,7 @@ public class Board extends JPanel implements GameSession.View {
     public void stopClocks() {
         whiteClock.stop();
         blackClock.stop();
+        fireGameChanged();
     }
 
     /**
@@ -305,6 +317,90 @@ public class Board extends JPanel implements GameSession.View {
         whiteClock.reset();
         blackClock.reset();
         whiteClock.start();
+        // a new game keeps none of the times the finished one left behind
+        clockSnapshots.clear();
+        clockSnapshots.add(new long[]{whiteClock.getTimeMs(), blackClock.getTimeMs()});
+        fireGameChanged();
+    }
+
+    /**
+     * Remembers what both clocks show after the move that was just played.
+     * <p>
+     * Taking a move back has to give both players the time they had before it, and only the clocks
+     * themselves know that. I store both remaining times under the ply the game is at now. A move
+     * played after something was taken back drops the snapshots of the line that was abandoned, so
+     * the list always describes the game as it really went.
+     * <p>
+     * Time complexity: O(d) for the d snapshots of an abandoned line, O(1) otherwise.
+     * Space complexity: O(1) per played move.
+     *
+     * @param pPly how many moves have been played, 1 after the first move
+     */
+    @Override
+    public void recordClocks(int pPly) {
+        // a new move after an undo replaces the times of the line nobody is playing any more
+        while (clockSnapshots.size() > pPly) {
+            clockSnapshots.remove(clockSnapshots.size() - 1);
+        }
+        clockSnapshots.add(new long[]{whiteClock.getTimeMs(), blackClock.getTimeMs()});
+    }
+
+    /**
+     * Puts both clocks back to what they showed at a ply and starts the one of the player to move.
+     * <p>
+     * A taken back move gives the time back that was spent on it. I stop both clocks, set them to
+     * the times recorded for that ply and start the clock of whoever is to move there. A ply nobody
+     * recorded, which can only happen for a game that was loaded rather than played, leaves the
+     * times alone and only hands the clock over.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pPly         how many moves are played now, 0 at the starting position
+     * @param pWhiteToMove true if White is to move at that ply
+     */
+    @Override
+    public void restoreClocks(int pPly, boolean pWhiteToMove) {
+        whiteClock.stop();
+        blackClock.stop();
+
+        if (pPly < clockSnapshots.size()) {
+            long[] times = clockSnapshots.get(pPly);
+            whiteClock.setTimeMs(times[0]);
+            blackClock.setTimeMs(times[1]);
+        }
+
+        // the player to move is the one whose clock runs
+        if (pWhiteToMove) {
+            whiteClock.start();
+        } else {
+            blackClock.start();
+        }
+        fireGameChanged();
+    }
+
+    /**
+     * Sets who is told when the game changed.
+     * <p>
+     * The buttons beside the board have to know whether there is a move to take back or to play
+     * again, and only the session knows that. Every change it makes reaches this board through one
+     * of the clock methods, so those are where the news is passed on.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pListener run after every change to the game, or null for nobody
+     */
+    public void setGameChangedListener(Runnable pListener) {
+        this.onGameChanged = pListener == null ? () -> {
+        } : pListener;
+    }
+
+    /**
+     * Tells the listener that the game changed.
+     * <p>
+     * Time complexity: O(1) beyond whatever the listener does. Space complexity: O(1).
+     */
+    private void fireGameChanged() {
+        onGameChanged.run();
     }
 
     /**

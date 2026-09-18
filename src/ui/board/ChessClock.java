@@ -151,6 +151,29 @@ public class ChessClock {
     }
 
     /**
+     * Puts this clock back to a time it showed earlier.
+     * <p>
+     * Taking a move back has to give both players exactly the time they had before that move, or
+     * undo would quietly hand out or steal thinking time. I bank the time that is given and count
+     * from this moment on, so the seconds that passed before the restore are not subtracted a second
+     * time. An unlimited clock has no time to put back.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pTimeMs remaining time in milliseconds, values below 0 are treated as 0
+     */
+    public void setTimeMs(long pTimeMs) {
+        // an unlimited clock never counts down, so there is nothing to restore
+        if (START_TIME_MS == 0) {
+            return;
+        }
+        bankedMs = Math.max(0, pTimeMs);
+        timeMs = bankedMs;
+        // a running clock counts from now, not from when it was last started
+        runningSinceNanos = System.nanoTime();
+    }
+
+    /**
      * Refreshes the display and detects when the time has run out.
      * <p>
      * The Swing timer calls this ten times a second. A stopped clock is ignored and an unlimited
