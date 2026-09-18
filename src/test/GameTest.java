@@ -1471,6 +1471,101 @@ public class GameTest {
         });
 
         // =================================================================
+        System.out.println("\n-- Search --------------------------------------------------------");
+        // =================================================================
+
+        test("Searcher: finds a mate in one", () -> {
+            // the black king is walled in by its own pawns, so the rook mates on the back rank
+            Position position = Fen.parse("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1");
+            Searcher.Result result = new Searcher().search(position, Searcher.Limits.toDepth(3));
+
+            checkEqual("a1a8", Moves.toUci(result.bestMove), "the rook must go to the back rank");
+            check(result.isMate(), "and the score must say it is mate, got " + result.score);
+            check(result.score > 0, "in favour of the side giving it, got " + result.score);
+        });
+
+        test("Searcher: takes a piece that is there for the taking", () -> {
+            // the black queen stands on a square a pawn attacks and nothing defends
+            Position position = Fen.parse("4k3/8/8/3q4/4P3/8/8/4K3 w - - 0 1");
+            int standingStill = Evaluator.evaluate(position);
+            Searcher.Result result = new Searcher().search(position, Searcher.Limits.toDepth(4));
+
+            checkEqual("e4d5", Moves.toUci(result.bestMove), "the pawn must take the queen");
+            // A score says what the position becomes, not what changed hands. White starts a queen
+            // down and ends a pawn up against a bare king, so the number to expect is a modest plus
+            // rather than the value of a queen. What proves the capture was found is the distance
+            // from where the position stood before it.
+            check(result.score > 0, "taking the queen must leave White ahead, got " + result.score);
+            check(result.score > standingStill + 700,
+                    "and far better than leaving it there, which stood at " + standingStill
+                            + ", got " + result.score);
+        });
+
+        test("Searcher: does not walk into a recapture it cannot afford", () -> {
+            // taking the pawn on d5 loses the queen to the pawn on c6, so a search that stops in the
+            // middle of the exchange would play it and one that follows captures out will not
+            Position position = Fen.parse("4k3/8/2p5/3p4/8/8/8/3QK3 w - - 0 1");
+            Searcher.Result result = new Searcher().search(position, Searcher.Limits.toDepth(4));
+
+            check(!"d1d5".equals(Moves.toUci(result.bestMove)),
+                    "the queen must not take a defended pawn, got " + Moves.toUci(result.bestMove));
+        });
+
+        test("Searcher: leaves the position exactly as it found it", () -> {
+            // a search makes and takes back thousands of moves, and one that does not match up
+            // leaves a board that looks right long before anybody notices it is not
+            String fen = "r3k2r/pp3ppp/2n2n2/2bpp3/4P3/2NP1N2/PPP2PPP/R1B1KB1R w KQkq - 4 8";
+            Position position = Fen.parse(fen);
+            long keyBefore = position.key();
+
+            new Searcher().search(position, Searcher.Limits.toDepth(4));
+
+            checkEqual(fen, Fen.write(position), "every move must have been taken back");
+            checkEqual(keyBefore, position.key(), "and the position key must be back where it was");
+            checkEqual(position.computeKey(), position.key(), "and must still be the honest one");
+        });
+
+        test("Searcher: a position with no move at all reports none", () -> {
+            // stalemate: Black is not in check and has nothing to play
+            Position stalemate = Fen.parse("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1");
+            Searcher.Result result = new Searcher().search(stalemate, Searcher.Limits.toDepth(2));
+
+            checkEqual(Moves.NONE, result.bestMove, "there is no move to report");
+            checkEqual(0, result.score, "and a stalemate is a draw");
+        });
+
+        test("Searcher: a node limit stops it early", () -> {
+            Position position = Fen.parse(Fen.START_POSITION);
+            Searcher.Result limited = new Searcher().search(position,
+                    new Searcher.Limits(64, 4000, Long.MAX_VALUE));
+
+            check(limited.nodes <= 4000 + MoveGen.MAX_MOVES,
+                    "the search must stop near its node limit, visited " + limited.nodes);
+            check(limited.depth < 64, "and must not have finished all 64 depths, got " + limited.depth);
+        });
+
+        test("Searcher: looking deeper finds the line it expects to follow", () -> {
+            Position position = Fen.parse("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1");
+            Searcher.Result result = new Searcher().search(position, Searcher.Limits.toDepth(3));
+
+            check(result.line.length >= 1, "a search that found a move must say what it expects");
+            checkEqual(result.bestMove, result.line[0], "the line must start with the move it would play");
+            check(result.lineText().startsWith("a1a8"),
+                    "and must read as moves, got: " + result.lineText());
+        });
+
+        test("Searcher: searching on its own thread leaves the original position alone", () -> {
+            String fen = "r3k2r/pp3ppp/2n2n2/2bpp3/4P3/2NP1N2/PPP2PPP/R1B1KB1R w KQkq - 4 8";
+            Position position = Fen.parse(fen);
+
+            Searcher.Result result = Searcher.searchOnThread(position, Searcher.Limits.toDepth(3));
+
+            checkNotNull(result, "the thread must hand a result back");
+            check(result.bestMove != Moves.NONE, "and must have found a move");
+            checkEqual(fen, Fen.write(position), "the position handed in must not have been touched");
+        });
+
+        // =================================================================
         System.out.println("\n-- EndScreen ----------------------------------------------------");
         // =================================================================
 
