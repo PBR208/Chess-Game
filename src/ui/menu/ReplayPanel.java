@@ -19,12 +19,13 @@ import ui.theme.UiComponents;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.text.BadLocationException;
 import java.awt.*;
-import java.awt.image.BufferedImage;
+import java.awt.datatransfer.StringSelection;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 public class ReplayPanel extends JPanel {
 
@@ -34,6 +35,9 @@ public class ReplayPanel extends JPanel {
     // what the parsed board holds where no piece stands, written as its code so this file needs
     // no escape sequence of its own
     private static final char EMPTY_SQUARE = (char) 0;
+
+    // a move list line reads "  1.  e4        e5", so past this column the line is Black's move
+    private static final int BLACK_MOVE_COLUMN = 15;
 
     // Board-tile colors mirror ui.board.Board's own palette
     private static final Color LIGHT_TILE = new Color(232, 235, 239);
@@ -52,6 +56,9 @@ public class ReplayPanel extends JPanel {
     // when that size changes and kept for every repaint that does not change it.
     private PieceSprites sprites;
     private int spriteTileSize;
+
+    // true while the board is turned round, so a game is looked at from Black's side
+    private boolean flipped;
 
     /**
      * Builds the replay view for one saved game.
@@ -125,6 +132,20 @@ public class ReplayPanel extends JPanel {
         nav.add(next);
         nav.add(last);
 
+        JButton flip = textButton("Flip", "flip");
+        flip.addActionListener(e -> {
+            flipped = !flipped;
+            refresh(boardCanvas);
+        });
+        JButton copyFen = textButton("Copy FEN", "copyFen");
+        copyFen.addActionListener(e -> copyToClipboard(fens.get(cursor)));
+        JButton copyMoves = textButton("Copy moves", "copyMoves");
+        copyMoves.addActionListener(e -> copyToClipboard(movetext()));
+
+        nav.add(flip);
+        nav.add(copyFen);
+        nav.add(copyMoves);
+
         boardPanel.add(boardCanvas, BorderLayout.CENTER);
         boardPanel.add(nav, BorderLayout.SOUTH);
 
@@ -147,6 +168,17 @@ public class ReplayPanel extends JPanel {
         moveHistoryArea.setForeground(new Color(210, 210, 210));
         moveHistoryArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         moveHistoryArea.setMargin(new Insets(8, 8, 8, 8));
+        // the move list was a list to look at, and the position it names was four buttons away
+        moveHistoryArea.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent pEvent) {
+                int frame = frameAt(pEvent.getPoint());
+                if (frame >= 0 && frame < fens.size()) {
+                    cursor = frame;
+                    refresh(boardCanvas);
+                }
+            }
+        });
 
         JScrollPane moveScroll = new JScrollPane(moveHistoryArea);
         moveScroll.setBorder(BorderFactory.createEmptyBorder());
@@ -306,7 +338,9 @@ public class ReplayPanel extends JPanel {
                 g2d.setColor((col + row) % 2 == 0 ? LIGHT_TILE : DARK_TILE);
                 g2d.fillRect(col * tileSize, row * tileSize, tileSize, tileSize);
 
-                char c = grid[row][col];
+                // turning the board round means reading the position from the other end. The square
+                // colours need no turning, because a square keeps its colour either way round.
+                char c = flipped ? grid[7 - row][7 - col] : grid[row][col];
                 if (c != EMPTY_SQUARE && PIECE_LETTERS.indexOf(c) >= 0) {
                     // the sprite is already scaled to this board's squares, so it is drawn as it is
                     g2d.drawImage(sprites.spriteForPiece(Pieces.fromFenChar(c)),
@@ -314,6 +348,96 @@ public class ReplayPanel extends JPanel {
                 }
             }
         }
+    }
+
+    /**
+     * Works out which frame of the game a point in the move list belongs to.
+     * <p>
+     * Every line of the list holds one full move, White's first and Black's behind it at a fixed
+     * column, because the list is laid out in a monospaced font. So the line gives the move number
+     * and the column says which half was clicked. The frame that shows a move is the one after it,
+     * and frame zero is the board before anybody moved, which is why the ply gets one added to it.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pPoint point inside the move list, never null
+     * @return the frame that shows the clicked move, or -1 when no move was hit
+     */
+    private int frameAt(Point pPoint) {
+        try {
+            int offset = moveHistoryArea.viewToModel2D(pPoint);
+            int line = moveHistoryArea.getLineOfOffset(offset);
+            int column = offset - moveHistoryArea.getLineStartOffset(line);
+            // the first half of a line is White's move, the rest is Black's
+            int half = column < BLACK_MOVE_COLUMN ? 0 : 1;
+            return line * 2 + half + 1;
+        } catch (BadLocationException e) {
+            // a click past the end of the text names no move
+            return -1;
+        }
+    }
+
+    /**
+     * Writes the moves of the game the way a move list is written.
+     * <p>
+     * Somebody looking at an old game usually wants to put it somewhere else, into a note, a message
+     * or another program, and retyping thirty moves is nobody's idea of a good time. This is the
+     * movetext alone, with a number in front of every move of White. The panel is handed the moves
+     * and the positions and nothing else, so it cannot write the tags a complete PGN file needs.
+     * <p>
+     * Time complexity: O(m) for the m moves. Space complexity: O(m) for the text.
+     *
+     * @return the moves as one line of text, never null
+     */
+    private String movetext() {
+        StringBuilder text = new StringBuilder();
+        for (int index = 0; index < moves.size(); index++) {
+            // a move number stands in front of White's move only
+            if (index % 2 == 0) {
+                text.append(index / 2 + 1).append(". ");
+            }
+            text.append(moves.get(index)).append(' ');
+        }
+        return text.toString().trim();
+    }
+
+    /**
+     * Puts a piece of text on the system clipboard.
+     * <p>
+     * Copying is a convenience, so it must never be the reason anything goes wrong. A machine
+     * without a clipboard, and one whose clipboard another program is holding at that moment, both
+     * end here quietly rather than throwing out of a button press.
+     * <p>
+     * Time complexity: O(n) in the length of the text. Space complexity: O(n).
+     *
+     * @param pText the text to copy, never null
+     */
+    private void copyToClipboard(String pText) {
+        try {
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(pText), null);
+        } catch (IllegalStateException | HeadlessException problem) {
+            // nothing to copy to, which is not worth interrupting anybody over
+        }
+    }
+
+    /**
+     * Creates one of the small text buttons beside the navigation arrows.
+     * <p>
+     * Flip and the two copy actions are words rather than arrows, so they need a wider button and a
+     * smaller font than the arrows do. I style them with the same dark look and name each one, so a
+     * test can find it whatever the button says.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the button.
+     *
+     * @param pText text on the button, never null
+     * @param pName component name that identifies it, never null
+     * @return the finished button, never null
+     */
+    private JButton textButton(String pText, String pName) {
+        JButton b = UiComponents.button(pText, new Font(Font.SANS_SERIF, Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
+        b.setName(pName);
+        b.setPreferredSize(new Dimension(92, 32));
+        return b;
     }
 
     /**
