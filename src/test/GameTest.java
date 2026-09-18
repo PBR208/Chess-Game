@@ -1566,6 +1566,71 @@ public class GameTest {
         });
 
         // =================================================================
+        System.out.println("\n-- Analysis ------------------------------------------------------");
+        // =================================================================
+
+        test("Analyst: a hint is the move the search would play", () -> {
+            Position position = Fen.parse("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1");
+            Searcher.Result hint = new Analyst().analyse(position, Searcher.Limits.toDepth(3));
+
+            checkEqual("a1a8", Moves.toUci(hint.bestMove), "the hint must be the mate that is there");
+            checkEqual("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1", Fen.write(position),
+                    "and asking for it must not disturb the position being looked at");
+        });
+
+        test("Analyst: a threat is what the other side would do if you did nothing", () -> {
+            // White to move, but Black's rook mates on the back rank the moment White wastes a move.
+            // White keeps its f2, g2 and h2 pawns, which is what seals the king in: without them it
+            // simply steps up a rank and there is no threat worth naming.
+            Position position = Fen.parse("r5k1/5ppp/8/8/8/8/5PPP/6K1 w - - 0 1");
+            int threat = new Analyst().threatMove(position, Searcher.Limits.toDepth(2));
+
+            check(threat != Moves.NONE, "there must be a threat to report");
+            checkEqual("a8a1", Moves.toUci(threat), "and it must be the mate Black is threatening");
+            checkEqual(Pieces.WHITE, position.sideToMove(),
+                    "looking at the threat must leave it White's turn");
+        });
+
+        test("Analyst: a check leaves nothing to show but the check", () -> {
+            // handing the turn over while in check would describe a board where a king can be taken
+            Position position = Fen.parse("6k1/8/8/8/8/8/8/r5K1 w - - 0 1");
+            checkEqual(Moves.NONE, new Analyst().threatMove(position, Searcher.Limits.toDepth(2)),
+                    "a side that is in check has nothing to worry about except the check");
+        });
+
+        test("Analyst: a move is judged by what it gave away", () -> {
+            // both numbers are read from the point of view of the player who moved
+            check(Analyst.isBlunder(50, -200), "throwing away two and a half pawns is a blunder");
+            check(!Analyst.isBlunder(50, 20), "and giving up a third of a pawn is not");
+            check(Analyst.isMistake(50, -60), "a mistake is smaller than a blunder");
+            check(!Analyst.isMistake(50, -200), "and a blunder is not also called a mistake");
+            check(!Analyst.isBlunder(-200, 50), "a move that gains ground is neither");
+            checkEqual(250, Analyst.costOf(50, -200), "the cost is the ground that was lost");
+        });
+
+        test("Searcher: a search can be called off while it is running", () -> {
+            String fen = "r3k2r/pp3ppp/2n2n2/2bpp3/4P3/2NP1N2/PPP2PPP/R1B1KB1R w KQkq - 4 8";
+            Position position = Fen.parse(fen);
+            Searcher searcher = new Searcher();
+            Searcher.Result[] result = new Searcher.Result[1];
+
+            // deep enough that it would run for a very long time if nobody stopped it
+            Thread thinking = new Thread(() ->
+                    result[0] = searcher.search(position, Searcher.Limits.toDepth(40)), "long search");
+            thinking.start();
+
+            // let it get going, so stopping is not lost against the search clearing the flag
+            Thread.sleep(150);
+            searcher.stop();
+            thinking.join(15_000);
+
+            check(!thinking.isAlive(), "a search that was called off must stop rather than run on");
+            checkNotNull(result[0], "and must still hand back what it had finished");
+            checkEqual(fen, Fen.write(position),
+                    "and must leave the position as it found it even when cut short");
+        });
+
+        // =================================================================
         System.out.println("\n-- EndScreen ----------------------------------------------------");
         // =================================================================
 

@@ -71,7 +71,10 @@ public final class Searcher {
     private long nodes;
     private long deadline;
     private long nodeLimit;
-    private boolean stopped;
+
+    // Read by the search and written by whoever calls it off, which are different threads, so this
+    // has to be volatile: without it the search is free to keep reading a cached false for ever.
+    private volatile boolean stopped;
 
     /**
      * Purpose: Limits says when a search has to stop. A search can be bounded by how deep it looks,
@@ -608,6 +611,19 @@ public final class Searcher {
         long pawns = pPosition.pieces(Pieces.make(pColour, Pieces.PAWN));
         long king = pPosition.pieces(Pieces.make(pColour, Pieces.KING));
         return (pPosition.occupancy(pColour) & ~pawns & ~king) != 0L;
+    }
+
+    /**
+     * Calls off a search that is running.
+     * <p>
+     * A search started for somebody who has since moved on is work nobody will read, and analysis in
+     * particular is asked for constantly and wanted briefly. The search notices at its next position
+     * rather than at once, which is close enough: it checks between every one of them.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
+    public void stop() {
+        stopped = true;
     }
 
     /**
