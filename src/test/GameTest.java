@@ -1777,12 +1777,16 @@ public class GameTest {
                 "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2"
         );
 
-        test("ReplayPanel: displays first position's move label on construction", () ->
+        // three recorded positions plus the board before anybody moved makes four frames
+        test("ReplayPanel: opens on the position before anybody moved", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
                     JLabel lbl = findMoveLabel(p);
                     checkNotNull(lbl, "ReplayPanel must show a move-index label");
-                    check(lbl.getText().contains("1/3"), "Should start at position 1 of 3, got: " + lbl.getText());
+                    check(lbl.getText().contains("1/4"),
+                            "the starting position is the first of four frames, got: " + lbl.getText());
+                    check(lbl.getText().contains("Start position"),
+                            "and it belongs to no move, got: " + lbl.getText());
                 }));
 
         test("ReplayPanel: next button advances position", () ->
@@ -1792,7 +1796,9 @@ public class GameTest {
                     checkNotNull(next, "Must have a next button");
                     next.doClick();
                     JLabel lbl = findMoveLabel(p);
-                    check(lbl.getText().contains("2/3"), "Should be at position 2 of 3, got: " + lbl.getText());
+                    check(lbl.getText().contains("2/4"), "Should be at position 2 of 4, got: " + lbl.getText());
+                    check(lbl.getText().contains("(White)"),
+                            "the second frame follows White's first move, got: " + lbl.getText());
                 }));
 
         test("ReplayPanel: last button jumps to final position", () ->
@@ -1802,7 +1808,7 @@ public class GameTest {
                     checkNotNull(last, "Must have a last button");
                     last.doClick();
                     JLabel lbl = findMoveLabel(p);
-                    check(lbl.getText().contains("3/3"), "Should be at the final position, got: " + lbl.getText());
+                    check(lbl.getText().contains("4/4"), "Should be at the final position, got: " + lbl.getText());
                 }));
 
         test("ReplayPanel: next button does not overrun the list", () ->
@@ -1811,7 +1817,7 @@ public class GameTest {
                     AbstractButton next = findButton(p, "next");
                     for (int i = 0; i < 10; i++) next.doClick(); // click far past the end
                     JLabel lbl = findMoveLabel(p);
-                    check(lbl.getText().contains("3/3"), "Cursor must clamp at the last position, got: " + lbl.getText());
+                    check(lbl.getText().contains("4/4"), "Cursor must clamp at the last position, got: " + lbl.getText());
                 }));
 
         test("ReplayPanel: first button returns to position 1", () ->
@@ -1822,7 +1828,7 @@ public class GameTest {
                     checkNotNull(first, "Must have a first button");
                     first.doClick();
                     JLabel lbl = findMoveLabel(p);
-                    check(lbl.getText().contains("1/3"), "Should be back at position 1, got: " + lbl.getText());
+                    check(lbl.getText().contains("1/4"), "Should be back at position 1, got: " + lbl.getText());
                 }));
 
         test("ReplayPanel: prev button does not underrun position 1", () ->
@@ -1831,7 +1837,7 @@ public class GameTest {
                     AbstractButton prev = findButton(p, "previous");
                     for (int i = 0; i < 5; i++) prev.doClick(); // click before the start
                     JLabel lbl = findMoveLabel(p);
-                    check(lbl.getText().contains("1/3"), "Cursor must clamp at the first position, got: " + lbl.getText());
+                    check(lbl.getText().contains("1/4"), "Cursor must clamp at the first position, got: " + lbl.getText());
                 }));
 
         test("ReplayPanel: empty FEN list shows 'No moves' without throwing", () ->

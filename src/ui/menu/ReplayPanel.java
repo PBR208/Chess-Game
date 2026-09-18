@@ -10,6 +10,7 @@ package ui.menu;
  * Version: 1.0
  */
 
+import engine.core.Fen;
 import engine.persistence.FenLoader;
 import ui.board.PieceSprites;
 import ui.theme.Theme;
@@ -19,6 +20,7 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,7 +72,13 @@ public class ReplayPanel extends JPanel {
      */
     public ReplayPanel(List<String> pMoves, List<String> pFens) {
         this.moves = pMoves;
-        this.fens = pFens;
+        // the replay used to open on the position after White's first move, so the one position
+        // every game has in common, the board before anybody moved, could not be looked at at all.
+        // The frames start there now, which also gives a game with no moves something to show.
+        List<String> frames = new ArrayList<>(pFens.size() + 1);
+        frames.add(Fen.START_POSITION);
+        frames.addAll(pFens);
+        this.fens = frames;
         setBackground(Theme.BG);
         setLayout(new BorderLayout());
 
@@ -241,11 +249,35 @@ public class ReplayPanel extends JPanel {
         moveHistoryArea.setCaretPosition(0);
     }
 
+    /**
+     * Describes the frame the replay is showing.
+     * <p>
+     * The first frame is the board before anybody moved, which belongs to no move and says so. Every
+     * frame after it follows one half move, so the move number and whose move it was are worked out
+     * from the frame index with the starting position taken back off. A game without moves says so
+     * rather than counting a single frame.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(n) for the line of text.
+     *
+     * @return the line shown between the navigation buttons, never null
+     */
+    private String positionText() {
+        // a saved game with no moves in it has nothing to step through
+        if (moves.isEmpty()) {
+            return "No moves";
+        }
+        if (cursor == 0) {
+            return "Start position - position 1/" + fens.size();
+        }
+        // frame one follows the first half move, so the moves are counted from there
+        int move = (cursor - 1) / 2 + 1;
+        String who = (cursor - 1) % 2 == 0 ? "White" : "Black";
+        return "After move " + move + " (" + who + ") - position " + (cursor + 1) + "/" + fens.size();
+    }
+
     private String moveText() {
         if (fens.isEmpty()) return "No moves";
-        int move = cursor / 2 + 1;
-        String who = cursor % 2 == 0 ? "White" : "Black";
-        return "After move " + move + " (" + who + ") \u2014 position " + (cursor + 1) + "/" + fens.size();
+        return positionText();
     }
 
     private void drawPosition(Graphics2D g2d, int width, int height) {
