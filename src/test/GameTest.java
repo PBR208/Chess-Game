@@ -428,6 +428,25 @@ public class GameTest {
     }
 
     /**
+     * Reads the colour in the middle of one board square out of a painted board.
+     * <p>
+     * The board turns round to face the side to move, so the same square is at a different pixel
+     * after every move. Asking the board where it drew a square is the only reading that stays right.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pBoard  board that painted the image, never null
+     * @param pImage  the painted board, never null
+     * @param pSquare square to sample, 0 to 63
+     * @return the colour of that square's middle pixel
+     */
+    private static int centreColour(Board pBoard, BufferedImage pImage, int pSquare) {
+        int half = pBoard.getTileSize() / 2;
+        return pImage.getRGB(pBoard.toVisualX(Board.colOf(pSquare)) + half,
+                pBoard.toVisualY(Board.rowOf(pSquare)) + half);
+    }
+
+    /**
      * Counts how many components of the given class exist in the tree.
      */
     private static int countComponents(Container c, Class<?> type) {
@@ -1365,6 +1384,64 @@ public class GameTest {
         // =================================================================
         System.out.println("\n-- Input and accessibility ---------------------------------------");
         // =================================================================
+
+        test("Board: the move that was just played is remembered", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    check(board.getLastMoveFrom() < 0, "a game nobody has moved in has no last move");
+
+                    GameSession session = board.getSession();
+                    int from = Bitboards.squareOf("e2");
+                    int to = Bitboards.squareOf("e4");
+                    check(board.playMove(session.moveFor(from, to)), "the move must be played");
+                    checkEqual(from, board.getLastMoveFrom(), "the square it came from must be remembered");
+                    checkEqual(to, board.getLastMoveTo(), "and the square it went to");
+                }));
+
+        test("Board: a move nobody can play marks nothing", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    check(!board.playMove(Moves.NONE), "a pair of squares that is no move must be refused");
+                    check(board.getLastMoveFrom() < 0, "and must not mark a square");
+                    check(board.getSession().getMoveLog().isEmpty(), "and must not reach the game");
+                }));
+
+        test("Board: the king that is in check is the square that gets marked", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    GameSession session = board.getSession();
+                    check(board.checkSquare() < 0, "nobody is in check at the start");
+
+                    // 1. e4 f5 2. Qh5+, the quickest check there is, once f7 is out of the way
+                    board.playMove(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+                    board.playMove(session.moveFor(Bitboards.squareOf("f7"), Bitboards.squareOf("f5")));
+                    check(board.checkSquare() < 0, "still nobody is in check");
+
+                    board.playMove(session.moveFor(Bitboards.squareOf("d1"), Bitboards.squareOf("h5")));
+                    checkEqual(Bitboards.squareOf("e8"), board.checkSquare(),
+                            "the black king must be the square that is marked");
+                }));
+
+        test("Board: the square a piece came from is really marked on the board", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    GameSession session = board.getSession();
+                    board.playMove(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+
+                    int width = board.getPreferredSize().width;
+                    int height = board.getPreferredSize().height;
+                    board.setSize(width, height);
+                    BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+                    Graphics2D graphics = image.createGraphics();
+                    board.paintComponent(graphics);
+                    graphics.dispose();
+
+                    // e2 stands empty now and carries the mark, b3 is an empty square of the same
+                    // shade that nothing marked, so the two may not come out the same colour
+                    int marked = centreColour(board, image, Bitboards.squareOf("e2"));
+                    int plain = centreColour(board, image, Bitboards.squareOf("b3"));
+                    check(marked != plain, "the square the pawn came from must be marked");
+                }));
 
         test("Theme: the board markings can be told apart without seeing colour", () -> {
             Color[] markings = {Theme.HINT, Theme.LAST_MOVE, Theme.CHECK};

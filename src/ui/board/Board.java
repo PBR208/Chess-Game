@@ -14,6 +14,7 @@ package ui.board;
 import engine.core.Bitboards;
 import engine.core.GameSession;
 import engine.core.MoveGen;
+import engine.core.Moves;
 import engine.core.Pieces;
 import engine.model.GameConfig;
 import ui.theme.Theme;
@@ -50,6 +51,10 @@ public class Board extends JPanel implements GameSession.View {
     // pixel position of the dragged piece, it follows the mouse instead of sitting on its square
     private int dragX;
     private int dragY;
+
+    // the two squares of the move that was played last, or NO_SQUARE before anybody has moved
+    private int lastMoveFrom = NO_SQUARE;
+    private int lastMoveTo = NO_SQUARE;
 
     // piece images scaled to this board's square size
     private final PieceSprites sprites;
@@ -186,10 +191,24 @@ public class Board extends JPanel implements GameSession.View {
             }
         }
 
+        // the move that was just played, under the hints so a square a piece may go to still wins
+        if (lastMoveFrom >= 0) {
+            g2d.setColor(Theme.LAST_MOVE);
+            g2d.fillRect(toVisualX(colOf(lastMoveFrom)), toVisualY(rowOf(lastMoveFrom)), tileSize, tileSize);
+            g2d.fillRect(toVisualX(colOf(lastMoveTo)), toVisualY(rowOf(lastMoveTo)), tileSize, tileSize);
+        }
+
         // the squares a picked up piece may go to
         for (int index = 0; index < targetCount; index++) {
             g2d.setColor(HINT_COLOR);
             g2d.fillRect(toVisualX(colOf(targets[index])), toVisualY(rowOf(targets[index])), tileSize, tileSize);
+        }
+
+        // a king in check, over everything else, because it is the most urgent thing on the board
+        int checkedKing = checkSquare();
+        if (checkedKing >= 0) {
+            g2d.setColor(Theme.CHECK);
+            g2d.fillRect(toVisualX(colOf(checkedKing)), toVisualY(rowOf(checkedKing)), tileSize, tileSize);
         }
 
         for (int square = 0; square < Bitboards.SQUARE_COUNT; square++) {
@@ -244,6 +263,72 @@ public class Board extends JPanel implements GameSession.View {
     public void clearSelection() {
         selectedSquare = NO_SQUARE;
         targetCount = 0;
+    }
+
+    /**
+     * Plays a move and remembers which two squares it used.
+     * <p>
+     * Every move a player makes comes through here, whether it was dragged, clicked or typed, so one
+     * place knows what was played last and the board can mark it. A player who looked away for a
+     * moment otherwise has to work out what changed by comparing the position with their memory of
+     * it. The session still decides whether the move is legal, and a move it refuses marks nothing.
+     * <p>
+     * Time complexity: O(m) for the m legal moves the session checks, plus the cost of the move.
+     * Space complexity: O(1).
+     *
+     * @param pMove packed move to play, or Moves.NONE when the two squares make no move at all
+     * @return true if the move was played
+     */
+    public boolean playMove(int pMove) {
+        // a pair of squares that is no legal move simply puts the piece back
+        if (pMove == Moves.NONE || !session.play(pMove)) {
+            return false;
+        }
+        lastMoveFrom = Moves.from(pMove);
+        lastMoveTo = Moves.to(pMove);
+        repaint();
+        return true;
+    }
+
+    /**
+     * Returns the square of a king that is in check.
+     * <p>
+     * A check is the one thing on the board a player must not miss, and spotting it means scanning
+     * the whole position for whatever is attacking the king. Only the side to move can be in check,
+     * because the other side being in check would mean the move before it was illegal.
+     * <p>
+     * Time complexity: O(1), a handful of attack lookups. Space complexity: O(1).
+     *
+     * @return the square the king in check stands on, or -1 when nobody is in check
+     */
+    public int checkSquare() {
+        int sideToMove = session.position().sideToMove();
+        if (!MoveGen.isInCheck(session.position(), sideToMove)) {
+            return NO_SQUARE;
+        }
+        return session.position().kingSquare(sideToMove);
+    }
+
+    /**
+     * Returns the square the last move started from.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the square, or -1 before anybody has moved
+     */
+    public int getLastMoveFrom() {
+        return lastMoveFrom;
+    }
+
+    /**
+     * Returns the square the last move ended on.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the square, or -1 before anybody has moved
+     */
+    public int getLastMoveTo() {
+        return lastMoveTo;
     }
 
     /**

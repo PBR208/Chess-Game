@@ -12,7 +12,6 @@ package ui.board;
  */
 
 import engine.core.GameSession;
-import engine.core.Moves;
 
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -91,11 +90,8 @@ public class Input extends MouseAdapter {
 
         if (from >= 0 && board.isOnBoard(pEvent.getX(), pEvent.getY())) {
             int to = Board.squareAt(board.toLogicalCol(pEvent.getX()), board.toLogicalRow(pEvent.getY()));
-            int move = session.moveFor(from, to);
-            // a pair of squares that is no legal move simply puts the piece back
-            if (move != Moves.NONE) {
-                session.play(move);
-            }
+            // the board plays it, so the move that was just made is marked whoever entered it
+            board.playMove(session.moveFor(from, to));
         }
 
         board.clearSelection();
