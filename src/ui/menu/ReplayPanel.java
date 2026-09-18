@@ -11,6 +11,7 @@ package ui.menu;
  */
 
 import engine.core.Fen;
+import engine.core.Pieces;
 import engine.persistence.FenLoader;
 import ui.board.PieceSprites;
 import ui.theme.Theme;
@@ -27,23 +28,12 @@ import java.util.Map;
 
 public class ReplayPanel extends JPanel {
 
-    // Spritesheet column order: King=0, Queen=1, Bishop=2, Knight=3, Rook=4, Pawn=5
-    private static final Map<Character, Integer> PIECE_COL = new HashMap<>();
+    // the letters a FEN uses for pieces, which is also the check for whether a square holds one
+    private static final String PIECE_LETTERS = "kKqQbBnNrRpP";
 
-    static {
-        PIECE_COL.put('k', 0);
-        PIECE_COL.put('K', 0);
-        PIECE_COL.put('q', 1);
-        PIECE_COL.put('Q', 1);
-        PIECE_COL.put('b', 2);
-        PIECE_COL.put('B', 2);
-        PIECE_COL.put('n', 3);
-        PIECE_COL.put('N', 3);
-        PIECE_COL.put('r', 4);
-        PIECE_COL.put('R', 4);
-        PIECE_COL.put('p', 5);
-        PIECE_COL.put('P', 5);
-    }
+    // what the parsed board holds where no piece stands, written as its code so this file needs
+    // no escape sequence of its own
+    private static final char EMPTY_SQUARE = (char) 0;
 
     // Board-tile colors mirror ui.board.Board's own palette
     private static final Color LIGHT_TILE = new Color(232, 235, 239);
@@ -56,6 +46,12 @@ public class ReplayPanel extends JPanel {
     private final JLabel moveLabel;
     private final JTextArea moveHistoryArea;
     private final JTextArea fenArea;
+
+    // piece images scaled to the size this board is currently drawn at, and the size they were
+    // scaled for. The replay board grows and shrinks with the window, so the cache is thrown away
+    // when that size changes and kept for every repaint that does not change it.
+    private PieceSprites sprites;
+    private int spriteTileSize;
 
     /**
      * Builds the replay view for one saved game.
@@ -291,10 +287,19 @@ public class ReplayPanel extends JPanel {
 
         // Calculate tile size based on available space
         int tileSize = Math.min(width, height) / 8;
+        // a panel that has not been laid out yet has no room for a board
+        if (tileSize <= 0) {
+            return;
+        }
+
+        // every repaint used to cut all of the pieces out of the sheet again and scale each one
+        // while drawing it. They are scaled once per board size now and reused after that.
+        if (sprites == null || spriteTileSize != tileSize) {
+            sprites = new PieceSprites(tileSize);
+            spriteTileSize = tileSize;
+        }
 
         char[][] grid = FenLoader.parse(fens.get(cursor));
-        BufferedImage sheet = PieceSprites.getSheet();
-        int scale = PieceSprites.getSheetScale();
 
         for (int row = 0; row < 8; row++) {
             for (int col = 0; col < 8; col++) {
@@ -302,14 +307,10 @@ public class ReplayPanel extends JPanel {
                 g2d.fillRect(col * tileSize, row * tileSize, tileSize, tileSize);
 
                 char c = grid[row][col];
-                if (c != '\0' && sheet != null && PIECE_COL.containsKey(c)) {
-                    int spriteCol = PIECE_COL.get(c);
-                    int spriteRow = Character.isUpperCase(c) ? 0 : 1;
-
-                    BufferedImage sprite = sheet.getSubimage(
-                            spriteCol * scale, spriteRow * scale, scale, scale);
-                    g2d.drawImage(sprite, col * tileSize, row * tileSize,
-                            tileSize, tileSize, null);
+                if (c != EMPTY_SQUARE && PIECE_LETTERS.indexOf(c) >= 0) {
+                    // the sprite is already scaled to this board's squares, so it is drawn as it is
+                    g2d.drawImage(sprites.spriteForPiece(Pieces.fromFenChar(c)),
+                            col * tileSize, row * tileSize, null);
                 }
             }
         }
