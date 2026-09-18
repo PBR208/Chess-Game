@@ -701,6 +701,39 @@ public class GameTest {
         });
 
         // =================================================================
+        System.out.println("\n-- Starting from a set up position -------------------------------");
+        // =================================================================
+
+        test("Board: a game can start from a position that was set up", () -> {
+            // a rook endgame, the kind of position somebody sets up on purpose
+            String fen = "8/8/8/4k3/8/8/4K3/7R w - - 0 1";
+            Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE, Fen.parse(fen));
+
+            checkEqual(fen, Fen.write(board.getSession().position()),
+                    "the board must start on the position it was handed");
+            check(board.getSession().isWhiteToMove(), "White must be to move in that position");
+        });
+
+        test("Board: without a position a game still starts where chess starts", () -> {
+            Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE);
+            checkEqual(Fen.START_POSITION, Fen.write(board.getSession().position()),
+                    "the usual constructor must still give the standard position");
+        });
+
+        test("Board: a game that began from a set up position can be played on", () -> {
+            Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE,
+                    Fen.parse("8/8/8/4k3/8/8/4K3/7R w - - 0 1"));
+            GameSession session = board.getSession();
+
+            // starting somewhere else is worth nothing if the rules do not follow
+            int move = session.moveFor(Bitboards.squareOf("h1"), Bitboards.squareOf("h8"));
+            check(session.play(move), "a legal move in the set up position must be accepted");
+            checkEqual(1, session.getMoveLog().size(), "the move must be written down");
+            checkEqual("Rh8", session.getMoveLog().get(0), "and written down correctly");
+            check(!session.isWhiteToMove(), "the turn must pass to Black");
+        });
+
+        // =================================================================
         System.out.println("\n-- BoardState ---------------------------------------------------");
         // =================================================================
         // BoardState holds the position data that used to live directly on

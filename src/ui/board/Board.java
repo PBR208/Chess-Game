@@ -15,6 +15,7 @@ import engine.core.Bitboards;
 import engine.core.GameSession;
 import engine.core.MoveGen;
 import engine.core.Pieces;
+import engine.core.Position;
 import engine.model.GameConfig;
 
 import javax.swing.*;
@@ -78,13 +79,10 @@ public class Board extends JPanel implements GameSession.View {
     }
 
     /**
-     * Builds the game board for a new game with squares of a given size.
+     * Builds the game board for a new game from the standard starting position.
      * <p>
-     * A game needs a session to play in, two clocks, mouse input and a size that fits the player's
-     * screen. I store the square size first, since everything else is measured in squares, create
-     * the session on the starting position and hand it this board as its view, the promotion dialog
-     * and the draw dialogs, build both clocks with the configured times, size the panel for the board
-     * and the two clock bars, hook up the mouse and start White's clock.
+     * Almost every game begins where chess begins, so this is the constructor the New Game screen
+     * uses. I forward to the full one with the standard starting position.
      * <p>
      * Time complexity: O(p) for the p starting pieces. Space complexity: O(s^2) for the sprites
      * scaled to squares of s pixels.
@@ -95,6 +93,30 @@ public class Board extends JPanel implements GameSession.View {
      * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
      */
     public Board(GameConfig pConfig, int pTileSize) {
+        this(pConfig, pTileSize, Position.startPosition());
+    }
+
+    /**
+     * Builds the game board for a game that starts from a given position.
+     * <p>
+     * A game does not have to begin from the standard position: it can start from one that was set
+     * up in the position editor or loaded from a FEN, which is what studying an endgame needs. The
+     * session already accepts a position to begin from, so this only has to pass one on rather than
+     * place any pieces itself. I store the square size first, since everything else is measured in
+     * squares, create the session on that position and hand it this board as its view, the promotion
+     * dialog and the draw dialogs, build both clocks with the configured times, size the panel for
+     * the board and the two clock bars, hook up the mouse and start White's clock.
+     * <p>
+     * Time complexity: O(p) for the p pieces of the position. Space complexity: O(s^2) for the
+     * sprites scaled to squares of s pixels.
+     *
+     * @param pConfig   names, times and increment of the new game, never null
+     * @param pTileSize edge length of one square in pixels, at least MIN_TILE_SIZE
+     * @param pStart    position the game begins from, never null
+     * @throws NullPointerException     if pConfig or pStart is null
+     * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
+     */
+    public Board(GameConfig pConfig, int pTileSize, Position pStart) {
         // pieces this small would be hard to see and click
         if (pTileSize < MIN_TILE_SIZE) {
             throw new IllegalArgumentException("tile size " + pTileSize + " is below " + MIN_TILE_SIZE);
@@ -104,7 +126,7 @@ public class Board extends JPanel implements GameSession.View {
         // the board draws the pieces, so it owns their images
         this.sprites = new PieceSprites(pTileSize);
 
-        this.session = new GameSession();
+        this.session = new GameSession(pStart);
         session.setView(this);
         session.setPromotionPicker(new SwingPromotionChooser(this));
         session.setDrawArbiter(new SwingDrawOfferResolver(this));

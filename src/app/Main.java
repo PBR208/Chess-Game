@@ -11,8 +11,10 @@ package app;
  * Version: 1.0
  */
 
+import engine.core.Fen;
 import engine.core.GameResult;
 import engine.core.GameSession;
+import engine.core.Position;
 import engine.core.Termination;
 import engine.model.GameConfig;
 import engine.model.GameRecord;
@@ -119,13 +121,37 @@ public class Main {
      * @param pConfig names, times and increment of the new game; null starts an unlimited game
      */
     public static void startGame(GameConfig pConfig) {
+        startGame(pConfig, null);
+    }
+
+    /**
+     * Opens the game screen for a new game that starts from a given position.
+     * <p>
+     * A game can begin from a position that was set up in the editor rather than from the standard
+     * one. I read the FEN into a position, falling back to the standard one when no FEN is given, and
+     * otherwise set the game up exactly as a normal one. The FEN is parsed here rather than trusted,
+     * so an unusable one is refused before a window is built, which the editor prevents anyway by
+     * only offering to start a position it could parse itself.
+     * <p>
+     * Time complexity: O(p) for the p pieces of the position. Space complexity: O(p) for the board.
+     *
+     * @param pConfig   names, times and increment of the new game; null starts an unlimited game
+     * @param pStartFen position to begin from in Forsyth Edwards notation; null or blank starts from
+     *                  the standard position
+     * @throws IllegalArgumentException if pStartFen is not a legal chess position
+     */
+    public static void startGame(GameConfig pConfig, String pStartFen) {
         // no configuration means a casual game without clocks
         final GameConfig cfg = pConfig == null ? GameConfig.unlimited() : pConfig;
+        // no FEN means the game begins where chess begins
+        final Position start = pStartFen == null || pStartFen.isBlank()
+                ? Position.startPosition()
+                : Fen.parse(pStartFen);
 
         SwingUtilities.invokeLater(() -> {
             // squares small enough for the whole game screen to fit on this screen
             Rectangle usableArea = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
-            Board board = new Board(cfg, Board.tileSizeFor(usableArea.width, usableArea.height));
+            Board board = new Board(cfg, Board.tileSizeFor(usableArea.width, usableArea.height), start);
             MoveLogPanel logPanel = new MoveLogPanel(board.getPreferredSize().height);
             GameSession session = board.getSession();
             session.setMoveLogView(logPanel);
