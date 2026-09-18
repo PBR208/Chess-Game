@@ -13,6 +13,7 @@ package app;
 
 import engine.core.GameResult;
 import engine.core.GameSession;
+import engine.core.Pieces;
 import engine.core.Termination;
 import engine.model.GameConfig;
 import engine.model.GameRecord;
@@ -22,6 +23,8 @@ import ui.board.EndScreen;
 import ui.board.MoveLogPanel;
 import ui.menu.MainMenu;
 import ui.menu.PastGamesPanel;
+import ui.theme.Theme;
+import ui.theme.UiComponents;
 
 import javax.swing.*;
 import java.awt.*;
@@ -155,6 +158,7 @@ public class Main {
             gameContainer.setBackground(new Color(28, 28, 30));
             gameContainer.add(board, BorderLayout.CENTER);
             gameContainer.add(logPanel, BorderLayout.EAST);
+            gameContainer.add(actionBar(board), BorderLayout.SOUTH);
 
             JPanel wrapper = new JPanel(new GridBagLayout());
             wrapper.setBackground(new Color(28, 28, 30));
@@ -164,6 +168,66 @@ public class Main {
             frame.revalidate();
             frame.repaint();
         });
+    }
+
+    /**
+     * Builds the row of actions under the board.
+     * <p>
+     * Games between people end by agreement or by resignation far more often than by mate, and until
+     * now neither was possible here. The three actions sit beside the board rather than in a dialog
+     * that interrupts, so they are available without getting in the way. Resigning asks once, because
+     * it is final and a misclick would end the game. Offering a draw goes to the opponent, and
+     * claiming one goes to the rules, which is why claiming is only live while a rule actually allows
+     * it. The session says whenever the game changed, so the buttons are grey exactly when pressing
+     * them would do nothing.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the panel and its three buttons.
+     *
+     * @param pBoard the board of the running game, never null
+     * @return the action row, never null
+     * @throws NullPointerException if pBoard is null
+     */
+    private static JPanel actionBar(Board pBoard) {
+        GameSession session = pBoard.getSession();
+
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 6));
+        bar.setBackground(Theme.PANEL_BG);
+
+        Font buttonFont = new Font(Font.SANS_SERIF, Font.PLAIN, 13);
+        JButton resign = UiComponents.button("Resign", buttonFont, Theme.BUTTON_SECONDARY);
+        resign.setName("resign");
+        JButton offerDraw = UiComponents.button("Offer draw", buttonFont, Theme.BUTTON_SECONDARY);
+        offerDraw.setName("offerDraw");
+        JButton claimDraw = UiComponents.button("Claim draw", buttonFont, Theme.BUTTON_SECONDARY);
+        claimDraw.setName("claimDraw");
+
+        resign.addActionListener(e -> {
+            // giving up is final, so it is the one action worth asking about twice
+            int answer = JOptionPane.showConfirmDialog(pBoard,
+                    "Resign this game?", "Resign", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+            if (answer == JOptionPane.YES_OPTION) {
+                // the player to move is the one who gives up
+                session.resign(session.isWhiteToMove() ? Pieces.WHITE : Pieces.BLACK);
+            }
+        });
+        // the session asks the opponent, and the rules answer the claim
+        offerDraw.addActionListener(e -> session.offerDraw());
+        claimDraw.addActionListener(e -> session.claimDraw());
+
+        // an action that would do nothing says so by being grey
+        Runnable refresh = () -> {
+            boolean running = !session.result().isFinished();
+            resign.setEnabled(running);
+            offerDraw.setEnabled(running);
+            claimDraw.setEnabled(running && session.isDrawClaimable());
+        };
+        session.setStateListener(refresh);
+        refresh.run();
+
+        bar.add(resign);
+        bar.add(offerDraw);
+        bar.add(claimDraw);
+        return bar;
     }
 
     /**

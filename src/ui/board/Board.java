@@ -108,6 +108,8 @@ public class Board extends JPanel implements GameSession.View {
         session.setView(this);
         session.setPromotionPicker(new SwingPromotionChooser(this));
         session.setDrawArbiter(new SwingDrawOfferResolver(this));
+        // a draw one player offers the other is a different question from a draw the rules allow
+        session.setDrawOfferArbiter(new SwingDrawOfferArbiter(this));
 
         this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), this::repaint, this::onTimeExpired);
         this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), this::repaint, this::onTimeExpired);
