@@ -700,6 +700,84 @@ public class GameTest {
             }
         });
 
+        test("PgnManager: the library pairs every game with the file it came from", () -> {
+            String white = "LibraryWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(white, "LibraryBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+
+            List<PgnManager.SavedGame> library = PgnManager.loadLibrary();
+            PgnManager.SavedGame mine = library.stream()
+                    .filter(g -> g.record.whiteName.equals(white)).findFirst().orElse(null);
+            checkNotNull(mine, "the saved game must appear in the library");
+            check(Files.exists(mine.file), "the library must name a file that is really there");
+            // both views have to stay in step, a file that fails to parse must drop out of each
+            checkEqual(PgnManager.loadAll().size(), library.size(),
+                    "the record list and the library must hold the same games");
+            cleanupSavedGame(white);
+        });
+
+        test("PgnManager: a game nobody renamed is listed by its players", () -> {
+            String white = "UnnamedWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(white, "UnnamedBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+
+            PgnManager.SavedGame mine = PgnManager.loadLibrary().stream()
+                    .filter(g -> g.record.whiteName.equals(white)).findFirst().orElse(null);
+            checkNotNull(mine, "the saved game must appear in the library");
+            check(mine.name.isEmpty(), "a game carrying the default event must count as unnamed, got: " + mine.name);
+            checkEqual(mine.record.getDisplayTitle(), mine.title(),
+                    "an unnamed game must be listed by who played it");
+            cleanupSavedGame(white);
+        });
+
+        test("PgnManager: renaming a game survives quotes and shows up in the library", () -> {
+            String white = "RenameWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(white, "RenameBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+
+            PgnManager.SavedGame mine = PgnManager.loadLibrary().stream()
+                    .filter(g -> g.record.whiteName.equals(white)).findFirst().orElse(null);
+            checkNotNull(mine, "the saved game must appear in the library");
+
+            // a name with a quote and a backslash is exactly what broke tag values before
+            String name = "My best \"win\" \\ ever";
+            check(PgnManager.rename(mine.file, name), "renaming must report success");
+
+            PgnManager.SavedGame renamed = PgnManager.loadLibrary().stream()
+                    .filter(g -> g.record.whiteName.equals(white)).findFirst().orElse(null);
+            checkNotNull(renamed, "the renamed game must still be in the library");
+            checkEqual(name, renamed.name, "the name must come back exactly as it was typed");
+            check(renamed.title().contains(name), "the library must list the game under its name");
+            check(renamed.title().contains(white), "and must still show who played it");
+            checkEqual(mine.record.moves.size(), renamed.record.moves.size(),
+                    "renaming must not touch the moves");
+
+            // an empty name puts the game back to being listed by its players
+            check(PgnManager.rename(renamed.file, "  "), "clearing a name must report success");
+            PgnManager.SavedGame cleared = PgnManager.loadLibrary().stream()
+                    .filter(g -> g.record.whiteName.equals(white)).findFirst().orElse(null);
+            checkNotNull(cleared, "the game must survive losing its name");
+            check(cleared.name.isEmpty(), "a blank name must make the game unnamed again, got: " + cleared.name);
+            cleanupSavedGame(white);
+        });
+
+        test("PgnManager: deleting a game removes it from the library and the disk", () -> {
+            String white = "DeleteWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(white, "DeleteBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+
+            PgnManager.SavedGame mine = PgnManager.loadLibrary().stream()
+                    .filter(g -> g.record.whiteName.equals(white)).findFirst().orElse(null);
+            checkNotNull(mine, "the saved game must appear in the library");
+
+            check(PgnManager.delete(mine.file), "deleting must report that a game went");
+            check(!Files.exists(mine.file), "the file must really be gone");
+            check(PgnManager.loadLibrary().stream().noneMatch(g -> g.record.whiteName.equals(white)),
+                    "the deleted game must not be listed any more");
+            // deleting the same entry twice is harmless, but it must not claim to have deleted it
+            check(!PgnManager.delete(mine.file), "deleting a game that is already gone must report nothing");
+        });
+
         // =================================================================
         System.out.println("\n-- BoardState ---------------------------------------------------");
         // =================================================================
