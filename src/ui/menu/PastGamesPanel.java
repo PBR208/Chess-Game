@@ -13,6 +13,7 @@ package ui.menu;
 import engine.model.GameRecord;
 import engine.persistence.PgnManager;
 import app.Main;
+import ui.i18n.Messages;
 import ui.theme.Theme;
 import ui.theme.UiComponents;
 
@@ -48,7 +49,7 @@ public class PastGamesPanel extends JPanel {
         topBar.setBackground(Theme.PANEL_BG);
         topBar.setBorder(new EmptyBorder(12, 16, 12, 16));
 
-        JLabel title = new JLabel("Past Games");
+        JLabel title = new JLabel(Messages.get("past.title"));
         title.setForeground(Theme.FG);
         title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 20));
 
@@ -61,7 +62,7 @@ public class PastGamesPanel extends JPanel {
 
         DefaultListModel<String> listModel = new DefaultListModel<>();
         if (records.isEmpty()) {
-            listModel.addElement("No saved games yet.");
+            listModel.addElement(Messages.get("past.empty"));
         } else {
             for (GameRecord r : records) listModel.addElement(r.getDisplayTitle());
         }
@@ -83,7 +84,7 @@ public class PastGamesPanel extends JPanel {
         rightPanel = new JPanel(rightCards);
         rightPanel.setBackground(Theme.BG);
 
-        JLabel placeholder = new JLabel("Select a game from the list", SwingConstants.CENTER);
+        JLabel placeholder = new JLabel(Messages.get("past.selectPrompt"), SwingConstants.CENTER);
         placeholder.setForeground(new Color(120, 120, 120));
         placeholder.setFont(new Font(Font.SANS_SERIF, Font.ITALIC, 14));
         rightPanel.add(placeholder, "empty");
@@ -109,7 +110,7 @@ public class PastGamesPanel extends JPanel {
         toggleBar.setBackground(Theme.PANEL_BG);
         toggleBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(60, 60, 65)));
 
-        JButton showLog = styledButton("Move Log");
+        JButton showLog = styledButton(Messages.get("past.moveLog"));
         JButton showReplay = styledButton("Replay \u25b6", "Replay >", "replay");
         toggleBar.add(showLog);
         toggleBar.add(showReplay);
@@ -158,7 +159,7 @@ public class PastGamesPanel extends JPanel {
         if (!record.fenHistory.isEmpty()) {
             replayHolder.add(new ReplayPanel(record.moves, record.fenHistory), BorderLayout.CENTER);
         } else {
-            JLabel noReplay = new JLabel("No position data for this game", SwingConstants.CENTER);
+            JLabel noReplay = new JLabel(Messages.get("past.noPositions"), SwingConstants.CENTER);
             noReplay.setForeground(new Color(120, 120, 120));
             replayHolder.add(noReplay, BorderLayout.CENTER);
         }
