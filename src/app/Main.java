@@ -183,11 +183,17 @@ public class Main {
      * <p>
      * Time complexity: O(1). Space complexity: O(1) apart from the panel and its three buttons.
      *
+     * It is public for the same reason fitToScreen is: the rule about when each action is live is
+     * worth checking, and a test should be able to build the row from a board without starting the
+     * whole application around it.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the panel and its three buttons.
+     *
      * @param pBoard the board of the running game, never null
      * @return the action row, never null
      * @throws NullPointerException if pBoard is null
      */
-    private static JPanel actionBar(Board pBoard) {
+    public static JPanel actionBar(Board pBoard) {
         GameSession session = pBoard.getSession();
 
         JPanel bar = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 6));

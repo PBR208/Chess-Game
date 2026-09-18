@@ -1273,6 +1273,40 @@ public class GameTest {
             }
         });
 
+        test("Main: the actions beside the board are live exactly when they would do something", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    GameSession session = board.getSession();
+                    // the board installs the real claim dialog, which a test must never open
+                    session.setDrawArbiter(null);
+
+                    JPanel bar = app.Main.actionBar(board);
+                    AbstractButton resign = findButton(bar, "resign");
+                    AbstractButton offer = findButton(bar, "offerDraw");
+                    AbstractButton claim = findButton(bar, "claimDraw");
+                    checkNotNull(resign, "the row must offer resigning");
+                    checkNotNull(offer, "and offering a draw");
+                    checkNotNull(claim, "and claiming one");
+
+                    check(resign.isEnabled(), "a running game can be resigned");
+                    check(offer.isEnabled(), "and a draw can be offered in it");
+                    check(!claim.isEnabled(), "but nothing is claimable in the starting position");
+
+                    // both knights out and back twice brings the starting position back a third time
+                    String[][] shuffle = {{"g1", "f3"}, {"g8", "f6"}, {"f3", "g1"}, {"f6", "g8"}};
+                    for (int round = 0; round < 2; round++) {
+                        for (String[] step : shuffle) {
+                            session.play(session.moveFor(Bitboards.squareOf(step[0]), Bitboards.squareOf(step[1])));
+                        }
+                    }
+                    check(claim.isEnabled(), "a threefold repetition makes the claim live");
+
+                    session.resign(Pieces.WHITE);
+                    check(!resign.isEnabled(), "a finished game cannot be resigned");
+                    check(!offer.isEnabled(), "nor drawn by agreement");
+                    check(!claim.isEnabled(), "nor claimed");
+                }));
+
         test("Main: the window size is cut down to the usable screen area", () -> {
             Rectangle laptop = new Rectangle(0, 0, 1366, 728);
             checkEqual(new Dimension(1366, 728), app.Main.fitToScreen(new Dimension(1400, 1000), laptop),
