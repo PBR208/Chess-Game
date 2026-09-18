@@ -71,6 +71,16 @@ public class ChessClock {
     }
 
     /**
+     * What a clock showed at one moment, enough to put it back there.
+     *
+     * @param timeMs       remaining time in milliseconds
+     * @param stage        the stage of a tournament control being played, 0 without stages
+     * @param movesInStage moves the player has finished inside that stage
+     */
+    public record Reading(long timeMs, int stage, int movesInStage) {
+    }
+
+    /**
      * Creates a stopped clock with the given starting time.
      * <p>
      * Every player gets their own clock when a board is built. I store the colour, the starting
@@ -286,6 +296,63 @@ public class ChessClock {
         if (currentStage < stages.size()) {
             addTime(stages.get(currentStage).timeMs());
         }
+    }
+
+    /**
+     * Puts this clock back to a time it showed earlier.
+     * <p>
+     * Taking a move back has to give both players exactly the time they had before that move, or
+     * undo would quietly hand out or steal thinking time. I bank the time that is given and count
+     * from this moment on, so the seconds that passed before the restore are not subtracted a second
+     * time. An unlimited clock has no time to put back.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pTimeMs remaining time in milliseconds, values below 0 are treated as 0
+     */
+    public void setTimeMs(long pTimeMs) {
+        // an unlimited clock never counts down, so there is nothing to restore
+        if (START_TIME_MS == 0) {
+            return;
+        }
+        bankedMs = Math.max(0, pTimeMs);
+        timeMs = bankedMs;
+        // a running clock counts from now, not from when it was last started
+        runningSinceNanos = System.nanoTime();
+        // time back above the mark means the next dip under it is worth warning about again
+        if (timeMs >= LOW_TIME_MS) {
+            lowTimeWarned = false;
+        }
+    }
+
+    /**
+     * Reads everything this clock would need to be put back to this moment.
+     * <p>
+     * Taking a move back has to undo more than the time it cost. On a tournament control the move
+     * also counted towards the end of a stage, and a move that is no longer played must not bring
+     * the next stage's time any closer. So a reading holds the time left together with how far the
+     * player has got through the stages.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the state of this clock right now, never null
+     */
+    public Reading reading() {
+        return new Reading(currentTimeMs(), currentStage, movesInStage);
+    }
+
+    /**
+     * Puts this clock back to an earlier reading.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pReading a reading this clock gave earlier, never null
+     * @throws NullPointerException if pReading is null
+     */
+    public void restore(Reading pReading) {
+        setTimeMs(pReading.timeMs());
+        currentStage = pReading.stage();
+        movesInStage = pReading.movesInStage();
     }
 
     /**
