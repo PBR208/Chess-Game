@@ -410,6 +410,49 @@ public class GameTest {
     }
 
     /**
+     * Paints a component into an image, the way a window would.
+     * <p>
+     * Time complexity: O(n) for whatever the component draws. Space complexity: O(w * h).
+     *
+     * @param pBoard  board to paint, never null
+     * @param pWidth  width in pixels, greater than 0
+     * @param pHeight height in pixels, greater than 0
+     * @return the painted board, never null
+     */
+    private static BufferedImage paintBoard(Board pBoard, int pWidth, int pHeight) {
+        BufferedImage image = new BufferedImage(pWidth, pHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        pBoard.paintComponent(graphics);
+        graphics.dispose();
+        return image;
+    }
+
+    /**
+     * Compares two painted boards over a band of rows.
+     * <p>
+     * Only part of the panel is worth comparing, because the clock bars are painted as well and a
+     * running clock would make two otherwise identical paintings differ.
+     * <p>
+     * Time complexity: O(w * r) for w pixels across r rows. Space complexity: O(1).
+     *
+     * @param pFirst   one painted board, never null
+     * @param pSecond  the other, never null
+     * @param pTopY    first row to compare
+     * @param pBottomY row to stop before
+     * @return true if every pixel in the band is the same
+     */
+    private static boolean sameRows(BufferedImage pFirst, BufferedImage pSecond, int pTopY, int pBottomY) {
+        for (int y = pTopY; y < pBottomY; y++) {
+            for (int x = 0; x < pFirst.getWidth(); x++) {
+                if (pFirst.getRGB(x, y) != pSecond.getRGB(x, y)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
      * Turns a position into its mirror image: the board upside down and the colours swapped.
      * <p>
      * Every evaluation term has to be written twice, once for each side, and forgetting one of them
@@ -1568,6 +1611,63 @@ public class GameTest {
         // =================================================================
         System.out.println("\n-- Analysis ------------------------------------------------------");
         // =================================================================
+
+        test("Board: asking what to play offers a move the rules allow", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    checkEqual(Moves.NONE, board.getHintMove(), "nothing is suggested until it is asked");
+
+                    check(board.showHintNow(), "there must be something to suggest");
+                    check(board.getSession().isLegal(board.getHintMove()),
+                            "and a hint must be a move that could actually be played");
+                    check(board.getSession().getMoveLog().isEmpty(),
+                            "asking must not play anything by itself");
+                }));
+
+        test("Board: asking what is coming shows the other side's plan", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    checkEqual(Moves.NONE, board.getThreatMove(), "nothing is shown until it is asked");
+
+                    check(board.showThreatNow(), "the other side must have something in mind");
+                    check(board.getThreatMove() != Moves.NONE, "and it must be a move");
+                    checkEqual(Fen.START_POSITION, Fen.write(board.getSession().position()),
+                            "and looking at it must leave the game exactly as it was");
+                }));
+
+        test("Board: advice is really drawn, and clearing it puts the board back", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    int width = board.getPreferredSize().width;
+                    int height = board.getPreferredSize().height;
+                    board.setSize(width, height);
+
+                    // only the squares, so a clock that counts cannot decide the comparison
+                    int tile = board.getTileSize();
+                    int top = tile;
+                    int bottom = tile + 8 * tile;
+
+                    BufferedImage plain = paintBoard(board, width, height);
+                    board.showHintNow();
+                    BufferedImage advised = paintBoard(board, width, height);
+                    check(!sameRows(plain, advised, top, bottom), "a hint must show up on the board");
+
+                    board.clearAdvice();
+                    check(sameRows(plain, paintBoard(board, width, height), top, bottom),
+                            "and clearing it must leave the board as it was");
+                }));
+
+        test("Board: advice is about one position, so a move takes it away", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    board.showHintNow();
+                    board.showThreatNow();
+                    check(board.getHintMove() != Moves.NONE, "there must be advice to lose");
+
+                    board.clearAdvice();
+                    checkEqual(Moves.NONE, board.getHintMove(), "the hint must go");
+                    checkEqual(Moves.NONE, board.getThreatMove(), "and so must the threat");
+                }));
 
         test("Analyst: a hint is the move the search would play", () -> {
             Position position = Fen.parse("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1");
