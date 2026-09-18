@@ -3,7 +3,9 @@ package ui.board;
 /*
  * Purpose: Board is the Swing panel that shows a running game. It paints the tiles, the pieces, the
  * legal move hints and both player clocks, and it translates between screen pixels and the squares
- * the engine counts in, while turning the view towards the player to move. The game itself lives in
+ * the engine counts in. Between two people at one screen it turns the view towards whoever is to
+ * move; against the program it holds still and faces the person, because there is only one of them
+ * and a board that turned would hand them their opponent's view. The game itself lives in
  * a GameSession on the bitboard core, so this class holds no position data of its own and only asks
  * the session what stands where and which squares a picked up piece may go to.
  *
@@ -15,6 +17,7 @@ import engine.core.Bitboards;
 import engine.core.GameSession;
 import engine.core.MoveGen;
 import engine.core.Pieces;
+import engine.model.EngineSettings;
 import engine.model.GameConfig;
 
 import javax.swing.*;
@@ -40,6 +43,9 @@ public class Board extends JPanel implements GameSession.View {
     private final int clockHeight;
 
     private final GameSession session;
+
+    // who the second player is, which also decides whether the board turns round after a move
+    private final EngineSettings settings;
 
     // square of the piece the mouse picked up, or NO_SQUARE while nothing is dragged
     private int selectedSquare = NO_SQUARE;
@@ -78,13 +84,11 @@ public class Board extends JPanel implements GameSession.View {
     }
 
     /**
-     * Builds the game board for a new game with squares of a given size.
+     * Builds the game board for a game between two people at one screen.
      * <p>
-     * A game needs a session to play in, two clocks, mouse input and a size that fits the player's
-     * screen. I store the square size first, since everything else is measured in squares, create
-     * the session on the starting position and hand it this board as its view, the promotion dialog
-     * and the draw dialogs, build both clocks with the configured times, size the panel for the board
-     * and the two clock bars, hook up the mouse and start White's clock.
+     * Most games are played by two people taking turns at one screen, so this is the ordinary way in.
+     * I forward to the full constructor with settings that have no engine in them, which is also what
+     * makes the board turn round after every move.
      * <p>
      * Time complexity: O(p) for the p starting pieces. Space complexity: O(s^2) for the sprites
      * scaled to squares of s pixels.
@@ -95,12 +99,36 @@ public class Board extends JPanel implements GameSession.View {
      * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
      */
     public Board(GameConfig pConfig, int pTileSize) {
+        this(pConfig, pTileSize, EngineSettings.humanOpponent());
+    }
+
+    /**
+     * Builds the game board for a new game against a given opponent.
+     * <p>
+     * A game needs a session to play in, two clocks, mouse input and a size that fits the player's
+     * screen. I store the square size first, since everything else is measured in squares, create
+     * the session on the starting position and hand it this board as its view, the promotion dialog
+     * and the draw dialogs, build both clocks with the configured times, size the panel for the board
+     * and the two clock bars, hook up the mouse and start White's clock. The settings are kept
+     * because they decide which way round the board is drawn.
+     * <p>
+     * Time complexity: O(p) for the p starting pieces. Space complexity: O(s^2) for the sprites
+     * scaled to squares of s pixels.
+     *
+     * @param pConfig   names, times and increment of the new game, never null
+     * @param pTileSize edge length of one square in pixels, at least MIN_TILE_SIZE
+     * @param pSettings who the second player is and which way the board faces, never null
+     * @throws NullPointerException     if pConfig or pSettings is null
+     * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
+     */
+    public Board(GameConfig pConfig, int pTileSize, EngineSettings pSettings) {
         // pieces this small would be hard to see and click
         if (pTileSize < MIN_TILE_SIZE) {
             throw new IllegalArgumentException("tile size " + pTileSize + " is below " + MIN_TILE_SIZE);
         }
         this.tileSize = pTileSize;
         this.clockHeight = pTileSize;
+        this.settings = pSettings;
         // the board draws the pieces, so it owns their images
         this.sprites = new PieceSprites(pTileSize);
 
@@ -166,7 +194,7 @@ public class Board extends JPanel implements GameSession.View {
         g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
                 RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
-        boolean whiteAtBottom = session.isWhiteToMove();
+        boolean whiteAtBottom = isWhiteAtBottom();
         int boardWidth = cols * tileSize;
         int bottomY = clockHeight + rows * tileSize;
 
@@ -241,6 +269,36 @@ public class Board extends JPanel implements GameSession.View {
     public void clearSelection() {
         selectedSquare = NO_SQUARE;
         targetCount = 0;
+    }
+
+    /**
+     * Tells whether White is drawn along the bottom edge.
+     * <p>
+     * Two people at one screen want the board to turn after every move, so whoever is to move always
+     * sees their own pieces nearest to them and reaches for the right end. Against the program that
+     * is exactly wrong: there is only one person sitting there, and a board that spun away every time
+     * the program answered would hand them the opponent's view of their own game. So a game against
+     * the program holds the board still, facing the side the person is playing.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return true if White is at the bottom of the screen
+     */
+    private boolean isWhiteAtBottom() {
+        return settings.autoFlip()
+                ? session.isWhiteToMove()
+                : settings.humanColour() == Pieces.WHITE;
+    }
+
+    /**
+     * Returns who this board thinks the second player is.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the settings the board was built with, never null
+     */
+    public EngineSettings getSettings() {
+        return settings;
     }
 
     /**
@@ -354,7 +412,7 @@ public class Board extends JPanel implements GameSession.View {
      * @return the horizontal pixel of that column's left edge
      */
     public int toVisualX(int pCol) {
-        return (session.isWhiteToMove() ? pCol : 7 - pCol) * tileSize;
+        return (isWhiteAtBottom() ? pCol : 7 - pCol) * tileSize;
     }
 
     /**
@@ -366,7 +424,7 @@ public class Board extends JPanel implements GameSession.View {
      * @return the vertical pixel of that row's upper edge
      */
     public int toVisualY(int pRow) {
-        return clockHeight + (session.isWhiteToMove() ? pRow : 7 - pRow) * tileSize;
+        return clockHeight + (isWhiteAtBottom() ? pRow : 7 - pRow) * tileSize;
     }
 
     /**
@@ -401,7 +459,7 @@ public class Board extends JPanel implements GameSession.View {
      */
     public int toLogicalCol(int pX) {
         int col = Math.floorDiv(pX, tileSize);
-        return session.isWhiteToMove() ? col : 7 - col;
+        return isWhiteAtBottom() ? col : 7 - col;
     }
 
     /**
@@ -417,7 +475,7 @@ public class Board extends JPanel implements GameSession.View {
      */
     public int toLogicalRow(int pY) {
         int row = Math.floorDiv(pY - clockHeight, tileSize);
-        return session.isWhiteToMove() ? row : 7 - row;
+        return isWhiteAtBottom() ? row : 7 - row;
     }
 
     /**

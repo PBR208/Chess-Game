@@ -1616,6 +1616,64 @@ public class GameTest {
         System.out.println("\n-- Playing the computer ------------------------------------------");
         // =================================================================
 
+        test("Board: two people at one screen get a board that turns round", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE,
+                            EngineSettings.humanOpponent());
+                    int row = Board.rowOf(Bitboards.squareOf("e2"));
+                    int before = board.toVisualY(row);
+
+                    GameSession session = board.getSession();
+                    session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+
+                    check(before != board.toVisualY(row),
+                            "the board must face the other player once the turn passes");
+                }));
+
+        test("Board: against the program the board holds still", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    // the program plays Black, so the person is White and must stay at the bottom
+                    Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE,
+                            EngineSettings.level(1, Pieces.BLACK));
+                    int row = Board.rowOf(Bitboards.squareOf("e2"));
+                    int before = board.toVisualY(row);
+
+                    GameSession session = board.getSession();
+                    session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+
+                    checkEqual(before, board.toVisualY(row),
+                            "a board facing one person must not spin away when the program answers");
+                    checkEqual(0, board.toVisualX(0), "and the a-file must stay on the left");
+                }));
+
+        test("Board: playing Black against the program puts Black at the bottom", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    // the program plays White, so the person is Black and sees the board from there
+                    Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE,
+                            EngineSettings.level(1, Pieces.WHITE));
+
+                    checkEqual(7 * board.getTileSize(), board.toVisualX(0),
+                            "the a-file must be drawn on the right for a player with the black pieces");
+                }));
+
+        test("Board: a pixel turned into a square and back is the same square", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    EngineSettings[] bothWays = {
+                            EngineSettings.humanOpponent(),
+                            EngineSettings.level(1, Pieces.WHITE),
+                    };
+                    for (EngineSettings settings : bothWays) {
+                        Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE, settings);
+                        int half = board.getTileSize() / 2;
+                        for (int index = 0; index < 8; index++) {
+                            checkEqual(index, board.toLogicalCol(board.toVisualX(index) + half),
+                                    "a column must survive the trip to pixels and back");
+                            checkEqual(index, board.toLogicalRow(board.toVisualY(index) + half),
+                                    "and so must a row");
+                        }
+                    }
+                }));
+
         test("EngineSettings: a game between two people has no engine in it", () -> {
             EngineSettings human = EngineSettings.humanOpponent();
             check(!human.engineOpponent(), "nobody is playing the computer");
