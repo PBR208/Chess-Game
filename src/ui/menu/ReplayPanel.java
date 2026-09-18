@@ -60,6 +60,9 @@ public class ReplayPanel extends JPanel {
     // true while the board is turned round, so a game is looked at from Black's side
     private boolean flipped;
 
+    // the canvas the position is drawn on, kept so anything that changes the frame can redraw it
+    private JPanel boardCanvas;
+
     /**
      * Builds the replay view for one saved game.
      * <p>
@@ -89,7 +92,7 @@ public class ReplayPanel extends JPanel {
         JPanel boardPanel = new JPanel(new BorderLayout());
         boardPanel.setBackground(Theme.BG);
 
-        JPanel boardCanvas = new JPanel() {
+        boardCanvas = new JPanel() {
             @Override
             protected void paintComponent(Graphics g) {
                 super.paintComponent(g);
@@ -97,6 +100,8 @@ public class ReplayPanel extends JPanel {
             }
         };
         boardCanvas.setBackground(Theme.BG);
+        // named so what is actually drawn can be looked at without a window around it
+        boardCanvas.setName("replayBoard");
 
         JPanel nav = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 4));
         nav.setBackground(Theme.BG);
@@ -108,22 +113,22 @@ public class ReplayPanel extends JPanel {
         JButton first = navButton("\u21e4", "|<", "first");
         first.addActionListener(e -> {
             cursor = 0;
-            refresh(boardCanvas);
+            refresh();
         });
         JButton prev = navButton("\u2190", "<", "previous");
         prev.addActionListener(e -> {
             if (cursor > 0) cursor--;
-            refresh(boardCanvas);
+            refresh();
         });
         JButton next = navButton("\u2192", ">", "next");
         next.addActionListener(e -> {
             if (cursor < fens.size() - 1) cursor++;
-            refresh(boardCanvas);
+            refresh();
         });
         JButton last = navButton("\u21e5", ">|", "last");
         last.addActionListener(e -> {
             cursor = fens.size() - 1;
-            refresh(boardCanvas);
+            refresh();
         });
 
         nav.add(first);
@@ -135,7 +140,7 @@ public class ReplayPanel extends JPanel {
         JButton flip = textButton("Flip", "flip");
         flip.addActionListener(e -> {
             flipped = !flipped;
-            refresh(boardCanvas);
+            refresh();
         });
         JButton copyFen = textButton("Copy FEN", "copyFen");
         copyFen.addActionListener(e -> copyToClipboard(fens.get(cursor)));
@@ -168,15 +173,13 @@ public class ReplayPanel extends JPanel {
         moveHistoryArea.setForeground(new Color(210, 210, 210));
         moveHistoryArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         moveHistoryArea.setMargin(new Insets(8, 8, 8, 8));
+        // named because this panel has two text areas, and the moves are the one worth finding
+        moveHistoryArea.setName("replayMoveList");
         // the move list was a list to look at, and the position it names was four buttons away
         moveHistoryArea.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent pEvent) {
-                int frame = frameAt(pEvent.getPoint());
-                if (frame >= 0 && frame < fens.size()) {
-                    cursor = frame;
-                    refresh(boardCanvas);
-                }
+                showMove(plyAt(pEvent.getPoint()));
             }
         });
 
@@ -249,17 +252,17 @@ public class ReplayPanel extends JPanel {
             }
         });
 
-        refresh(boardCanvas);
+        refresh();
     }
 
-    private void refresh(JPanel canvas) {
+    private void refresh() {
         moveLabel.setText(moveText());
         updateMoveHistory();
         if (!fens.isEmpty()) {
             fenArea.setText(fens.get(cursor));
             fenArea.setCaretPosition(0);
         }
-        canvas.repaint();
+        boardCanvas.repaint();
     }
 
     private void updateMoveHistory() {
@@ -351,26 +354,48 @@ public class ReplayPanel extends JPanel {
     }
 
     /**
-     * Works out which frame of the game a point in the move list belongs to.
+     * Shows the position a move produced.
+     * <p>
+     * This is what clicking a move in the list means, and it is worth being a method of its own
+     * rather than something buried in a mouse listener, because the rule is the interesting part:
+     * the frame that shows a move is the one after it, and frame zero is the board before anybody
+     * moved, so the ply gets one added to it. A move the game never had is ignored, which is what a
+     * click below the last move or on a line that is only half filled amounts to.
+     * <p>
+     * Time complexity: O(m) for redrawing the record of m moves. Space complexity: O(m) for it.
+     *
+     * @param pPly the move to show, counted in half moves from 0 for White's first
+     */
+    public void showMove(int pPly) {
+        int frame = pPly + 1;
+        // a move that was never played has no position to show
+        if (pPly < 0 || frame >= fens.size()) {
+            return;
+        }
+        cursor = frame;
+        refresh();
+    }
+
+    /**
+     * Works out which move of the game a point in the move list belongs to.
      * <p>
      * Every line of the list holds one full move, White's first and Black's behind it at a fixed
      * column, because the list is laid out in a monospaced font. So the line gives the move number
-     * and the column says which half was clicked. The frame that shows a move is the one after it,
-     * and frame zero is the board before anybody moved, which is why the ply gets one added to it.
+     * and the column says which of the two halves was hit.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
      * @param pPoint point inside the move list, never null
-     * @return the frame that shows the clicked move, or -1 when no move was hit
+     * @return the move as a count of half moves from 0, or -1 when no move was hit
      */
-    private int frameAt(Point pPoint) {
+    private int plyAt(Point pPoint) {
         try {
             int offset = moveHistoryArea.viewToModel2D(pPoint);
             int line = moveHistoryArea.getLineOfOffset(offset);
             int column = offset - moveHistoryArea.getLineStartOffset(line);
             // the first half of a line is White's move, the rest is Black's
             int half = column < BLACK_MOVE_COLUMN ? 0 : 1;
-            return line * 2 + half + 1;
+            return line * 2 + half;
         } catch (BadLocationException e) {
             // a click past the end of the text names no move
             return -1;

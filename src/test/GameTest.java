@@ -1851,6 +1851,83 @@ public class GameTest {
                     p.paint(img.createGraphics());
                 }));
 
+        test("ReplayPanel: turning the board round changes what is drawn", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
+                    // the board has to be painted on its own. Painting the whole panel without a
+                    // window draws nothing at all, because the split panes leave the board no size,
+                    // which is also why the older paint test could only check that nothing threw.
+                    Component canvas = findByName(p, "replayBoard");
+                    checkNotNull(canvas, "the replay must have a board to draw on");
+                    canvas.setSize(480, 480);
+
+                    // comparing the picture is what proves the board really turned, without the
+                    // panel having to expose which way round it happens to be
+                    BufferedImage before = new BufferedImage(480, 480, BufferedImage.TYPE_INT_ARGB);
+                    canvas.paint(before.createGraphics());
+
+                    AbstractButton flip = findButton(p, "flip");
+                    checkNotNull(flip, "the replay must offer turning the board round");
+                    flip.doClick();
+
+                    BufferedImage after = new BufferedImage(480, 480, BufferedImage.TYPE_INT_ARGB);
+                    canvas.paint(after.createGraphics());
+
+                    boolean identical = java.util.Arrays.equals(
+                            before.getRGB(0, 0, 480, 480, null, 0, 480),
+                            after.getRGB(0, 0, 480, 480, null, 0, 480));
+                    check(!identical, "the same position from the other side has to look different");
+                }));
+
+        test("ReplayPanel: the copy buttons are there and never throw", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
+                    AbstractButton copyFen = findButton(p, "copyFen");
+                    AbstractButton copyMoves = findButton(p, "copyMoves");
+                    checkNotNull(copyFen, "the position must be copyable");
+                    checkNotNull(copyMoves, "and so must the moves");
+                    // a machine with no clipboard has to stay quiet rather than throw out of a click
+                    copyFen.doClick();
+                    copyMoves.doClick();
+                }));
+
+        test("ReplayPanel: asking for a move shows the position after it", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
+
+                    // White's second move is the third half move, so its position is the last frame
+                    p.showMove(2);
+                    JLabel lbl = findMoveLabel(p);
+                    check(lbl.getText().contains("4/4"),
+                            "move three must show the position after it, got: " + lbl.getText());
+
+                    p.showMove(0);
+                    check(findMoveLabel(p).getText().contains("2/4"),
+                            "White's first move must show the second frame, got: " + findMoveLabel(p).getText());
+
+                    // a move this game never had leaves the replay where it was
+                    p.showMove(99);
+                    check(findMoveLabel(p).getText().contains("2/4"),
+                            "a move that was never played must change nothing, got: " + findMoveLabel(p).getText());
+                    p.showMove(-1);
+                    check(findMoveLabel(p).getText().contains("2/4"),
+                            "and neither must a move before the first, got: " + findMoveLabel(p).getText());
+                }));
+
+        guiTest("ReplayPanel: copying the position puts its FEN on the clipboard", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
+                    findButton(p, "copyFen").doClick();
+                    try {
+                        String copied = (String) Toolkit.getDefaultToolkit().getSystemClipboard()
+                                .getData(java.awt.datatransfer.DataFlavor.stringFlavor);
+                        checkEqual(Fen.START_POSITION, copied,
+                                "the replay opens on the starting position, so that is what gets copied");
+                    } catch (Exception problem) {
+                        check(false, "the clipboard could not be read back: " + problem);
+                    }
+                }));
+
         // =================================================================
         System.out.println("\n-- Theme & UiComponents -----------------------------------------");
         // =================================================================
@@ -3894,6 +3971,36 @@ public class GameTest {
     }
 
     // -- Test-only helpers ------------------------------------------------
+
+    /**
+     * Finds the component with a given name anywhere below a container.
+     * <p>
+     * Some of what a screen draws is not a button or a label but a panel that paints itself, and
+     * such a panel has no text to find it by. The ones worth checking carry a name, so this walks
+     * the tree and returns the first component wearing the one that was asked for.
+     * <p>
+     * Time complexity: O(c) for the c components below the container.
+     * Space complexity: O(d) for a tree of depth d.
+     *
+     * @param pRoot container to search below, never null
+     * @param pName component name to look for, never null
+     * @return the component with that name, or null when nothing below carries it
+     */
+    private static Component findByName(Container pRoot, String pName) {
+        for (Component child : pRoot.getComponents()) {
+            if (pName.equals(child.getName())) {
+                return child;
+            }
+            // a named component can sit at any depth, inside panels and split panes
+            if (child instanceof Container nested) {
+                Component found = findByName(nested, pName);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
 
     /**
      * Reads the pixels of a button's icon so two icons can be compared.
