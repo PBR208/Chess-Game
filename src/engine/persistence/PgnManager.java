@@ -29,6 +29,67 @@ public class PgnManager {
     // the old games folder only has to be looked at once per run
     private static boolean legacyMigrationChecked = false;
 
+    // the Event tag every game is saved with. A game still carrying it was never named by anybody,
+    // so the library shows who played instead of repeating this for every entry.
+    private static final String DEFAULT_EVENT = "Casual Game";
+
+    /**
+     * Purpose: SavedGame is one entry of the library, the parsed game together with the file it was
+     * read from and the name a player gave it. The library screen needs the file to delete or rename
+     * an entry, and a record on its own has no idea where it came from. Pairing them here rather than
+     * handing out two lists means the two can never drift apart, which matters because a file that
+     * fails to parse is skipped and would shift every following index.
+     *
+     * Owner: PBR208 - https://github.com/PBR208/
+     * Version: 1.0
+     */
+    public static final class SavedGame {
+
+        /** the PGN file this game was read from, never null */
+        public final Path file;
+
+        /** the parsed game, never null */
+        public final GameRecord record;
+
+        /** the name a player gave this game, empty when nobody renamed it; never null */
+        public final String name;
+
+        /** true when the file holds other games as well, so this one cannot be renamed or deleted alone */
+        public final boolean sharesFile;
+
+        /**
+         * Pairs a parsed game with its file and its name.
+         * <p>
+         * Time complexity: O(1). Space complexity: O(1).
+         *
+         * @param pFile   file the game was read from, never null
+         * @param pRecord parsed game, never null
+         * @param pName   name given to the game, empty when it has none; never null
+         * @param pShared true when the file holds more than this one game
+         */
+        SavedGame(Path pFile, GameRecord pRecord, String pName, boolean pShared) {
+            this.file = pFile;
+            this.record = pRecord;
+            this.name = pName;
+            this.sharesFile = pShared;
+        }
+
+        /**
+         * Builds the line the library shows for this game.
+         * <p>
+         * A game nobody renamed is best recognised by who played it, so that stays the whole line. A
+         * game with a name of its own leads with that name and keeps the players behind it, because
+         * the name alone would lose the result and the date a player searches by.
+         * <p>
+         * Time complexity: O(n) in the length of the text. Space complexity: O(n) for it.
+         *
+         * @return the text for this entry, never null
+         */
+        public String title() {
+            return name.isEmpty() ? record.getDisplayTitle() : name + "  |  " + record.getDisplayTitle();
+        }
+    }
+
     /**
      * Resolves the directory where finished games are stored as PGN files.
      * <p>
@@ -198,7 +259,7 @@ public class PgnManager {
                     + sanitize(pRecord.blackName);
             Path file = uniquePath(dir, base, ".pgn");
 
-            Files.writeString(file, buildPgn(pRecord));
+            Files.writeString(file, PgnWriter.write(pRecord));
             return true;
         } catch (IOException e) {
             System.err.println("PgnManager: failed to save: " + e.getMessage());
@@ -222,8 +283,9 @@ public class PgnManager {
      * The Past Games screen lists the whole library. I first bring games from the old default folder
      * along if that hasn't happened yet, and return an empty list when the directory does not exist.
      * Otherwise I collect all .pgn files, sort them by file name in reverse so the
-     * latest dates come first, and parse each file. A file that fails to parse is skipped with a
-     * message on standard error so one broken file never hides the rest of the library.
+     * latest dates come first, and read each file. One file may hold several games, and every one of
+     * them is listed. A file that fails to parse is skipped with a message on standard error so one
+     * broken file never hides the rest of the library.
      * <p>
      * Time complexity: O(f log f + c) where f is the number of files and c is the total number of
      * characters parsed. Space complexity: O(c) for the loaded records.
@@ -233,11 +295,39 @@ public class PgnManager {
      */
     public static List<GameRecord> loadAll() {
         List<GameRecord> records = new ArrayList<>();
+        for (SavedGame game : loadLibrary()) {
+            records.add(game.record);
+        }
+        return records;
+    }
+
+    /**
+     * Loads the whole library, newest first, with the file and the name of every game.
+     * <p>
+     * The library screen lists every saved game and lets a player delete or rename one, which needs
+     * the file each record came from. I bring games from the old default folder along if that hasn't
+     * happened yet and return an empty list when the directory does not exist. Otherwise I collect
+     * all .pgn files, sort them by file name in reverse so the latest dates come first, and read each
+     * one. A file may hold several games, and every one of them is listed. The name is the Event tag,
+     * left empty for a game still carrying the default, so a game nobody renamed is shown by its
+     * players. Only a file of a single game is named, because naming and deleting work on the whole
+     * file, so the games of a shared file are marked as such and keep their players as their title.
+     * A file that fails to parse is skipped with a message on standard error, so one broken file
+     * never hides the rest of the library.
+     * <p>
+     * Time complexity: O(f log f + c) where f is the number of files and c is the total number of
+     * characters parsed. Space complexity: O(c) for the loaded games.
+     *
+     * @return every readable game with its file, newest first; never null, possibly empty
+     * @throws InvalidPathException if the configured games directory is not a valid path
+     */
+    public static List<SavedGame> loadLibrary() {
+        List<SavedGame> games = new ArrayList<>();
         // games from the old default folder come along the first time
         migrateLegacyGamesOnce();
         // no folder yet simply means no saved games yet
         Path dir = getGamesDirectory();
-        if (!Files.exists(dir)) return records;
+        if (!Files.exists(dir)) return games;
 
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, "*.pgn")) {
             List<Path> files = new ArrayList<>();
@@ -246,14 +336,21 @@ public class PgnManager {
 
             for (Path file : files) {
                 try {
-                    GameRecord r = parse(Files.readString(file));
-                    if (r != null) {
-                        records.add(r);
+                    String text = Files.readString(file);
+                    // one file may hold a whole tournament, and every game in it belongs in the library
+                    List<GameRecord> loaded = PgnReader.readAll(text);
+                    if (!loaded.isEmpty()) {
+                        // naming or deleting rewrites the whole file, which only a game of its own may do
+                        boolean shared = loaded.size() > 1;
+                        String name = shared ? "" : gameName(text);
+                        for (GameRecord record : loaded) {
+                            games.add(new SavedGame(file, record, name, shared));
+                        }
                     } else {
                         // a file without players or result can't be listed, so say which one it was
                         // TODO [PBR208]: Show skipped files in the Past Games screen, not only on standard error.
                         System.err.println("PgnManager: skipping " + file.getFileName()
-                                + ": missing White, Black or Result tag");
+                                + ": no game with White, Black and Result tags");
                     }
                 } catch (Exception e) {
                     System.err.println("PgnManager: skipping " + file.getFileName()
@@ -263,123 +360,147 @@ public class PgnManager {
         } catch (IOException e) {
             System.err.println("PgnManager: failed to list games: " + e.getMessage());
         }
-        return records;
+        return games;
     }
 
     /**
-     * Turns a game record into PGN text.
+     * Reads the name a player gave a game.
      * <p>
-     * Saved games must follow the PGN standard so the library and other chess programs can read them.
-     * I write the seven tag roster first and in its required order, Event, Site, Date, Round, White,
-     * Black and Result, followed by the time control, with every value escaped. Then come the moves
-     * with a move number before each White move, the FEN after each move as a comment for the replay
-     * viewer, and the result as the final token.
+     * A game is named through its Event tag, which is where the PGN standard puts the name of what
+     * was played. Every game this program saves carries the same default there, and a file with no
+     * Event tag at all was written by something else, so both count as unnamed.
      * <p>
-     * Time complexity: O(m + c) for m moves and c characters in the tag values.
-     * Space complexity: O(m + c) for the PGN text.
-     *
-     * @param pRecord game to write, with non-null names, date, result and time control; never null
-     * @return the complete PGN text ending with a line break, never null
-     * @throws NullPointerException if pRecord or one of its tag values is null
-     */
-    private static String buildPgn(GameRecord pRecord) {
-        StringBuilder sb = new StringBuilder();
-
-        // the seven tag roster comes first and in exactly this order
-        appendTag(sb, "Event", "Casual Game");
-        appendTag(sb, "Site", "Local");
-        appendTag(sb, "Date", pRecord.date);
-        appendTag(sb, "Round", "-");
-        appendTag(sb, "White", pRecord.whiteName);
-        appendTag(sb, "Black", pRecord.blackName);
-        appendTag(sb, "Result", pRecord.result);
-        appendTag(sb, "TimeControl", pRecord.timeControl);
-        sb.append("\n");
-
-        for (int i = 0; i < pRecord.moves.size(); i++) {
-            // move numbers only stand before White's moves
-            if (i % 2 == 0) sb.append(i / 2 + 1).append(". ");
-            sb.append(pRecord.moves.get(i));
-            // the FEN after each move is kept in a comment for the replay viewer
-            if (i < pRecord.fenHistory.size()) {
-                sb.append(" {").append(pRecord.fenHistory.get(i)).append("}");
-            }
-            sb.append(" ");
-        }
-
-        sb.append(pRecord.result).append("\n");
-        return sb.toString();
-    }
-
-    /**
-     * Appends one PGN tag pair with a correctly escaped value.
-     * <p>
-     * Tag values are quoted strings, so a player name containing a quote used to end the string early
-     * and made the whole file unreadable. As the PGN standard asks, I escape backslashes first and
-     * quotes second, then write the tag on its own line.
-     * <p>
-     * Time complexity: O(n) in the length of the value. Space complexity: O(n) for the escaped copy.
-     *
-     * @param pBuilder PGN text being built, never null
-     * @param pName    tag name such as "White", never null
-     * @param pValue   raw tag value, may contain quotes and backslashes; never null
-     * @throws NullPointerException if pValue is null
-     */
-    private static void appendTag(StringBuilder pBuilder, String pName, String pValue) {
-        // backslashes first, otherwise the escape of a quote would be escaped again
-        String escaped = pValue.replace("\\", "\\\\").replace("\"", "\\\"");
-        pBuilder.append('[').append(pName).append(" \"").append(escaped).append("\"]\n");
-    }
-
-    /**
-     * Reads a game record back from PGN text.
-     * <p>
-     * The Past Games library is built from the saved files. I read the player, result, date and time
-     * control tags, whose values may contain escaped quotes, and give up on files without players or
-     * result. Then I remove the complete tag lines, so brackets inside a quoted value can't cut a tag
-     * short, collect the FEN comments for the replay viewer and split what is left into moves,
-     * skipping move numbers and the result token.
-     * <p>
-     * Time complexity: O(c) in the length of the text. Space complexity: O(c) for the intermediate
-     * strings and the record.
+     * Time complexity: O(c) in the length of the text. Space complexity: O(n) for the name.
      *
      * @param pPgn complete PGN text of one game, never null
-     * @return the parsed record, or null when the White, Black or Result tag is missing
+     * @return the name, or an empty string when the game has none; never null
      * @throws NullPointerException if pPgn is null
      */
-    private static GameRecord parse(String pPgn) {
-        String white = tag(pPgn, "White");
-        String black = tag(pPgn, "Black");
-        String result = tag(pPgn, "Result");
-        String date = tag(pPgn, "Date");
-        String timeControl = tag(pPgn, "TimeControl");
+    private static String gameName(String pPgn) {
+        String event = tag(pPgn, "Event");
+        // no tag, the default every save writes, or a blank value all mean nobody named this game
+        if (event == null || event.isBlank() || event.equals(DEFAULT_EVENT)) {
+            return "";
+        }
+        return event;
+    }
 
-        if (white == null || black == null || result == null) return null;
+    /**
+     * Deletes one saved game from the library.
+     * <p>
+     * A library nobody can tidy up only grows, and a player who deletes a game expects it gone from
+     * the disk rather than hidden. I delete the file and report whether there was one to delete, so
+     * deleting the same entry twice is harmless and answers honestly the second time. An I/O failure
+     * doesn't throw, because a read-only disk shouldn't crash the library screen.
+     * <p>
+     * Time complexity: O(1) apart from what the file system does. Space complexity: O(1).
+     *
+     * @param pFile the game file to delete, never null
+     * @return true if a file was deleted, false if there was none or it could not be deleted
+     * @throws NullPointerException if pFile is null
+     */
+    public static boolean delete(Path pFile) {
+        try {
+            return Files.deleteIfExists(pFile);
+        } catch (IOException e) {
+            System.err.println("PgnManager: failed to delete " + pFile.getFileName() + ": " + e.getMessage());
+            // let the caller tell the player instead of pretending it worked
+            return false;
+        }
+    }
 
-        // only whole tag lines go, a bracket inside a quoted value stays part of its tag
-        String moveSection = pPgn.replaceAll("(?m)^\\s*\\[\\w+\\s+" + QUOTED_VALUE + "\\]\\s*$", "").trim();
+    /**
+     * Gives one saved game a name of its own.
+     * <p>
+     * "Alice vs Bob" repeated eleven times tells a player nothing, so a game can be named after what
+     * made it worth keeping. The name goes into the Event tag, which is where the PGN standard puts
+     * it, so other chess programs read it as the name too. I replace the existing tag in place and
+     * add one at the top when a file has none, which is possible for an imported game. The value is
+     * escaped like any tag value, and I write it by position rather than through a regular expression
+     * replacement, so a name containing a backslash or a dollar sign stays exactly what was typed.
+     * <p>
+     * Time complexity: O(c) in the length of the file. Space complexity: O(c) for the rewritten text.
+     *
+     * @param pFile the game file to rename, never null
+     * @param pName the new name, never null; blank means the game goes back to being unnamed
+     * @return true if the file was rewritten, false if an I/O error prevented it
+     * @throws NullPointerException if pFile or pName is null
+     */
+    public static boolean rename(Path pFile, String pName) {
+        try {
+            String text = Files.readString(pFile);
+            // a blank name puts the default back, so the game reads as unnamed again
+            String value = pName.isBlank() ? DEFAULT_EVENT : pName.trim();
+            // backslashes first, otherwise the escape of a quote would be escaped again
+            String escaped = value.replace("\\", "\\\\").replace("\"", "\\\"");
+            String line = "[Event \"" + escaped + "\"]";
 
-        List<String> fens = new ArrayList<>();
-        Matcher fenMatcher = Pattern.compile("\\{([^}]+)\\}").matcher(moveSection);
-        while (fenMatcher.find()) fens.add(fenMatcher.group(1).trim());
+            Matcher m = Pattern.compile("(?m)^\\[Event\\s+" + QUOTED_VALUE + "\\]").matcher(text);
+            String updated = m.find()
+                    ? new StringBuilder(text).replace(m.start(), m.end(), line).toString()
+                    : line + "\n" + text;
 
-        String clean = moveSection
-                .replaceAll("\\{[^}]*\\}", "")
-                .replaceAll("\\d+\\.", "")
-                .replaceAll(Pattern.quote(result), "")
-                .trim();
+            Files.writeString(pFile, updated);
+            return true;
+        } catch (IOException e) {
+            System.err.println("PgnManager: failed to rename " + pFile.getFileName() + ": " + e.getMessage());
+            // let the caller tell the player instead of pretending it worked
+            return false;
+        }
+    }
 
-        List<String> moves = new ArrayList<>();
-        for (String token : clean.split("\\s+")) {
-            String t = token.trim();
-            if (!t.isEmpty()) moves.add(t);
+    /**
+     * Reads a PGN file the player picked and copies every game in it into the library.
+     * <p>
+     * Players have games from other programs, from a chess site or from a friend, and until now the
+     * only way into the library was playing a game here. I read the file with the same reader the
+     * library uses, so a file with comments, side lines or several games in it is understood, and
+     * write every game it holds into the games folder as its own file. The games keep their names and
+     * dates, and an existing file is never overwritten, because each one gets a free name.
+     * <p>
+     * Time complexity: O(c + g * m * l) for c characters, g games of m moves and l legal moves per
+     * position, plus the writing of g files.
+     * Space complexity: O(c) for the text and the games read from it.
+     *
+     * @param pFile the PGN file to read, never null
+     * @return the games that were imported, never null and empty when the file held none
+     * @throws IOException          if the file cannot be read or the library cannot be written to
+     * @throws NullPointerException if pFile is null
+     */
+    public static List<GameRecord> importFrom(Path pFile) throws IOException {
+        List<GameRecord> imported = PgnReader.readAll(Files.readString(pFile));
+        // a file without a single readable game leaves the library untouched
+        if (imported.isEmpty()) {
+            return imported;
         }
 
-        return new GameRecord(
-                white, black, result,
-                date != null ? date : "?",
-                timeControl != null ? timeControl : "?",
-                moves, fens);
+        Path dir = getGamesDirectory();
+        Files.createDirectories(dir);
+        for (GameRecord record : imported) {
+            // the same naming the game's own saves use, so the library stays consistent
+            String base = record.date + "_" + sanitize(record.whiteName) + "_vs_" + sanitize(record.blackName);
+            Files.writeString(uniquePath(dir, base, ".pgn"), PgnWriter.write(record));
+        }
+        return imported;
+    }
+
+    /**
+     * Writes one game of the library to a file the player chose.
+     * <p>
+     * A game is worth little if it cannot leave the program, so this writes the selected game as PGN
+     * wherever the player wants it, in the same standard form the library saves in. The file is
+     * written as a whole and replaces whatever was there, which is what a save dialog promises after
+     * it has asked about overwriting.
+     * <p>
+     * Time complexity: O(m) for the m moves written. Space complexity: O(m) for the text.
+     *
+     * @param pRecord the game to write, never null
+     * @param pFile   the file to write it to, never null
+     * @throws IOException          if the file cannot be written
+     * @throws NullPointerException if an argument is null
+     */
+    public static void exportTo(GameRecord pRecord, Path pFile) throws IOException {
+        Files.writeString(pFile, PgnWriter.write(pRecord));
     }
 
     // a tag value is a quoted string in which a backslash escapes quotes and backslashes
@@ -389,9 +510,8 @@ public class PgnManager {
      * Reads the value of one PGN tag.
      * <p>
      * Tag values are quoted strings that may contain escaped quotes and backslashes, and they may also
-     * be empty. The old pattern stopped at the first quote and rejected empty values, which made whole
-     * games disappear from the library. I match the value as a proper quoted string and then undo the
-     * escaping, where a backslash always protects the character after it.
+     * be empty. I match the value as a proper quoted string and then undo the escaping, where a
+     * backslash always protects the character after it.
      * <p>
      * Time complexity: O(c) in the length of the text. Space complexity: O(n) for the value.
      *

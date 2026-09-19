@@ -272,10 +272,19 @@ cd Chess-Game
 java build/Build.java              # compile for Java 17, run the headless tests, package out/Chess-Game.jar
 java build/Build.java run          # compile if needed and start the game
 java -jar out/Chess-Game.jar       # start the packaged jar
+java build/Build.java package      # build an application image that carries its own Java runtime
 ```
 
-The script also knows the targets `clean`, `verify`, `compile`, `test`, `test-gui`, and `jar`, and runs several of them in the
-order given. It compiles with `--release 17` and UTF-8 source encoding no matter which JDK runs it, copies
+`package` writes a self contained application image to `out/package`, with a launcher next to a runtime linked from
+only the three modules the game uses, so a player needs no Java installed at all and nothing to match. `jpackage`
+cannot build for another operating system, so each platform builds its own image, which is why CI packages on
+Windows, macOS, and Linux separately and uploads one image per platform. The target stops at an application image on
+purpose: an `.msi` or `.exe` installer additionally needs WiX on the Windows machine, and a macOS app that opens
+without a security warning has to be signed and notarized with an Apple developer account, which is a manual release
+step rather than something a build can do.
+
+The script also knows the targets `clean`, `verify`, `compile`, `test`, `test-gui`, `jar`, and `package`, and runs several of
+them in the order given. It compiles with `--release 17` and UTF-8 source encoding no matter which JDK runs it, copies
 `src/resources` next to the classes so the sprite sheet is found, and refuses to package class files that need a Java
 newer than 17. `verify` fails the build when any source below `src/engine` mentions the `ui` package, AWT or Swing, so the rules engine cannot quietly grow a dependency on a window again.
 
