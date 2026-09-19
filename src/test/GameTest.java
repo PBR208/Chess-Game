@@ -1392,6 +1392,134 @@ public class GameTest {
             check(!clock.isTicking(), "a stopped clock must stop its timer");
         });
 
+        test("ChessClock: a Fischer clock pays its increment after a move", () -> {
+            ChessClock clock = new ChessClock(true, 60_000, ClockMode.FISCHER, 2_000, 0, () -> {
+            }, w -> {
+            });
+            clock.onMoveFinished();
+            checkEqual(62_000L, clock.getTimeMs(), "the increment is paid whether the move needed it or not");
+        });
+
+        test("ChessClock: sudden death and a delay clock pay no increment", () -> {
+            ChessClock sudden = new ChessClock(true, 60_000, ClockMode.SUDDEN_DEATH, 0, 0, () -> {
+            }, w -> {
+            });
+            sudden.onMoveFinished();
+            checkEqual(60_000L, sudden.getTimeMs(), "sudden death gives a player nothing but their own time");
+
+            ChessClock delayed = new ChessClock(true, 60_000, ClockMode.SIMPLE_DELAY, 0, 3_000, () -> {
+            }, w -> {
+            });
+            delayed.onMoveFinished();
+            checkEqual(60_000L, delayed.getTimeMs(), "a delay is not an increment and is never paid out");
+        });
+
+        test("ChessClock: a simple delay charges nothing until the delay is used up", () -> {
+            ChessClock clock = new ChessClock(true, 10_000, ClockMode.SIMPLE_DELAY, 0, 5_000, () -> {
+            }, w -> {
+            });
+            clock.start();
+            Thread.sleep(200);
+            clock.stop();
+            // the whole think fitted inside the delay, so it cost nothing at all
+            checkEqual(10_000L, clock.getTimeMs(), "time spent inside the delay must not be charged");
+        });
+
+        test("ChessClock: a simple delay charges only what goes past it", () -> {
+            ChessClock clock = new ChessClock(true, 10_000, ClockMode.SIMPLE_DELAY, 0, 100, () -> {
+            }, w -> {
+            });
+            clock.start();
+            Thread.sleep(400);
+            clock.stop();
+
+            long left = clock.getTimeMs();
+            check(left < 10_000, "thinking past the delay has to cost time, got " + left);
+            check(left >= 9_000, "but only what went past it, got " + left);
+        });
+
+        test("ChessClock: Bronstein gives back what the move used, up to the delay", () -> {
+            ChessClock generous = new ChessClock(true, 10_000, ClockMode.BRONSTEIN, 0, 5_000, () -> {
+            }, w -> {
+            });
+            generous.start();
+            Thread.sleep(200);
+            generous.stop();
+            check(generous.getTimeMs() >= 9_990,
+                    "a move well inside the delay costs nothing once it is given back, got " + generous.getTimeMs());
+
+            ChessClock capped = new ChessClock(true, 10_000, ClockMode.BRONSTEIN, 0, 100, () -> {
+            }, w -> {
+            });
+            capped.start();
+            Thread.sleep(500);
+            capped.stop();
+            check(capped.getTimeMs() <= 9_700,
+                    "a move past the delay gets only the delay back, got " + capped.getTimeMs());
+        });
+
+        test("ChessClock: the display counts in tenths below ten seconds", () -> {
+            checkEqual("01:05", ChessClock.formatTime(65_000, 600_000), "minutes and seconds above ten seconds");
+            checkEqual("00:10", ChessClock.formatTime(10_000, 600_000), "ten seconds still reads as a clock");
+            checkEqual("9.4", ChessClock.formatTime(9_400, 600_000), "below ten seconds every tenth shows");
+            checkEqual("0.0", ChessClock.formatTime(0, 600_000), "a fallen flag shows no time left");
+            checkEqual("00:00", ChessClock.formatTime(0, 0), "an unlimited clock never counts tenths");
+        });
+
+        test("ClockStage: a tournament control is read the way players write it", () -> {
+            List<ClockStage> classical = ClockStage.parse("40/90, 30");
+            checkEqual(2, classical.size(), "forty moves in ninety minutes, then thirty minutes");
+            checkEqual(40, classical.get(0).moves(), "the first stage covers forty moves");
+            checkEqual(5_400_000L, classical.get(0).timeMs(), "ninety minutes, in milliseconds");
+            check(classical.get(1).runsToTheEnd(), "the last stage has no move count of its own");
+            checkEqual(1_800_000L, classical.get(1).timeMs(), "thirty minutes for the rest of the game");
+
+            checkEqual(1, ClockStage.parse("30").size(), "a control without a slash is a single stage");
+            check(ClockStage.parse("").isEmpty(), "no text means no stages");
+            check(ClockStage.parse(null).isEmpty(), "and neither does nothing at all");
+            check(ClockStage.parse("40/ninety").isEmpty(), "a control nobody can read gives no stages at all");
+        });
+
+        test("ChessClock: a staged control hands out its time when the stage is played out", () -> {
+            ChessClock clock = new ChessClock(true, 60_000, ClockMode.SUDDEN_DEATH, 0, 0, () -> {
+            }, w -> {
+            });
+            // two moves at a minute, then a minute and a half for whatever is left
+            clock.setStages(List.of(new ClockStage(2, 60_000),
+                    new ClockStage(ClockStage.UNTIL_THE_END, 30_000)));
+
+            clock.onMoveFinished();
+            checkEqual(60_000L, clock.getTimeMs(), "a move inside the stage brings nothing with it");
+
+            clock.onMoveFinished();
+            checkEqual(90_000L, clock.getTimeMs(), "playing the stage out brings the next stage's time");
+
+            clock.onMoveFinished();
+            checkEqual(90_000L, clock.getTimeMs(), "the last stage runs to the end and brings no more");
+        });
+
+        test("LowTimeSound: a warning never throws, with or without a sound card", () -> {
+            // a build server has no sound card, and a warning must never take a game down with it
+            checkEqual(!GraphicsEnvironment.isHeadless(), LowTimeSound.isAvailable(),
+                    "a machine without a screen is treated as one without sound");
+            LowTimeSound.play();
+        });
+
+        test("ChessClock: the low time warning comes once, and again after time is added", () -> {
+            ChessClock clock = new ChessClock(true, 2_000, () -> {
+            }, w -> {
+            });
+            check(!clock.isLowTimeWarned(), "a fresh clock has nothing to warn about yet");
+
+            clock.start();
+            Thread.sleep(250);
+            check(clock.isLowTimeWarned(), "a clock under the low mark warns its player");
+            clock.stop();
+
+            clock.addTime(120_000);
+            check(!clock.isLowTimeWarned(), "time back above the mark earns another warning later on");
+        });
+
         test("Board: a board whose clocks are stopped can be garbage collected", () -> {
             java.lang.ref.WeakReference<Board> ref = boardWithStoppedClocks();
             // give the collector a few chances, a live timer would keep the board reachable forever
@@ -1444,6 +1572,35 @@ public class GameTest {
                 // the size is checked before anything else is created
             }
         });
+
+        test("Board: pausing stops both clocks and resuming starts the one to move", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(new GameConfig("Alice", "Bob", 120_000, 120_000, "Bullet 2+1", 1_000));
+                    check(board.areClocksRunning(), "a new game runs White's clock");
+
+                    board.setPaused(true);
+                    check(board.isPaused(), "the board has to know it is paused");
+                    check(!board.areClocksRunning(), "a paused game stops both clocks");
+
+                    board.setPaused(true);
+                    check(board.isPaused(), "pausing an already paused game changes nothing");
+
+                    board.setPaused(false);
+                    check(!board.isPaused(), "the game runs again");
+                    check(board.isClockRunning(true), "and the clock of the player to move carries on");
+                }));
+
+        test("Board: a paused board takes no moves", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    Input input = new Input(board, board.getSession());
+                    board.setPaused(true);
+
+                    // the middle of e2, which holds a pawn in the starting position
+                    input.mousePressed(new java.awt.event.MouseEvent(board, java.awt.event.MouseEvent.MOUSE_PRESSED,
+                            System.currentTimeMillis(), 0, 382, 637, 1, false));
+                    check(board.getSelectedSquare() < 0, "nothing may be picked up while the game is paused");
+                }));
 
         test("Main: the window size is cut down to the usable screen area", () -> {
             Rectangle laptop = new Rectangle(0, 0, 1366, 728);
@@ -2226,6 +2383,54 @@ public class GameTest {
                     boolean explained = findAllLabels(p).stream()
                             .anyMatch(l -> l.getText() != null && l.getText().contains("minutes"));
                     check(explained, "the reason must be shown on the screen");
+                }));
+
+        test("NewGamePanel: an untouched screen keeps the mode its time control implies", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    checkEqual(ClockMode.SUDDEN_DEATH, p.createConfig().clockMode(),
+                            "Rapid 10+0 has no increment, so it is played as sudden death");
+
+                    findButton(p, "Bullet 2+1").doClick();
+                    checkEqual(ClockMode.FISCHER, p.createConfig().clockMode(),
+                            "a preset with an increment is a Fischer clock");
+                }));
+
+        test("NewGamePanel: picking Bronstein trades the increment for a delay", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    // a preset that does have an increment, to prove the mode wins over it
+                    findButton(p, "Rapid 15+10").doClick();
+                    findButton(p, "Bronstein").doClick();
+                    // the delay field sits behind the two names and the two custom time fields
+                    findAllTextFields(p).get(4).setText("5");
+
+                    GameConfig cfg = p.createConfig();
+                    checkEqual(ClockMode.BRONSTEIN, cfg.clockMode(), "the mode the player picked must win");
+                    checkEqual(5_000L, cfg.delayMs(), "the delay is read from the delay field");
+                    checkEqual(0L, cfg.incrementMs(), "a Bronstein clock pays no increment");
+                }));
+
+        test("NewGamePanel: picking Delay reads the same field", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    findButton(p, "Delay").doClick();
+                    findAllTextFields(p).get(4).setText("3");
+
+                    GameConfig cfg = p.createConfig();
+                    checkEqual(ClockMode.SIMPLE_DELAY, cfg.clockMode(), "the delay mode must reach the game");
+                    checkEqual(3_000L, cfg.delayMs(), "with the seconds that were typed");
+                }));
+
+        test("NewGamePanel: Black can start with a time of their own", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    // the odds field is the last one on the screen
+                    findAllTextFields(p).get(5).setText("3");
+
+                    GameConfig cfg = p.createConfig();
+                    checkEqual(600_000L, cfg.whiteTimeMs(), "White keeps the time of the preset");
+                    checkEqual(180_000L, cfg.blackTimeMs(), "Black gets the time from the odds field");
                 }));
 
         // =================================================================
@@ -4241,6 +4446,28 @@ public class GameTest {
             });
             unlimited.setTimeMs(5_000);
             checkEqual(0L, unlimited.getTimeMs(), "an unlimited clock has no time to restore");
+        });
+
+        test("ChessClock: a restored reading takes a move back out of its stage as well", () -> {
+            ChessClock clock = new ChessClock(true, 60_000, ClockMode.SUDDEN_DEATH, 0, 0, () -> {
+            }, w -> {
+            });
+            // two moves at a minute, then half a minute more for whatever is left
+            clock.setStages(List.of(new ClockStage(2, 60_000),
+                    new ClockStage(ClockStage.UNTIL_THE_END, 30_000)));
+
+            clock.onMoveFinished();
+            ChessClock.Reading afterFirstMove = clock.reading();
+            clock.onMoveFinished();
+            checkEqual(90_000L, clock.getTimeMs(), "the second move plays the stage out");
+
+            // taking the second move back, then playing it again, must hand the stage's time out once
+            clock.restore(afterFirstMove);
+            checkEqual(60_000L, clock.getTimeMs(), "the time goes back to before the second move");
+            clock.onMoveFinished();
+            checkEqual(90_000L, clock.getTimeMs(), "the move played again finishes the stage exactly once");
+            clock.onMoveFinished();
+            checkEqual(90_000L, clock.getTimeMs(), "and the last stage brings nothing more");
         });
 
         // -- Summary ------------------------------------------------------

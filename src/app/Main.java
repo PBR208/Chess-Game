@@ -181,6 +181,11 @@ public class Main {
      * session, which asks the opponent in a timed game, and let the board tell me whenever the game
      * changed so the buttons can be greyed out exactly when they would do nothing.
      * <p>
+     * Players also step away from a game, and stopping the clock should not mean ending it. The
+     * pause button pauses and resumes the board and says which of the two it will do next, so a
+     * player always reads the action rather than the state. Everything it needs is on the board
+     * itself, which stops the clocks and refuses moves while it is paused.
+     * <p>
      * Time complexity: O(1). Space complexity: O(1) apart from the panel and its buttons.
      *
      * @param pBoard the board of the running game, never null
@@ -198,10 +203,17 @@ public class Main {
         takeBack.setName("takeBack");
         JButton replay = UiComponents.button("Replay move", buttonFont, Theme.BUTTON_SECONDARY);
         replay.setName("replayMove");
+        JButton pause = UiComponents.button("Pause", buttonFont, Theme.BUTTON_SECONDARY);
+        pause.setName("pause");
 
         // the session decides whether the move really comes back, since a timed game asks the opponent
         takeBack.addActionListener(e -> session.requestTakeback());
         replay.addActionListener(e -> session.redo());
+        pause.addActionListener(e -> {
+            pBoard.setPaused(!pBoard.isPaused());
+            // the button names what pressing it will do next, not what the game is doing now
+            pause.setText(pBoard.isPaused() ? "Resume" : "Pause");
+        });
 
         // a button that would do nothing says so by being grey
         Runnable refresh = () -> {
@@ -213,6 +225,7 @@ public class Main {
 
         bar.add(takeBack);
         bar.add(replay);
+        bar.add(pause);
         return bar;
     }
 

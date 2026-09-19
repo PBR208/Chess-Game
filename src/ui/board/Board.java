@@ -56,10 +56,13 @@ public class Board extends JPanel implements GameSession.View {
 
     private final ChessClock whiteClock;
     private final ChessClock blackClock;
-    // added to a player's clock after each of their moves
-    private final long incrementMs;
-    // what both clocks showed after each ply, index 0 being the start of the game
-    private final ArrayList<long[]> clockSnapshots = new ArrayList<>();
+    // while a game is paused both clocks stand still and the board takes no moves
+    private boolean paused;
+
+    // laid over the squares while the game is paused, dark enough to say "not now"
+    private static final Color PAUSE_VEIL = new Color(0, 0, 0, 150);
+    // what both clocks showed after each ply, White's first, index 0 being the start of the game
+    private final ArrayList<ChessClock.Reading[]> clockSnapshots = new ArrayList<>();
     // told after every change the session makes, so the buttons around the board can follow along
     private Runnable onGameChanged = () -> {
     };
@@ -117,12 +120,16 @@ public class Board extends JPanel implements GameSession.View {
         // a game on a clock asks the opponent before a move is taken back, a casual one does not
         session.setTakebackArbiter(new SwingTakebackArbiter(this, pConfig.whiteTimeMs() > 0));
 
-        this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), this::repaint, this::onTimeExpired);
-        this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), this::repaint, this::onTimeExpired);
-        // the same increment applies to both players
-        this.incrementMs = pConfig.incrementMs();
-        // the times before a single move was played, which is where taking back the first move leads
-        clockSnapshots.add(new long[]{pConfig.whiteTimeMs(), pConfig.blackTimeMs()});
+        // both clocks play the same time control, but they may start from different times
+        this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), pConfig.clockMode(),
+                pConfig.incrementMs(), pConfig.delayMs(), this::repaint, this::onTimeExpired);
+        this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), pConfig.clockMode(),
+                pConfig.incrementMs(), pConfig.delayMs(), this::repaint, this::onTimeExpired);
+        // both players play the same tournament control, each counting their own moves through it
+        this.whiteClock.setStages(pConfig.stages());
+        this.blackClock.setStages(pConfig.stages());
+        // the clocks before a single move was played, which is where taking back the first move leads
+        clockSnapshots.add(readClocks());
 
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
 
@@ -218,6 +225,18 @@ public class Board extends JPanel implements GameSession.View {
         } else {
             blackClock.draw(g2d, bottomY, boardWidth, clockHeight);
         }
+
+        // a paused game has to look paused, or a player waits for a board that is ignoring them
+        if (paused) {
+            g2d.setColor(PAUSE_VEIL);
+            g2d.fillRect(0, clockHeight, boardWidth, rows * tileSize);
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font(Font.SANS_SERIF, Font.BOLD, tileSize / 2));
+            FontMetrics metrics = g2d.getFontMetrics();
+            String text = "PAUSED";
+            g2d.drawString(text, (boardWidth - metrics.stringWidth(text)) / 2,
+                    clockHeight + rows * tileSize / 2);
+        }
     }
 
     /**
@@ -282,14 +301,14 @@ public class Board extends JPanel implements GameSession.View {
      */
     @Override
     public void switchClocks(boolean pWhiteToMove) {
-        // only the side to move uses up time, the side that just moved earns its increment
+        // only the side to move uses up time, and the clock that just stopped settles its own mode
         if (pWhiteToMove) {
             blackClock.stop();
-            blackClock.addTime(incrementMs);
+            blackClock.onMoveFinished();
             whiteClock.start();
         } else {
             whiteClock.stop();
-            whiteClock.addTime(incrementMs);
+            whiteClock.onMoveFinished();
             blackClock.start();
         }
         fireGameChanged();
@@ -319,7 +338,7 @@ public class Board extends JPanel implements GameSession.View {
         whiteClock.start();
         // a new game keeps none of the times the finished one left behind
         clockSnapshots.clear();
-        clockSnapshots.add(new long[]{whiteClock.getTimeMs(), blackClock.getTimeMs()});
+        clockSnapshots.add(readClocks());
         fireGameChanged();
     }
 
@@ -327,9 +346,11 @@ public class Board extends JPanel implements GameSession.View {
      * Remembers what both clocks show after the move that was just played.
      * <p>
      * Taking a move back has to give both players the time they had before it, and only the clocks
-     * themselves know that. I store both remaining times under the ply the game is at now. A move
-     * played after something was taken back drops the snapshots of the line that was abandoned, so
-     * the list always describes the game as it really went.
+     * themselves know that. I store both clocks under the ply the game is at now, including how far
+     * each player has got through a tournament control, so a move that is taken back no longer
+     * counts towards the end of a stage either. A move played after something was taken back drops
+     * the snapshots of the line that was abandoned, so the list always describes the game as it
+     * really went.
      * <p>
      * Time complexity: O(d) for the d snapshots of an abandoned line, O(1) otherwise.
      * Space complexity: O(1) per played move.
@@ -342,16 +363,28 @@ public class Board extends JPanel implements GameSession.View {
         while (clockSnapshots.size() > pPly) {
             clockSnapshots.remove(clockSnapshots.size() - 1);
         }
-        clockSnapshots.add(new long[]{whiteClock.getTimeMs(), blackClock.getTimeMs()});
+        clockSnapshots.add(readClocks());
+    }
+
+    /**
+     * Reads both clocks at this moment.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return White's reading followed by Black's, never null
+     */
+    private ChessClock.Reading[] readClocks() {
+        return new ChessClock.Reading[]{whiteClock.reading(), blackClock.reading()};
     }
 
     /**
      * Puts both clocks back to what they showed at a ply and starts the one of the player to move.
      * <p>
      * A taken back move gives the time back that was spent on it. I stop both clocks, set them to
-     * the times recorded for that ply and start the clock of whoever is to move there. A ply nobody
+     * what was recorded for that ply and start the clock of whoever is to move there. A ply nobody
      * recorded, which can only happen for a game that was loaded rather than played, leaves the
-     * times alone and only hands the clock over.
+     * times alone and only hands the clock over. A paused game stays paused, so neither clock starts
+     * until the players resume it.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
@@ -364,16 +397,18 @@ public class Board extends JPanel implements GameSession.View {
         blackClock.stop();
 
         if (pPly < clockSnapshots.size()) {
-            long[] times = clockSnapshots.get(pPly);
-            whiteClock.setTimeMs(times[0]);
-            blackClock.setTimeMs(times[1]);
+            ChessClock.Reading[] readings = clockSnapshots.get(pPly);
+            whiteClock.restore(readings[0]);
+            blackClock.restore(readings[1]);
         }
 
-        // the player to move is the one whose clock runs
-        if (pWhiteToMove) {
-            whiteClock.start();
-        } else {
-            blackClock.start();
+        // the player to move is the one whose clock runs, and resuming a paused game starts it
+        if (!paused) {
+            if (pWhiteToMove) {
+                whiteClock.start();
+            } else {
+                blackClock.start();
+            }
         }
         fireGameChanged();
     }
@@ -401,6 +436,51 @@ public class Board extends JPanel implements GameSession.View {
      */
     private void fireGameChanged() {
         onGameChanged.run();
+    }
+
+    /**
+     * Pauses or resumes the game.
+     * <p>
+     * Players step away from a board, and until now the only way to stop the clock was to finish the
+     * game. Pausing stops both clocks and makes the board ignore the mouse, so a piece cannot be
+     * moved while nobody is watching the time. Resuming starts the clock of whoever is to move, and
+     * never starts one at all when the game is already over. Asking for the state the game is
+     * already in does nothing, so a pause cannot be stacked.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pPaused true to pause the game, false to let it run again
+     */
+    public void setPaused(boolean pPaused) {
+        // nothing to do, and pausing twice must not lose track of whose clock was running
+        if (pPaused == paused) {
+            return;
+        }
+        paused = pPaused;
+
+        if (paused) {
+            whiteClock.stop();
+            blackClock.stop();
+        } else if (!session.result().isFinished()) {
+            // the clock of the player to move is the one that carries on
+            if (session.isWhiteToMove()) {
+                whiteClock.start();
+            } else {
+                blackClock.start();
+            }
+        }
+        repaint();
+    }
+
+    /**
+     * Tells whether the game is paused.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return true while both clocks stand still and the board takes no moves
+     */
+    public boolean isPaused() {
+        return paused;
     }
 
     /**
