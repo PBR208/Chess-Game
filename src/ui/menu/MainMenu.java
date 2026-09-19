@@ -73,6 +73,8 @@ public class MainMenu extends JPanel {
 
         card.add(menuButton(Messages.get("menu.newGame"), true, e -> showNewGamePanel()));
         card.add(Box.createVerticalStrut(10));
+        card.add(menuButton(Messages.get("menu.setUpPosition"), false, e -> Main.showSetup()));
+        card.add(Box.createVerticalStrut(10));
         card.add(menuButton(Messages.get("menu.pastGames"), false, e -> Main.showPastGames()));
 
         card.add(Box.createVerticalStrut(24));

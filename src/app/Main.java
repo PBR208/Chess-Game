@@ -11,8 +11,10 @@ package app;
  * Version: 1.0
  */
 
+import engine.core.Fen;
 import engine.core.GameResult;
 import engine.core.GameSession;
+import engine.core.Position;
 import engine.core.Pieces;
 import engine.core.Termination;
 import engine.model.GameConfig;
@@ -24,6 +26,7 @@ import ui.board.MoveLogPanel;
 import ui.i18n.Messages;
 import ui.menu.MainMenu;
 import ui.menu.PastGamesPanel;
+import ui.menu.SetupPanel;
 import ui.theme.Theme;
 import ui.theme.UiComponents;
 
@@ -123,13 +126,39 @@ public class Main {
      * @param pConfig names, times and increment of the new game; null starts an unlimited game
      */
     public static void startGame(GameConfig pConfig) {
+        startGame(pConfig, null);
+    }
+
+    /**
+     * Opens the game screen for a new game that starts from a given position.
+     * <p>
+     * A game can begin from a position that was set up in the editor rather than from the standard
+     * one. I read the FEN into a position, falling back to the standard one when no FEN is given, and
+     * otherwise set the game up exactly as a normal one. The FEN is parsed here rather than trusted,
+     * so an unusable one is refused before a window is built, which the editor prevents anyway by
+     * only offering to start a position it could parse itself.
+     * <p>
+     * Time complexity: O(p) for the p pieces of the position. Space complexity: O(p) for the board.
+     *
+     * @param pConfig   names, times and increment of the new game; null starts an unlimited game
+     * @param pStartFen position to begin from in Forsyth Edwards notation; null or blank starts from
+     *                  the standard position
+     * @throws IllegalArgumentException if pStartFen is not a legal chess position
+     */
+    public static void startGame(GameConfig pConfig, String pStartFen) {
         // no configuration means a casual game without clocks
         final GameConfig cfg = pConfig == null ? GameConfig.unlimited() : pConfig;
+        // no FEN means the game begins where chess begins
+        final Position start = pStartFen == null || pStartFen.isBlank()
+                ? Position.startPosition()
+                : Fen.parse(pStartFen);
+        // a saved game names the position it began from, unless that was the usual one
+        final String startFen = Fen.write(start).equals(Fen.START_POSITION) ? null : Fen.write(start);
 
         SwingUtilities.invokeLater(() -> {
             // squares small enough for the whole game screen to fit on this screen
             Rectangle usableArea = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
-            Board board = new Board(cfg, Board.tileSizeFor(usableArea.width, usableArea.height));
+            Board board = new Board(cfg, Board.tileSizeFor(usableArea.width, usableArea.height), start);
             MoveLogPanel logPanel = new MoveLogPanel(board.getPreferredSize().height);
             GameSession session = board.getSession();
             session.setMoveLogView(logPanel);
@@ -138,10 +167,10 @@ public class Main {
 
             session.setEndListener((pResult, pTermination) -> {
                 // the session owns the moves and the result, the names and the clock come from the config,
-                // and the reason it ended is what the PGN Termination tag gets written from. The board
-                // always starts a game from the usual position, so there is no starting FEN to record.
+                // and the reason it ended is what the PGN Termination tag gets written from. A game set
+                // up in the editor records its starting FEN, or its moves could not be read back.
                 GameRecord record = new GameRecord(cfg, pResult.pgnToken(), pTermination,
-                        session.getMoveLog(), session.getFenHistory(), null);
+                        session.getMoveLog(), session.getFenHistory(), startFen);
                 // a game that couldn't be written must not disappear without a word
                 boolean saved = PgnManager.save(record);
                 // the engine reports a result and a reason, the sentence the players read is built here
@@ -312,6 +341,24 @@ public class Main {
     public static void showPastGames() {
         SwingUtilities.invokeLater(() -> {
             frame.setContentPane(new PastGamesPanel());
+            frame.revalidate();
+            frame.repaint();
+        });
+    }
+
+    /**
+     * Opens the position editor.
+     * <p>
+     * Setting a position up is a screen of its own, like the menu and the library, so the window
+     * swaps it in the same way. The editor starts a game itself once the position can be played,
+     * which is why nothing has to be handed back here.
+     * <p>
+     * Time complexity: O(64) for the board the editor opens on. Space complexity: O(1) beyond the
+     * new screen.
+     */
+    public static void showSetup() {
+        SwingUtilities.invokeLater(() -> {
+            frame.setContentPane(new SetupPanel());
             frame.revalidate();
             frame.repaint();
         });

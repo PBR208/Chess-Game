@@ -410,6 +410,34 @@ public class GameTest {
     }
 
     /**
+     * Finds a component by the name it was given.
+     * <p>
+     * Screens hold several text fields and several check boxes, and picking one by its position in
+     * the tree breaks as soon as anything is laid out differently. A name says which one is meant.
+     * <p>
+     * Time complexity: O(n) for the n components below pRoot. Space complexity: O(d) for a tree d
+     * levels deep.
+     *
+     * @param pRoot container to search, never null
+     * @param pName the name the component was given, never null
+     * @return the component with that name, or null when there is none
+     */
+    private static Component findByName(Container pRoot, String pName) {
+        for (Component child : pRoot.getComponents()) {
+            if (pName.equals(child.getName())) {
+                return child;
+            }
+            if (child instanceof Container nested) {
+                Component found = findByName(nested, pName);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
      * Counts how many components of the given class exist in the tree.
      */
     private static int countComponents(Container c, Class<?> type) {
@@ -978,6 +1006,153 @@ public class GameTest {
             checkEqual(GameRecord.NO_TIME_CONTROL, GameRecord.pgnTimeControl(GameConfig.unlimited()),
                     "a game without a clock has no time control at all");
         });
+
+        // =================================================================
+        System.out.println("\n-- Starting from a set up position -------------------------------");
+        // =================================================================
+
+        test("Board: a game can start from a position that was set up", () -> {
+            // a rook endgame, the kind of position somebody sets up on purpose
+            String fen = "8/8/8/4k3/8/8/4K3/7R w - - 0 1";
+            Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE, Fen.parse(fen));
+
+            checkEqual(fen, Fen.write(board.getSession().position()),
+                    "the board must start on the position it was handed");
+            check(board.getSession().isWhiteToMove(), "White must be to move in that position");
+        });
+
+        test("Board: a set up position with Black to move runs Black's clock first", () -> {
+            String fen = "8/8/8/4k3/8/8/4K3/7R b - - 0 1";
+            Board board = new Board(new GameConfig("Alice", "Bob", 60_000, 60_000, "Blitz 1+0", 0),
+                    Board.MIN_TILE_SIZE, Fen.parse(fen));
+            try {
+                check(board.isClockRunning(false), "the side to move is the one whose time runs");
+                check(!board.isClockRunning(true), "and White's clock waits for White's turn");
+            } finally {
+                // a running clock keeps its timer alive
+                board.getSession().resign(Pieces.WHITE);
+            }
+        });
+
+        test("Board: without a position a game still starts where chess starts", () -> {
+            Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE);
+            checkEqual(Fen.START_POSITION, Fen.write(board.getSession().position()),
+                    "the usual constructor must still give the standard position");
+        });
+
+        test("Board: a game that began from a set up position can be played on", () -> {
+            Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE,
+                    Fen.parse("8/8/8/4k3/8/8/4K3/7R w - - 0 1"));
+            GameSession session = board.getSession();
+
+            // starting somewhere else is worth nothing if the rules do not follow
+            int move = session.moveFor(Bitboards.squareOf("h1"), Bitboards.squareOf("h8"));
+            check(session.play(move), "a legal move in the set up position must be accepted");
+            checkEqual(1, session.getMoveLog().size(), "the move must be written down");
+            checkEqual("Rh8", session.getMoveLog().get(0), "and written down correctly");
+            check(!session.isWhiteToMove(), "the turn must pass to Black");
+        });
+
+        // =================================================================
+        System.out.println("\n-- SetupPanel ----------------------------------------------------");
+        // =================================================================
+
+        test("SetupPanel: opens on the standard starting position", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    SetupPanel p = new SetupPanel();
+                    checkEqual(Fen.START_POSITION, p.fen(), "the editor must open on the starting position");
+                    check(p.canStart(), "the starting position must be playable");
+                    checkNotNull(findByName(p, "setupBoard"), "the editor must show a board");
+                }));
+
+        test("SetupPanel: placing and rubbing out pieces changes the position", () -> {
+            SetupPanel p = new SetupPanel();
+            p.clearBoard();
+            checkEqual("8/8/8/8/8/8/8/8 w - - 0 1", p.fen(), "clearing must leave an empty board");
+
+            p.putPiece(Bitboards.squareOf("e1"), Pieces.WHITE_KING);
+            p.putPiece(Bitboards.squareOf("e8"), Pieces.BLACK_KING);
+            p.putPiece(Bitboards.squareOf("h1"), Pieces.WHITE_ROOK);
+            checkEqual("4k3/8/8/8/8/8/8/4K2R w - - 0 1", p.fen(), "the pieces must stand where they were put");
+
+            p.putPiece(Bitboards.squareOf("h1"), Pieces.NONE);
+            checkEqual("4k3/8/8/8/8/8/8/4K3 w - - 0 1", p.fen(), "the eraser must empty a square");
+        });
+
+        test("SetupPanel: a piece can be dragged to another square", () -> {
+            SetupPanel p = new SetupPanel();
+            p.clearBoard();
+            p.putPiece(Bitboards.squareOf("e1"), Pieces.WHITE_KING);
+            p.putPiece(Bitboards.squareOf("e8"), Pieces.BLACK_KING);
+
+            p.movePiece(Bitboards.squareOf("e1"), Bitboards.squareOf("a1"));
+            checkEqual("4k3/8/8/8/8/8/8/K7 w - - 0 1", p.fen(), "the piece must have moved across");
+
+            // dragging from an empty square must not conjure a piece up
+            p.movePiece(Bitboards.squareOf("d4"), Bitboards.squareOf("d5"));
+            checkEqual("4k3/8/8/8/8/8/8/K7 w - - 0 1", p.fen(), "an empty square has nothing to drag");
+        });
+
+        test("SetupPanel: an illegal position says what is wrong and cannot be started", () -> {
+            SetupPanel p = new SetupPanel();
+            p.clearBoard();
+
+            // no kings at all is the first thing a cleared board is guilty of
+            checkNotNull(p.validationError(), "an empty board must not count as a position");
+            check(!p.canStart(), "a game must not start from an empty board");
+
+            p.putPiece(Bitboards.squareOf("e1"), Pieces.WHITE_KING);
+            p.putPiece(Bitboards.squareOf("e8"), Pieces.BLACK_KING);
+            check(p.canStart(), "two kings alone are a legal position, got: " + p.validationError());
+
+            // a pawn that should have promoted is exactly what Fen refuses
+            p.putPiece(Bitboards.squareOf("a8"), Pieces.WHITE_PAWN);
+            String problem = p.validationError();
+            checkNotNull(problem, "a pawn on the last rank must be refused");
+            check(problem.contains("pawn"), "the reason must name the pawn, got: " + problem);
+            check(!p.canStart(), "a game must not start from an impossible position");
+        });
+
+        test("SetupPanel: pasting a FEN fills the board, a bad one is refused", () -> {
+            SetupPanel p = new SetupPanel();
+            String endgame = "8/8/8/4k3/8/8/4K3/7R b - - 3 42";
+
+            check(p.loadFen(endgame), "a legal position must be accepted");
+            checkEqual(endgame, p.fen(), "the pasted position must come back unchanged");
+            check(p.canStart(), "the pasted position must be playable");
+
+            // the board has to keep what it had rather than end up half loaded
+            check(!p.loadFen("this is not a position"), "nonsense must be refused");
+            checkEqual(endgame, p.fen(), "a refused paste must leave the board alone");
+            check(!p.loadFen("8/8/8/8/8/8/8/8 w - - 0 1"), "a position without kings must be refused");
+            checkEqual(endgame, p.fen(), "and must also leave the board alone");
+        });
+
+        test("SetupPanel: the side to move and the castling rights reach the FEN", () -> {
+            SetupPanel p = new SetupPanel();
+            p.setSideToMove(Pieces.BLACK);
+            check(p.fen().contains(" b "), "Black to move must show up in the FEN, got: " + p.fen());
+
+            p.setSideToMove(Pieces.WHITE);
+            check(p.fen().contains(" w "), "White to move must show up in the FEN, got: " + p.fen());
+
+            JCheckBox kingside = (JCheckBox) findByName(p, "castleK");
+            checkNotNull(kingside, "the editor must offer the castling rights");
+            check(kingside.isSelected(), "the starting position must keep all four rights");
+            kingside.setSelected(false);
+            checkEqual("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w Qkq - 0 1", p.fen(),
+                    "taking a right away must change the FEN");
+        });
+
+        test("MainMenu: the menu leads to the position editor", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    MainMenu menu = new MainMenu();
+                    check(hasButton(menu, "Set Up Position"),
+                            "the menu must offer a way into the position editor");
+                    // the editor must be an addition rather than a replacement
+                    check(hasButton(menu, "New Game"), "the menu must still start a new game");
+                    check(hasButton(menu, "Past Games"), "and must still reach the library");
+                }));
 
         // =================================================================
         System.out.println("\n-- BoardState ---------------------------------------------------");
@@ -5112,36 +5287,6 @@ public class GameTest {
     }
 
     // -- Test-only helpers ------------------------------------------------
-
-    /**
-     * Finds the component with a given name anywhere below a container.
-     * <p>
-     * Some of what a screen draws is not a button or a label but a panel that paints itself, and
-     * such a panel has no text to find it by. The ones worth checking carry a name, so this walks
-     * the tree and returns the first component wearing the one that was asked for.
-     * <p>
-     * Time complexity: O(c) for the c components below the container.
-     * Space complexity: O(d) for a tree of depth d.
-     *
-     * @param pRoot container to search below, never null
-     * @param pName component name to look for, never null
-     * @return the component with that name, or null when nothing below carries it
-     */
-    private static Component findByName(Container pRoot, String pName) {
-        for (Component child : pRoot.getComponents()) {
-            if (pName.equals(child.getName())) {
-                return child;
-            }
-            // a named component can sit at any depth, inside panels and split panes
-            if (child instanceof Container nested) {
-                Component found = findByName(nested, pName);
-                if (found != null) {
-                    return found;
-                }
-            }
-        }
-        return null;
-    }
 
     /**
      * Reads one language bundle straight from the classpath, without any fallback.
