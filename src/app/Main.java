@@ -11,8 +11,11 @@ package app;
  * Version: 1.0
  */
 
+import engine.core.Fen;
 import engine.core.GameResult;
 import engine.core.GameSession;
+import engine.core.Position;
+import engine.core.Pieces;
 import engine.core.Termination;
 import engine.model.EngineSettings;
 import engine.model.GameConfig;
@@ -22,8 +25,12 @@ import ui.board.Board;
 import ui.board.EndScreen;
 import ui.board.EnginePlayer;
 import ui.board.MoveLogPanel;
+import ui.i18n.Messages;
 import ui.menu.MainMenu;
 import ui.menu.PastGamesPanel;
+import ui.menu.SetupPanel;
+import ui.theme.Theme;
+import ui.theme.UiComponents;
 
 import javax.swing.*;
 import java.awt.*;
@@ -121,16 +128,11 @@ public class Main {
      * @param pConfig names, times and increment of the new game; null starts an unlimited game
      */
     public static void startGame(GameConfig pConfig) {
-        startGame(pConfig, EngineSettings.humanOpponent());
+        startGame(pConfig, EngineSettings.humanOpponent(), null);
     }
 
     /**
      * Opens the game screen for a new game against a given opponent.
-     * <p>
-     * A game against the program needs three things a game between two people does not: the board
-     * has to stop turning round, somebody has to answer each move, and the program has to move first
-     * when it has the white pieces. The answering hangs off the move log, which is told about every
-     * move that is played, so nothing else had to grow a hook for it.
      * <p>
      * Time complexity: O(p) for the starting pieces. Space complexity: O(p) for the new board.
      *
@@ -138,25 +140,79 @@ public class Main {
      * @param pSettings who the second player is; null means another person
      */
     public static void startGame(GameConfig pConfig, EngineSettings pSettings) {
+        startGame(pConfig, pSettings, null);
+    }
+
+    /**
+     * Opens the game screen for a game between two people that starts from a given position.
+     * <p>
+     * Time complexity: O(p) for the p pieces of the position. Space complexity: O(p) for the board.
+     *
+     * @param pConfig   names, times and increment of the new game; null starts an unlimited game
+     * @param pStartFen position to begin from in Forsyth Edwards notation; null or blank starts from
+     *                  the standard position
+     * @throws IllegalArgumentException if pStartFen is not a legal chess position
+     */
+    public static void startGame(GameConfig pConfig, String pStartFen) {
+        startGame(pConfig, EngineSettings.humanOpponent(), pStartFen);
+    }
+
+    /**
+     * Opens the game screen for a new game against a given opponent from a given position.
+     * <p>
+     * A game can begin from a position that was set up in the editor rather than from the standard
+     * one. I read the FEN into a position, falling back to the standard one when no FEN is given, and
+     * otherwise set the game up exactly as a normal one. The FEN is parsed here rather than trusted,
+     * so an unusable one is refused before a window is built, which the editor prevents anyway by
+     * only offering to start a position it could parse itself.
+     * <p>
+     * A game against the program needs three things a game between two people does not: the board
+     * has to stop turning round, somebody has to answer each move, and the program has to move first
+     * when it is the side to move. The answering hangs off the move log, which is told about every
+     * move that is played, so nothing else had to grow a hook for it. The program also holds its
+     * move back while the game is paused and takes it once the game is resumed.
+     * <p>
+     * Time complexity: O(p) for the p pieces of the position. Space complexity: O(p) for the board.
+     *
+     * @param pConfig   names, times and increment of the new game; null starts an unlimited game
+     * @param pSettings who the second player is; null means another person
+     * @param pStartFen position to begin from in Forsyth Edwards notation; null or blank starts from
+     *                  the standard position
+     * @throws IllegalArgumentException if pStartFen is not a legal chess position
+     */
+    public static void startGame(GameConfig pConfig, EngineSettings pSettings, String pStartFen) {
         // no configuration means a casual game without clocks
         final GameConfig cfg = pConfig == null ? GameConfig.unlimited() : pConfig;
         final EngineSettings opponent = pSettings == null ? EngineSettings.humanOpponent() : pSettings;
+        // no FEN means the game begins where chess begins
+        final Position start = pStartFen == null || pStartFen.isBlank()
+                ? Position.startPosition()
+                : Fen.parse(pStartFen);
+        // a saved game names the position it began from, unless that was the usual one
+        final String startFen = Fen.write(start).equals(Fen.START_POSITION) ? null : Fen.write(start);
 
         SwingUtilities.invokeLater(() -> {
             // squares small enough for the whole game screen to fit on this screen
             Rectangle usableArea = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
-            Board board = new Board(cfg, Board.tileSizeFor(usableArea.width, usableArea.height), opponent);
+            Board board = new Board(cfg, Board.tileSizeFor(usableArea.width, usableArea.height), start, opponent);
             MoveLogPanel logPanel = new MoveLogPanel(board.getPreferredSize().height);
             GameSession session = board.getSession();
 
             EnginePlayer engine = new EnginePlayer(opponent);
             // the log hears about every move, so that is where the answer hangs off
             session.setMoveLogView(engine.watching(session, logPanel, board::repaint));
+            // a paused game keeps the program from moving, and resuming lets it take its turn
+            engine.setHold(board::isPaused);
+            board.setResumeListener(() -> engine.moveIfItsTurn(session, board::repaint));
+            // clicking a move in the log takes the game back to it, or forward again
+            logPanel.setPlySelectedListener(session::goToPly);
 
             session.setEndListener((pResult, pTermination) -> {
-                // the session owns the moves and the result, the names and the time control come from the config
-                GameRecord record = new GameRecord(cfg, pResult.pgnToken(),
-                        session.getMoveLog(), session.getFenHistory());
+                // the session owns the moves and the result, the names and the clock come from the config,
+                // and the reason it ended is what the PGN Termination tag gets written from. A game set
+                // up in the editor records its starting FEN, or its moves could not be read back.
+                GameRecord record = new GameRecord(cfg, pResult.pgnToken(), pTermination,
+                        session.getMoveLog(), session.getFenHistory(), startFen);
                 // a game that couldn't be written must not disappear without a word
                 boolean saved = PgnManager.save(record);
                 // the engine reports a result and a reason, the sentence the players read is built here
@@ -178,6 +234,7 @@ public class Main {
             gameContainer.setBackground(new Color(28, 28, 30));
             gameContainer.add(board, BorderLayout.CENTER);
             gameContainer.add(logPanel, BorderLayout.EAST);
+            gameContainer.add(actionBar(board), BorderLayout.SOUTH);
 
             JPanel wrapper = new JPanel(new GridBagLayout());
             wrapper.setBackground(new Color(28, 28, 30));
@@ -187,9 +244,110 @@ public class Main {
             frame.revalidate();
             frame.repaint();
 
-            // with the white pieces the program has to open the game rather than wait to be asked
+            // with the side to move the program has to open the game rather than wait to be asked
             engine.moveIfItsTurn(session, board::repaint);
         });
+    }
+
+    /**
+     * Builds the rows of actions under the board.
+     * <p>
+     * Players need a way to take a move back and to play it again, and both only make sense while
+     * there is something to take back or replay. The session asks the opponent before a move comes
+     * back in a timed game, so the button only hands the click over. Players also step away from a
+     * game, and stopping the clock should not mean ending it. The pause button pauses and resumes the
+     * board and says which of the two it will do next, so a player always reads the action rather
+     * than the state. Everything it needs is on the board itself, which stops the clocks and refuses
+     * moves while it is paused.
+     * <p>
+     * Games between people end by agreement or by resignation far more often than by mate, so the
+     * second row resigns, offers a draw and claims one. Resigning asks once, because it is final and a
+     * misclick would end the game. Offering a draw goes to the opponent, and claiming one goes to the
+     * rules, which is why claiming is only live while a rule actually allows it. The session says
+     * whenever the game changed, so every button is grey exactly when pressing it would do nothing.
+     * I keep the two groups on rows of their own, so the longer German labels still fit beside a
+     * small board.
+     * <p>
+     * It is public for the same reason fitToScreen is: the rule about when each action is live is
+     * worth checking, and a test should be able to build the rows from a board without starting the
+     * whole application around it.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the panels and their six buttons.
+     *
+     * @param pBoard the board of the running game, never null
+     * @return the panel holding both rows of actions, never null
+     * @throws NullPointerException if pBoard is null
+     */
+    public static JPanel actionBar(Board pBoard) {
+        GameSession session = pBoard.getSession();
+
+        JPanel bar = new JPanel(new GridLayout(2, 1));
+        bar.setBackground(Theme.PANEL_BG);
+        JPanel moveRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 6));
+        moveRow.setBackground(Theme.PANEL_BG);
+        JPanel endRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 6));
+        endRow.setBackground(Theme.PANEL_BG);
+
+        Font buttonFont = new Font(Font.SANS_SERIF, Font.PLAIN, 13);
+        JButton takeBack = UiComponents.button(Messages.get("game.takeBack"), buttonFont, Theme.BUTTON_SECONDARY);
+        takeBack.setName("takeBack");
+        JButton replay = UiComponents.button(Messages.get("game.replayMove"), buttonFont, Theme.BUTTON_SECONDARY);
+        replay.setName("replayMove");
+        JButton pause = UiComponents.button(Messages.get("game.pause"), buttonFont, Theme.BUTTON_SECONDARY);
+        pause.setName("pause");
+        JButton resign = UiComponents.button(Messages.get("game.resign"), buttonFont, Theme.BUTTON_SECONDARY);
+        resign.setName("resign");
+        JButton offerDraw = UiComponents.button(Messages.get("game.offerDraw"), buttonFont, Theme.BUTTON_SECONDARY);
+        offerDraw.setName("offerDraw");
+        JButton claimDraw = UiComponents.button(Messages.get("game.claimDraw"), buttonFont, Theme.BUTTON_SECONDARY);
+        claimDraw.setName("claimDraw");
+
+        // the session decides whether the move really comes back, since a timed game asks the opponent,
+        // and against the program the board steps back to the person's own move
+        takeBack.addActionListener(e -> pBoard.takeBack());
+        replay.addActionListener(e -> pBoard.replayMove());
+        pause.addActionListener(e -> {
+            pBoard.setPaused(!pBoard.isPaused());
+            // the button names what pressing it will do next, not what the game is doing now
+            pause.setText(Messages.get(pBoard.isPaused() ? "game.resume" : "game.pause"));
+        });
+        resign.addActionListener(e -> {
+            // giving up is final, so it is the one action worth asking about twice
+            int answer = JOptionPane.showConfirmDialog(pBoard, Messages.get("game.resignQuestion"),
+                    Messages.get("game.resign"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+            if (answer == JOptionPane.YES_OPTION) {
+                // the person gives up against the program, and between two people the player to move
+                EngineSettings settings = pBoard.getSettings();
+                int colour = settings.engineOpponent() ? settings.humanColour()
+                        : session.isWhiteToMove() ? Pieces.WHITE : Pieces.BLACK;
+                session.resign(colour);
+            }
+        });
+        // the session asks the opponent, and the rules answer the claim
+        offerDraw.addActionListener(e -> session.offerDraw());
+        claimDraw.addActionListener(e -> session.claimDraw());
+
+        // a button that would do nothing says so by being grey
+        Runnable refresh = () -> {
+            boolean running = !session.result().isFinished();
+            takeBack.setEnabled(session.canUndo());
+            replay.setEnabled(session.canRedo());
+            resign.setEnabled(running);
+            offerDraw.setEnabled(running);
+            claimDraw.setEnabled(running && session.isDrawClaimable());
+        };
+        session.setStateListener(refresh);
+        refresh.run();
+
+        moveRow.add(takeBack);
+        moveRow.add(replay);
+        moveRow.add(pause);
+        endRow.add(resign);
+        endRow.add(offerDraw);
+        endRow.add(claimDraw);
+        bar.add(moveRow);
+        bar.add(endRow);
+        return bar;
     }
 
     /**
@@ -212,24 +370,44 @@ public class Main {
     private static String endMessage(GameConfig pConfig, GameResult pResult, Termination pTermination) {
         // only mate, a resignation and a flag fall have a winner to name
         String winner = pResult == GameResult.WHITE_WINS ? pConfig.whiteName() : pConfig.blackName();
+        // the three reasons with a winner put the name into the sentence, because where the name
+        // belongs in a sentence is not the same in every language
         return switch (pTermination) {
-            case CHECKMATE -> winner + " wins by checkmate!";
-            case RESIGNATION -> winner + " wins by resignation!";
-            case TIME_OUT -> winner + " wins on time!";
-            case STALEMATE -> "Draw by stalemate!";
-            case INSUFFICIENT_MATERIAL -> "Draw: neither side has enough material to mate!";
-            case TIME_OUT_WITHOUT_MATING_MATERIAL -> "Draw: time ran out, but no mate was possible!";
-            case FIFTY_MOVE_RULE -> "Draw by the 50-move rule!";
-            case SEVENTY_FIVE_MOVE_RULE -> "Draw by the 75-move rule!";
-            case THREEFOLD_REPETITION -> "Draw by threefold repetition!";
-            case FIVEFOLD_REPETITION -> "Draw by fivefold repetition!";
-            case DRAW_AGREED -> "Draw by agreement!";
+            case CHECKMATE -> Messages.format("end.checkmate", winner);
+            case RESIGNATION -> Messages.format("end.resignation", winner);
+            case TIME_OUT -> Messages.format("end.timeOut", winner);
+            case STALEMATE -> Messages.get("end.stalemate");
+            case INSUFFICIENT_MATERIAL -> Messages.get("end.insufficientMaterial");
+            case TIME_OUT_WITHOUT_MATING_MATERIAL -> Messages.get("end.timeOutNoMaterial");
+            case FIFTY_MOVE_RULE -> Messages.get("end.fiftyMoveRule");
+            case SEVENTY_FIVE_MOVE_RULE -> Messages.get("end.seventyFiveMoveRule");
+            case THREEFOLD_REPETITION -> Messages.get("end.threefoldRepetition");
+            case FIVEFOLD_REPETITION -> Messages.get("end.fivefoldRepetition");
+            case DRAW_AGREED -> Messages.get("end.drawAgreed");
         };
     }
 
     public static void showPastGames() {
         SwingUtilities.invokeLater(() -> {
             frame.setContentPane(new PastGamesPanel());
+            frame.revalidate();
+            frame.repaint();
+        });
+    }
+
+    /**
+     * Opens the position editor.
+     * <p>
+     * Setting a position up is a screen of its own, like the menu and the library, so the window
+     * swaps it in the same way. The editor starts a game itself once the position can be played,
+     * which is why nothing has to be handed back here.
+     * <p>
+     * Time complexity: O(64) for the board the editor opens on. Space complexity: O(1) beyond the
+     * new screen.
+     */
+    public static void showSetup() {
+        SwingUtilities.invokeLater(() -> {
+            frame.setContentPane(new SetupPanel());
             frame.revalidate();
             frame.repaint();
         });
