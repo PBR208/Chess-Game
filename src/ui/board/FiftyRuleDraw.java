@@ -11,6 +11,7 @@ package ui.board;
  * Version: 1.0
  */
 
+import ui.i18n.Messages;
 import ui.theme.Theme;
 import ui.theme.UiComponents;
 
@@ -24,10 +25,6 @@ public class FiftyRuleDraw extends JDialog {
         DECLINED,
         NONE
     }
-
-    // explanation for the 50-move claim, used by the original constructor
-    private static final String FIFTY_MOVE_CLAIM_MESSAGE = "<html><center>A draw may be claimed. 50 moves have<br>" +
-            "been played without a capture or pawn move.</center></html>";
 
     private DrawResult result = DrawResult.NONE;
 
@@ -45,7 +42,8 @@ public class FiftyRuleDraw extends JDialog {
      * @throws HeadlessException if the JVM has no display
      */
     public FiftyRuleDraw(JFrame pParent, int pTileSize, boolean pIsForced) {
-        this(pParent, pTileSize, pIsForced, FIFTY_MOVE_CLAIM_MESSAGE);
+        // the explanation is read when the dialog opens, so it is in the language chosen by then
+        this(pParent, pTileSize, pIsForced, Messages.get("draw.claimFifty"));
     }
 
     /**
@@ -98,17 +96,15 @@ public class FiftyRuleDraw extends JDialog {
         Font buttonFont = new Font(Font.DIALOG, Font.PLAIN, Math.max(pTileSize / 8, 11));
 
         if (pIsForced) {
-            msg = "<html><center>The game has ended in a draw under<br>" +
-                    "the 75-move rule. No captures or pawn<br>" +
-                    "moves occurred in the last 75 moves.</center></html>";
+            msg = Messages.get("draw.forced");
             // the button only closes the notice, it never restarted anything
-            button1 = UiComponents.button("OK", buttonFont, Theme.BUTTON_SECONDARY);
+            button1 = UiComponents.button(Messages.get("common.ok"), buttonFont, Theme.BUTTON_SECONDARY);
             button1.addActionListener(e -> dispose());
         } else {
             // the reason depends on the rule that made the draw claimable
             msg = pClaimMessage;
-            button1 = UiComponents.button("Claim Draw", buttonFont, Theme.ACCENT);
-            button2 = UiComponents.button("Decline", buttonFont, Theme.BUTTON_SECONDARY);
+            button1 = UiComponents.button(Messages.get("draw.claim"), buttonFont, Theme.ACCENT);
+            button2 = UiComponents.button(Messages.get("draw.decline"), buttonFont, Theme.BUTTON_SECONDARY);
 
             button1.addActionListener(e -> {
                 result = DrawResult.ACCEPTED;

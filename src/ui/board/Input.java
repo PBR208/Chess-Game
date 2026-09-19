@@ -42,6 +42,10 @@ public class Input extends MouseAdapter {
      */
     @Override
     public void mousePressed(MouseEvent pEvent) {
+        // a paused game takes no moves, which is the whole point of pausing it
+        if (board.isPaused()) {
+            return;
+        }
         // clicks on the clock bars or outside the squares select nothing
         if (!board.isOnBoard(pEvent.getX(), pEvent.getY())) {
             return;
@@ -87,6 +91,10 @@ public class Input extends MouseAdapter {
      */
     @Override
     public void mouseReleased(MouseEvent pEvent) {
+        // nothing was picked up while paused, so there is nothing to let go of either
+        if (board.isPaused()) {
+            return;
+        }
         int from = board.getSelectedSquare();
 
         if (from >= 0 && board.isOnBoard(pEvent.getX(), pEvent.getY())) {

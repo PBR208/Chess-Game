@@ -18,6 +18,7 @@ import engine.core.Pieces;
 import engine.core.Position;
 import engine.model.GameConfig;
 import ui.board.PieceSprites;
+import ui.i18n.Messages;
 import ui.theme.Theme;
 import ui.theme.UiComponents;
 
@@ -64,7 +65,7 @@ public class SetupPanel extends JPanel {
 
     private final JTextField fenField = new JTextField();
     private final JLabel errorLabel = new JLabel(" ");
-    private final JToggleButton sideButton = new JToggleButton("White to move");
+    private final JToggleButton sideButton = new JToggleButton(Messages.get("setup.whiteToMove"));
     private final JButton startButton;
     private final JPanel boardCanvas;
 
@@ -93,11 +94,11 @@ public class SetupPanel extends JPanel {
         topBar.setBackground(Theme.PANEL_BG);
         topBar.setBorder(new EmptyBorder(12, 16, 12, 16));
 
-        JLabel title = new JLabel("Set Up Position");
+        JLabel title = new JLabel(Messages.get("setup.title"));
         title.setForeground(Theme.FG);
         title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 20));
 
-        JButton backButton = secondaryButton("Back to Menu", "backToMenu");
+        JButton backButton = secondaryButton(Messages.get("common.backToMenu"), "backToMenu");
         backButton.addActionListener(e -> Main.showMenu());
 
         topBar.add(title, BorderLayout.WEST);
@@ -134,13 +135,13 @@ public class SetupPanel extends JPanel {
         add(boardHolder, BorderLayout.CENTER);
         add(buildSidePanel(), BorderLayout.EAST);
 
-        startButton = primaryButton("Start Game", "startPosition");
+        startButton = primaryButton(Messages.get("setup.startGame"), "startPosition");
         startButton.addActionListener(e -> startGame());
 
-        JButton clearButton = secondaryButton("Clear board", "clearBoard");
+        JButton clearButton = secondaryButton(Messages.get("setup.clearBoard"), "clearBoard");
         clearButton.addActionListener(e -> clearBoard());
 
-        JButton resetButton = secondaryButton("Start position", "resetPosition");
+        JButton resetButton = secondaryButton(Messages.get("setup.startPosition"), "resetPosition");
         resetButton.addActionListener(e -> resetToStartPosition());
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 8));
@@ -173,7 +174,7 @@ public class SetupPanel extends JPanel {
         side.setBorder(new EmptyBorder(12, 16, 12, 16));
         side.setPreferredSize(new Dimension(320, 0));
 
-        side.add(sectionLabel("Pieces"));
+        side.add(sectionLabel(Messages.get("setup.pieces")));
         side.add(Box.createVerticalStrut(8));
 
         ButtonGroup brushes = new ButtonGroup();
@@ -189,7 +190,7 @@ public class SetupPanel extends JPanel {
                 UiComponents.style(button, new Font(Font.SANS_SERIF, Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
                 // the FEN letter is a name that says exactly which piece this is
                 button.setName("brush" + Pieces.fenCharOf(piece));
-                button.setToolTipText("Place " + Pieces.fenCharOf(piece));
+                button.setToolTipText(Messages.format("setup.place", String.valueOf(Pieces.fenCharOf(piece))));
                 button.addActionListener(e -> setBrush(piece));
                 brushes.add(button);
                 pieceGrid.add(button);
@@ -201,17 +202,17 @@ public class SetupPanel extends JPanel {
         JPanel tools = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         tools.setBackground(Theme.PANEL_BG);
 
-        JToggleButton moveBrush = toolButton("Move", "brushMove", brushes, tools);
+        JToggleButton moveBrush = toolButton(Messages.get("setup.move"), "brushMove", brushes, tools);
         moveBrush.addActionListener(e -> setBrush(BRUSH_MOVE));
         moveBrush.setSelected(true);
 
-        JToggleButton eraser = toolButton("Erase", "brushErase", brushes, tools);
+        JToggleButton eraser = toolButton(Messages.get("setup.erase"), "brushErase", brushes, tools);
         eraser.addActionListener(e -> setBrush(Pieces.NONE));
 
         side.add(tools);
         side.add(Box.createVerticalStrut(20));
 
-        side.add(sectionLabel("Side to move"));
+        side.add(sectionLabel(Messages.get("setup.sideToMove")));
         side.add(Box.createVerticalStrut(8));
         UiComponents.style(sideButton, new Font(Font.SANS_SERIF, Font.PLAIN, 13), Theme.BUTTON_SECONDARY);
         sideButton.setName("sideToMove");
@@ -220,7 +221,7 @@ public class SetupPanel extends JPanel {
         side.add(sideButton);
         side.add(Box.createVerticalStrut(20));
 
-        side.add(sectionLabel("Castling rights"));
+        side.add(sectionLabel(Messages.get("setup.castling")));
         side.add(Box.createVerticalStrut(8));
         JPanel castling = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         castling.setBackground(Theme.PANEL_BG);
@@ -231,7 +232,7 @@ public class SetupPanel extends JPanel {
         side.add(castling);
         side.add(Box.createVerticalStrut(20));
 
-        side.add(sectionLabel("FEN"));
+        side.add(sectionLabel(Messages.get("setup.fen")));
         side.add(Box.createVerticalStrut(8));
         fenField.setBackground(new Color(28, 28, 30));
         fenField.setForeground(Theme.FG);
@@ -239,13 +240,13 @@ public class SetupPanel extends JPanel {
         fenField.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         fenField.setBorder(new EmptyBorder(8, 10, 8, 10));
         fenField.setName("setupFen");
-        fenField.setToolTipText("Paste a position here and press Enter");
+        fenField.setToolTipText(Messages.get("setup.fenTip"));
         // pressing Enter reads the pasted position back onto the board
         fenField.addActionListener(e -> loadFen(fenField.getText()));
         side.add(fenField);
         side.add(Box.createVerticalStrut(8));
 
-        JButton loadButton = secondaryButton("Load FEN", "loadFen");
+        JButton loadButton = secondaryButton(Messages.get("setup.loadFen"), "loadFen");
         loadButton.setAlignmentX(LEFT_ALIGNMENT);
         loadButton.addActionListener(e -> loadFen(fenField.getText()));
         side.add(loadButton);
@@ -340,7 +341,7 @@ public class SetupPanel extends JPanel {
         }
         sideToMove = position.sideToMove();
         sideButton.setSelected(sideToMove == Pieces.BLACK);
-        sideButton.setText(sideToMove == Pieces.WHITE ? "White to move" : "Black to move");
+        sideButton.setText(Messages.get(sideToMove == Pieces.WHITE ? "setup.whiteToMove" : "setup.blackToMove"));
 
         int rights = position.castlingRights();
         whiteKingside.setSelected((rights & Position.WHITE_KINGSIDE) != 0);
@@ -476,7 +477,7 @@ public class SetupPanel extends JPanel {
     public void setSideToMove(int pColour) {
         this.sideToMove = pColour;
         sideButton.setSelected(pColour == Pieces.BLACK);
-        sideButton.setText(pColour == Pieces.WHITE ? "White to move" : "Black to move");
+        sideButton.setText(Messages.get(pColour == Pieces.WHITE ? "setup.whiteToMove" : "setup.blackToMove"));
         // the en passant square belongs to the side that was to move
         enPassant = NO_EN_PASSANT;
         refresh();
@@ -596,7 +597,7 @@ public class SetupPanel extends JPanel {
      * @return the line for the error label, never null
      */
     private String problemText(String pMessage) {
-        return pMessage == null ? "This is not a position that can be played." : pMessage;
+        return pMessage == null ? Messages.get("setup.notPlayable") : pMessage;
     }
 
     /**
