@@ -3,19 +3,22 @@ package ui.menu;
 /*
  * Purpose: PastGamesPanel is the library of finished games. It lists every saved game, shows the
  * move log of the selected one and switches to a replay board that steps through its positions, and
- * it is also where a game is searched for, named or thrown away. I load the games through PgnManager,
- * which hands each record over together with the file it came from, so this screen never deals with
- * PGN text itself but can still act on a single game. Everything it has to ask the player goes
- * through LibraryPrompts, because a modal dialog would hang a test run that has nobody to answer it.
- * The text uses logical font names, which every platform provides.
+ * it is also where a game is searched for, named or thrown away, and the way games get in and out of
+ * the program, by importing a PGN file somebody else wrote and exporting the selected game as one. I
+ * load the games through PgnManager, which hands each record over together with the file it came
+ * from, so this screen never deals with PGN text itself but can still act on a single game.
+ * Everything it has to ask the player about a game goes through LibraryPrompts, because a modal
+ * dialog would hang a test run that has nobody to answer it. The text uses logical font names, which
+ * every platform provides.
  *
  * Owner: PBR208 - https://github.com/PBR208/
- * Version: 1.0
+ * Version: 1.2
  */
 
 import engine.model.GameRecord;
 import engine.persistence.PgnManager;
 import app.Main;
+import ui.i18n.Messages;
 import ui.theme.Theme;
 import ui.theme.UiComponents;
 
@@ -23,7 +26,9 @@ import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -71,11 +76,11 @@ public class PastGamesPanel extends JPanel {
         topBar.setBackground(Theme.PANEL_BG);
         topBar.setBorder(new EmptyBorder(12, 16, 12, 16));
 
-        JLabel title = new JLabel("Past Games");
+        JLabel title = new JLabel(Messages.get("past.title"));
         title.setForeground(Theme.FG);
         title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 20));
 
-        JButton backBtn = styledButton("\u2190 Back to Menu", "< Back to Menu", "backToMenu");
+        JButton backBtn = styledButton("\u2190 " + Messages.get("common.backToMenu"), "< " + Messages.get("common.backToMenu"), "backToMenu");
         backBtn.addActionListener(e -> Main.showMenu());
 
         topBar.add(title, BorderLayout.WEST);
@@ -101,7 +106,7 @@ public class PastGamesPanel extends JPanel {
         searchField.setCaretColor(Theme.FG);
         searchField.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 13));
         searchField.setBorder(new EmptyBorder(8, 10, 8, 10));
-        searchField.setToolTipText("Search by player, name, result, date or time control");
+        searchField.setToolTipText(Messages.get("past.searchTip"));
         // named so a test can type into the right field without going by position
         searchField.setName("librarySearch");
         // the list narrows down while a player types, because a search you have to confirm is one
@@ -123,14 +128,14 @@ public class PastGamesPanel extends JPanel {
             }
         });
 
-        JButton renameBtn = styledButton("Rename");
+        JButton renameBtn = styledButton(Messages.get("past.rename"));
         renameBtn.setName("renameGame");
-        renameBtn.setToolTipText("Give the selected game a name of its own");
+        renameBtn.setToolTipText(Messages.get("past.renameTip"));
         renameBtn.addActionListener(e -> renameSelected());
 
-        JButton deleteBtn = styledButton("Delete");
+        JButton deleteBtn = styledButton(Messages.get("past.delete"));
         deleteBtn.setName("deleteGame");
-        deleteBtn.setToolTipText("Remove the selected game from the library");
+        deleteBtn.setToolTipText(Messages.get("past.deleteTip"));
         deleteBtn.addActionListener(e -> deleteSelected());
 
         JPanel libraryButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 6));
@@ -150,7 +155,7 @@ public class PastGamesPanel extends JPanel {
         rightPanel = new JPanel(rightCards);
         rightPanel.setBackground(Theme.BG);
 
-        JLabel placeholder = new JLabel("Select a game from the list", SwingConstants.CENTER);
+        JLabel placeholder = new JLabel(Messages.get("past.selectPrompt"), SwingConstants.CENTER);
         placeholder.setForeground(new Color(120, 120, 120));
         placeholder.setFont(new Font(Font.SANS_SERIF, Font.ITALIC, 14));
         rightPanel.add(placeholder, "empty");
@@ -176,10 +181,12 @@ public class PastGamesPanel extends JPanel {
         toggleBar.setBackground(Theme.PANEL_BG);
         toggleBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(60, 60, 65)));
 
-        JButton showLog = styledButton("Move Log");
-        JButton showReplay = styledButton("Replay \u25b6", "Replay >", "replay");
+        JButton showLog = styledButton(Messages.get("past.moveLog"));
+        JButton showReplay = styledButton(Messages.get("past.replay") + " \u25b6", Messages.get("past.replay") + " >", "replay");
         toggleBar.add(showLog);
         toggleBar.add(showReplay);
+        toggleBar.add(importButton());
+        toggleBar.add(exportButton());
         showLog.addActionListener(e -> rightCards.show(rightPanel, "log"));
         showReplay.addActionListener(e -> rightCards.show(rightPanel, "replay"));
 
@@ -232,7 +239,7 @@ public class PastGamesPanel extends JPanel {
         listModel.clear();
         if (shown.isEmpty()) {
             // an empty library and a search that found nothing need different answers
-            listModel.addElement(games.isEmpty() ? "No saved games yet." : "No games match this search.");
+            listModel.addElement(Messages.get(games.isEmpty() ? "past.empty" : "past.noMatch"));
         } else {
             for (PgnManager.SavedGame game : shown) {
                 listModel.addElement(game.title());
@@ -263,7 +270,9 @@ public class PastGamesPanel extends JPanel {
     /**
      * Gives the selected game a name of its own.
      * <p>
-     * Asking for the name goes through the prompts, so the dialog can be replaced in a test. A player
+     * Asking for the name goes through the prompts, so the dialog can be replaced in a test. A game
+     * that shares its file with other games is refused, since the name would be written into a file
+     * the other games live in as well. A player
      * who cancels changes nothing, and an empty name puts the game back to being listed by its
      * players. After a successful rename I read the library again, because the name lives in the file
      * and the list has to show what is really on the disk rather than what I hoped I wrote.
@@ -271,12 +280,17 @@ public class PastGamesPanel extends JPanel {
      * Time complexity: O(g + c) for g saved games with c characters of PGN text to read again.
      * Space complexity: O(g + c) for the reloaded library.
      *
-     * @return true if a game was renamed, false when nothing was selected, the player cancelled or
-     *         the file could not be written
+     * @return true if a game was renamed, false when nothing was selected, the game shares its file
+     *         with other games, the player cancelled or the file could not be written
      */
     public boolean renameSelected() {
         PgnManager.SavedGame game = selectedGame();
         if (game == null) {
+            return false;
+        }
+        // the name lives in the file, and this file names other games too
+        if (game.sharesFile) {
+            prompts.sayFailed(Messages.get("past.sharedFile"));
             return false;
         }
         String name = prompts.askName(game.title(), game.name);
@@ -285,7 +299,7 @@ public class PastGamesPanel extends JPanel {
             return false;
         }
         if (!PgnManager.rename(game.file, name)) {
-            prompts.sayFailed("This game could not be renamed.");
+            prompts.sayFailed(Messages.get("past.renameFailed"));
             return false;
         }
         reload();
@@ -296,26 +310,32 @@ public class PastGamesPanel extends JPanel {
      * Deletes the selected game after asking.
      * <p>
      * Deleting is the one thing on this screen that cannot be undone, so it asks first, through the
-     * prompts so a test can answer without a dialog. Afterwards the library is read again and the
+     * prompts so a test can answer without a dialog. A game that shares its file with other games is
+     * refused, because deleting the file would delete them too. Afterwards the library is read again and the
      * right hand side goes back to its placeholder, because the move log and the replay would
      * otherwise keep showing a game that no longer exists.
      * <p>
      * Time complexity: O(g + c) for g saved games with c characters of PGN text to read again.
      * Space complexity: O(g + c) for the reloaded library.
      *
-     * @return true if a game was deleted, false when nothing was selected, the player said no or the
-     *         file could not be removed
+     * @return true if a game was deleted, false when nothing was selected, the game shares its file
+     *         with other games, the player said no or the file could not be removed
      */
     public boolean deleteSelected() {
         PgnManager.SavedGame game = selectedGame();
         if (game == null) {
             return false;
         }
+        // deleting the file would take the other games in it along
+        if (game.sharesFile) {
+            prompts.sayFailed(Messages.get("past.sharedFile"));
+            return false;
+        }
         if (!prompts.confirmDelete(game.title())) {
             return false;
         }
         if (!PgnManager.delete(game.file)) {
-            prompts.sayFailed("This game could not be deleted.");
+            prompts.sayFailed(Messages.get("past.deleteFailed"));
             return false;
         }
 
@@ -399,23 +419,23 @@ public class PastGamesPanel extends JPanel {
         @Override
         public boolean confirmDelete(String pTitle) {
             int answer = JOptionPane.showConfirmDialog(PastGamesPanel.this,
-                    "Delete this game?\n\n" + pTitle + "\n\nThis cannot be undone.",
-                    "Delete game", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+                    Messages.format("past.deleteQuestion", pTitle),
+                    Messages.get("past.deleteTitle"), JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
             return answer == JOptionPane.YES_OPTION;
         }
 
         @Override
         public String askName(String pTitle, String pCurrentName) {
             Object answer = JOptionPane.showInputDialog(PastGamesPanel.this,
-                    "Name for this game:\n\n" + pTitle,
-                    "Rename game", JOptionPane.PLAIN_MESSAGE, null, null, pCurrentName);
+                    Messages.format("past.renameQuestion", pTitle),
+                    Messages.get("past.renameTitle"), JOptionPane.PLAIN_MESSAGE, null, null, pCurrentName);
             return answer == null ? null : answer.toString();
         }
 
         @Override
         public void sayFailed(String pMessage) {
             JOptionPane.showMessageDialog(PastGamesPanel.this, pMessage,
-                    "Past Games", JOptionPane.ERROR_MESSAGE);
+                    Messages.get("past.title"), JOptionPane.ERROR_MESSAGE);
         }
     }
 
@@ -440,12 +460,114 @@ public class PastGamesPanel extends JPanel {
         if (!record.fenHistory.isEmpty()) {
             replayHolder.add(new ReplayPanel(record.moves, record.fenHistory), BorderLayout.CENTER);
         } else {
-            JLabel noReplay = new JLabel("No position data for this game", SwingConstants.CENTER);
+            JLabel noReplay = new JLabel(Messages.get("past.noPositions"), SwingConstants.CENTER);
             noReplay.setForeground(new Color(120, 120, 120));
             replayHolder.add(noReplay, BorderLayout.CENTER);
         }
         replayHolder.revalidate();
         replayHolder.repaint();
+    }
+
+    /**
+     * Creates the button that reads games out of a PGN file into the library.
+     * <p>
+     * Games from another program, a chess site or a friend had no way in until now. I ask for a file,
+     * hand it to PgnManager, rebuild the list and say how many games arrived. A file that holds no
+     * readable game is reported rather than silently doing nothing, and a file that cannot be read at
+     * all names the reason.
+     * <p>
+     * Time complexity: O(1) to build the button, the import itself is what the file costs.
+     * Space complexity: O(1) apart from the button.
+     *
+     * @return the finished button, never null
+     */
+    private JButton importButton() {
+        JButton button = styledButton(Messages.get("past.importPgn"));
+        button.setName("importPgn");
+        button.addActionListener(e -> {
+            JFileChooser chooser = new JFileChooser();
+            chooser.setDialogTitle(Messages.get("past.importPgn"));
+            chooser.setFileFilter(new FileNameExtensionFilter(Messages.get("past.pgnFiles"), "pgn"));
+            // a player who changes their mind leaves the library alone
+            if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
+                return;
+            }
+            try {
+                List<GameRecord> imported = PgnManager.importFrom(chooser.getSelectedFile().toPath());
+                if (imported.isEmpty()) {
+                    JOptionPane.showMessageDialog(this, Messages.get("past.importNothing"),
+                            Messages.get("past.importNothingTitle"), JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                // the new games are on disk, so the list has to be built again
+                reload();
+                JOptionPane.showMessageDialog(this,
+                        imported.size() == 1 ? Messages.get("past.importedOne")
+                                : Messages.format("past.importedMany", imported.size()),
+                        Messages.get("past.importDoneTitle"), JOptionPane.INFORMATION_MESSAGE);
+            } catch (IOException problem) {
+                JOptionPane.showMessageDialog(this, Messages.format("past.importFailed", problem.getMessage()),
+                        Messages.get("past.importFailedTitle"), JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        return button;
+    }
+
+    /**
+     * Creates the button that writes the selected game to a PGN file.
+     * <p>
+     * A game is worth little if it cannot leave the program. I refuse politely while nothing is
+     * selected, suggest a file name built from both players, and write the game wherever the player
+     * points. A file that cannot be written names the reason instead of failing quietly.
+     * <p>
+     * Time complexity: O(1) to build the button, the export itself is O(m) for m moves.
+     * Space complexity: O(1) apart from the button.
+     *
+     * @return the finished button, never null
+     */
+    private JButton exportButton() {
+        JButton button = styledButton(Messages.get("past.exportPgn"));
+        button.setName("exportPgn");
+        button.addActionListener(e -> {
+            // there is nothing to write before a game has been picked
+            PgnManager.SavedGame selected = selectedGame();
+            if (selected == null) {
+                JOptionPane.showMessageDialog(this, Messages.get("past.exportNothing"),
+                        Messages.get("past.exportNothingTitle"), JOptionPane.INFORMATION_MESSAGE);
+                return;
+            }
+            JFileChooser chooser = new JFileChooser();
+            chooser.setDialogTitle(Messages.get("past.exportPgn"));
+            chooser.setFileFilter(new FileNameExtensionFilter(Messages.get("past.pgnFiles"), "pgn"));
+            chooser.setSelectedFile(new java.io.File(suggestedFileName(selected.record)));
+            if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+                return;
+            }
+            try {
+                PgnManager.exportTo(selected.record, chooser.getSelectedFile().toPath());
+            } catch (IOException problem) {
+                JOptionPane.showMessageDialog(this, Messages.format("past.exportFailed", problem.getMessage()),
+                        Messages.get("past.exportFailedTitle"), JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        return button;
+    }
+
+    /**
+     * Builds the file name an export starts out with.
+     * <p>
+     * A player should not have to invent a name, so I offer both players and the date, with every
+     * character a file name cannot carry replaced.
+     * <p>
+     * Time complexity: O(n) in the length of the names. Space complexity: O(n) for the name.
+     *
+     * @param pRecord the game about to be written, never null
+     * @return a file name ending in .pgn, never null
+     */
+    private static String suggestedFileName(GameRecord pRecord) {
+        String name = pRecord.date + "_" + pRecord.whiteName + "_vs_" + pRecord.blackName;
+        // whatever a file name cannot hold becomes an underscore
+        return name.replaceAll("[^a-zA-Z0-9_.-]", "_") + ".pgn";
     }
 
     /**

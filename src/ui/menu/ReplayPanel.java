@@ -14,6 +14,7 @@ import engine.core.Fen;
 import engine.core.Pieces;
 import engine.persistence.FenLoader;
 import ui.board.PieceSprites;
+import ui.i18n.Messages;
 import ui.theme.Theme;
 import ui.theme.UiComponents;
 
@@ -137,14 +138,14 @@ public class ReplayPanel extends JPanel {
         nav.add(next);
         nav.add(last);
 
-        JButton flip = textButton("Flip", "flip");
+        JButton flip = textButton(Messages.get("replay.flip"), "flip");
         flip.addActionListener(e -> {
             flipped = !flipped;
             refresh();
         });
-        JButton copyFen = textButton("Copy FEN", "copyFen");
+        JButton copyFen = textButton(Messages.get("replay.copyFen"), "copyFen");
         copyFen.addActionListener(e -> copyToClipboard(fens.get(cursor)));
-        JButton copyMoves = textButton("Copy moves", "copyMoves");
+        JButton copyMoves = textButton(Messages.get("replay.copyMoves"), "copyMoves");
         copyMoves.addActionListener(e -> copyToClipboard(movetext()));
 
         nav.add(flip);
@@ -160,7 +161,8 @@ public class ReplayPanel extends JPanel {
         rightPanel.setPreferredSize(new Dimension(220, 0));
 
         // Move History
-        JLabel moveHistoryHeader = new JLabel("  Move History");
+        // the padding stays here, because a properties file drops the spaces in front of a value
+        JLabel moveHistoryHeader = new JLabel("  " + Messages.get("log.moveHistory"));
         moveHistoryHeader.setForeground(new Color(140, 140, 140));
         moveHistoryHeader.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
         moveHistoryHeader.setBackground(new Color(40, 40, 42));
@@ -193,7 +195,7 @@ public class ReplayPanel extends JPanel {
         movePanel.add(moveScroll, BorderLayout.CENTER);
 
         // FEN Display
-        JLabel fenHeader = new JLabel("  Current FEN");
+        JLabel fenHeader = new JLabel("  " + Messages.get("log.currentFen"));
         fenHeader.setForeground(new Color(140, 140, 140));
         fenHeader.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
         fenHeader.setBackground(new Color(40, 40, 42));
@@ -295,19 +297,20 @@ public class ReplayPanel extends JPanel {
     private String positionText() {
         // a saved game with no moves in it has nothing to step through
         if (moves.isEmpty()) {
-            return "No moves";
+            return Messages.get("replay.noMoves");
         }
         if (cursor == 0) {
-            return "Start position - position 1/" + fens.size();
+            return Messages.format("replay.startPosition", String.valueOf(fens.size()));
         }
         // frame one follows the first half move, so the moves are counted from there
         int move = (cursor - 1) / 2 + 1;
-        String who = (cursor - 1) % 2 == 0 ? "White" : "Black";
-        return "After move " + move + " (" + who + ") - position " + (cursor + 1) + "/" + fens.size();
+        String who = (cursor - 1) % 2 == 0 ? Messages.get("replay.white") : Messages.get("replay.black");
+        return Messages.format("replay.afterMove", String.valueOf(move), who, String.valueOf(cursor + 1),
+                String.valueOf(fens.size()));
     }
 
     private String moveText() {
-        if (fens.isEmpty()) return "No moves";
+        if (fens.isEmpty()) return Messages.get("replay.noMoves");
         return positionText();
     }
 
@@ -316,7 +319,7 @@ public class ReplayPanel extends JPanel {
 
         if (fens.isEmpty()) {
             g2d.setColor(Color.GRAY);
-            g2d.drawString("No position to display", 20, 40);
+            g2d.drawString(Messages.get("replay.noPosition"), 20, 40);
             return;
         }
 
