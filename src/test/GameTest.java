@@ -2387,6 +2387,53 @@ public class GameTest {
                     "and must read as moves, got: " + result.lineText());
         });
 
+        test("Searcher: without noise the same position always gives the same move", () -> {
+            Position position = Fen.parse(Fen.START_POSITION);
+            int first = new Searcher(1L).search(position, Searcher.Limits.toDepth(3)).bestMove;
+            int second = new Searcher(999L).search(position, Searcher.Limits.toDepth(3)).bestMove;
+
+            // with no noise asked for, the seed must make no difference whatsoever
+            checkEqual(Moves.toUci(first), Moves.toUci(second),
+                    "an exact search must not depend on the seed");
+        });
+
+        test("Searcher: a careless level does not always play the same move", () -> {
+            Position position = Fen.parse(Fen.START_POSITION);
+            String best = Moves.toUci(new Searcher(1L).search(position, Searcher.Limits.toDepth(3)).bestMove);
+
+            // the seeds are fixed, so this is the same experiment on every run rather than a gamble
+            java.util.Set<String> chosen = new java.util.HashSet<>();
+            for (long seed = 1; seed <= 10; seed++) {
+                Searcher.Limits careless = new Searcher.Limits(3, Long.MAX_VALUE, Long.MAX_VALUE, 400);
+                chosen.add(Moves.toUci(new Searcher(seed).search(position, careless).bestMove));
+            }
+
+            check(chosen.size() > 1, "a careless search must not always pick the same move, got " + chosen);
+            check(!chosen.equals(java.util.Set.of(best)),
+                    "and must sometimes differ from the best move, got " + chosen);
+        });
+
+        test("Searcher: even a careless level still sees a mate in one", () -> {
+            // noise is meant to lose close decisions, not to miss something this plain
+            Position position = Fen.parse("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1");
+            for (long seed = 1; seed <= 5; seed++) {
+                Searcher.Limits careless = new Searcher.Limits(3, Long.MAX_VALUE, Long.MAX_VALUE, 200);
+                Searcher.Result result = new Searcher(seed).search(position, careless);
+                checkEqual("a1a8", Moves.toUci(result.bestMove),
+                        "mate must still be found with seed " + seed);
+            }
+        });
+
+        test("Searcher: noise has to be a number of centipawns that makes sense", () -> {
+            boolean refused = false;
+            try {
+                new Searcher.Limits(3, Long.MAX_VALUE, Long.MAX_VALUE, -1);
+            } catch (IllegalArgumentException e) {
+                refused = true;
+            }
+            check(refused, "a negative amount of carelessness means nothing and must be refused");
+        });
+
         test("Searcher: searching on its own thread leaves the original position alone", () -> {
             String fen = "r3k2r/pp3ppp/2n2n2/2bpp3/4P3/2NP1N2/PPP2PPP/R1B1KB1R w KQkq - 4 8";
             Position position = Fen.parse(fen);
@@ -2396,6 +2443,360 @@ public class GameTest {
             checkNotNull(result, "the thread must hand a result back");
             check(result.bestMove != Moves.NONE, "and must have found a move");
             checkEqual(fen, Fen.write(position), "the position handed in must not have been touched");
+        });
+
+        // =================================================================
+        System.out.println("\n-- Playing the computer ------------------------------------------");
+        // =================================================================
+
+        test("Board: two people at one screen get a board that turns round", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE,
+                            EngineSettings.humanOpponent());
+                    int row = Board.rowOf(Bitboards.squareOf("e2"));
+                    int before = board.toVisualY(row);
+
+                    GameSession session = board.getSession();
+                    session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+
+                    check(before != board.toVisualY(row),
+                            "the board must face the other player once the turn passes");
+                }));
+
+        test("Board: against the program the board holds still", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    // the program plays Black, so the person is White and must stay at the bottom
+                    Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE,
+                            EngineSettings.level(1, Pieces.BLACK));
+                    int row = Board.rowOf(Bitboards.squareOf("e2"));
+                    int before = board.toVisualY(row);
+
+                    GameSession session = board.getSession();
+                    session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+
+                    checkEqual(before, board.toVisualY(row),
+                            "a board facing one person must not spin away when the program answers");
+                    checkEqual(0, board.toVisualX(0), "and the a-file must stay on the left");
+                }));
+
+        test("Board: playing Black against the program puts Black at the bottom", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    // the program plays White, so the person is Black and sees the board from there
+                    Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE,
+                            EngineSettings.level(1, Pieces.WHITE));
+
+                    checkEqual(7 * board.getTileSize(), board.toVisualX(0),
+                            "the a-file must be drawn on the right for a player with the black pieces");
+                }));
+
+        test("Board: a pixel turned into a square and back is the same square", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    EngineSettings[] bothWays = {
+                            EngineSettings.humanOpponent(),
+                            EngineSettings.level(1, Pieces.WHITE),
+                    };
+                    for (EngineSettings settings : bothWays) {
+                        Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE, settings);
+                        int half = board.getTileSize() / 2;
+                        for (int index = 0; index < 8; index++) {
+                            checkEqual(index, board.toLogicalCol(board.toVisualX(index) + half),
+                                    "a column must survive the trip to pixels and back");
+                            checkEqual(index, board.toLogicalRow(board.toVisualY(index) + half),
+                                    "and so must a row");
+                        }
+                    }
+                }));
+
+        test("NewGamePanel: the screen offers a person or the computer, and starts on a person", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel panel = new NewGamePanel();
+                    check(hasButton(panel, "opponentPerson"), "it must offer another person");
+                    check(hasButton(panel, "opponentComputer"), "and the computer");
+                    check(hasButton(panel, "sideWhite"), "and a side to play");
+                    check(hasButton(panel, "level1"), "and a level to play it at");
+
+                    check(!panel.createEngineSettings().engineOpponent(),
+                            "a screen nobody has touched must start a game between two people");
+                }));
+
+        test("NewGamePanel: choosing the computer gives it the colour the person did not take", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel panel = new NewGamePanel();
+                    findButton(panel, "opponentComputer").doClick();
+
+                    EngineSettings asWhite = panel.createEngineSettings();
+                    check(asWhite.engineOpponent(), "the computer must be the opponent now");
+                    checkEqual(Pieces.BLACK, asWhite.engineColour(),
+                            "a person playing White leaves the computer Black");
+                    checkEqual(Pieces.WHITE, asWhite.humanColour(), "and the person White");
+
+                    findButton(panel, "sideBlack").doClick();
+                    EngineSettings asBlack = panel.createEngineSettings();
+                    checkEqual(Pieces.WHITE, asBlack.engineColour(),
+                            "and a person playing Black leaves the computer White");
+                }));
+
+        test("NewGamePanel: the level that was clicked is the level that is played", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel panel = new NewGamePanel();
+                    findButton(panel, "opponentComputer").doClick();
+
+                    findButton(panel, "level1").doClick();
+                    EngineSettings weakest = panel.createEngineSettings();
+                    checkEqual(EngineSettings.level(1, Pieces.BLACK).depth(), weakest.depth(),
+                            "the weakest level must be the one that was clicked");
+
+                    findButton(panel, "level5").doClick();
+                    EngineSettings strongest = panel.createEngineSettings();
+                    checkEqual(EngineSettings.level(5, Pieces.BLACK).depth(), strongest.depth(),
+                            "and so must the strongest");
+                    check(strongest.depth() > weakest.depth(), "which must not be the same thing");
+                }));
+
+        test("NewGamePanel: the side and level mean nothing against another person", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel panel = new NewGamePanel();
+                    // a choice that changes nothing is worse than no choice at all
+                    check(!findButton(panel, "sideWhite").isEnabled(),
+                            "the side must be switched off while another person is playing");
+                    check(!findButton(panel, "level3").isEnabled(), "and so must the level");
+
+                    findButton(panel, "opponentComputer").doClick();
+                    check(findButton(panel, "sideWhite").isEnabled(),
+                            "choosing the computer must offer the side");
+                    check(findButton(panel, "level3").isEnabled(), "and the level");
+
+                    findButton(panel, "opponentPerson").doClick();
+                    check(!findButton(panel, "sideWhite").isEnabled(), "and going back must put them away");
+                    check(!panel.createEngineSettings().engineOpponent(),
+                            "and must leave a game between two people");
+                }));
+
+        test("NewGamePanel: the names and clocks still come through untouched", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel panel = new NewGamePanel();
+                    GameConfig config = panel.createConfig();
+                    checkNotNull(config, "the screen must still build a game configuration");
+                    checkEqual("White", config.whiteName(), "with the default white name");
+                    checkEqual("Rapid 10+0", config.timeLabel(), "and the preset it opens on");
+                }));
+
+        test("EngineSettings: a game between two people has no engine in it", () -> {
+            EngineSettings human = EngineSettings.humanOpponent();
+            check(!human.engineOpponent(), "nobody is playing the computer");
+            check(!human.playsFor(Pieces.WHITE), "so it plays neither White");
+            check(!human.playsFor(Pieces.BLACK), "nor Black");
+            check(human.autoFlip(), "and the board turns to face whoever is to move");
+        });
+
+        test("EngineSettings: the levels get stronger and less careless", () -> {
+            int previousDepth = 0;
+            int previousNoise = Integer.MAX_VALUE;
+            for (int level = EngineSettings.MIN_LEVEL; level <= EngineSettings.MAX_LEVEL; level++) {
+                EngineSettings settings = EngineSettings.level(level, Pieces.BLACK);
+                check(settings.depth() >= previousDepth,
+                        "level " + level + " must look at least as deep as the one below");
+                check(settings.noiseCentipawns() <= previousNoise,
+                        "and must judge at least as carefully");
+                check(settings.maxTimeMs() < Long.MAX_VALUE, "every level must be capped in time");
+                check(settings.maxNodes() < Long.MAX_VALUE, "and in positions");
+                check(!settings.autoFlip(), "and must hold the board still against an engine");
+                previousDepth = settings.depth();
+                previousNoise = settings.noiseCentipawns();
+            }
+            checkEqual(0, EngineSettings.level(EngineSettings.MAX_LEVEL, Pieces.WHITE).noiseCentipawns(),
+                    "the strongest level must play the best move it finds");
+        });
+
+        test("EngineSettings: it knows which side is whose", () -> {
+            EngineSettings asBlack = EngineSettings.level(3, Pieces.BLACK);
+            check(asBlack.playsFor(Pieces.BLACK), "the engine plays the colour it was given");
+            check(!asBlack.playsFor(Pieces.WHITE), "and not the other one");
+            checkEqual(Pieces.WHITE, asBlack.humanColour(), "which leaves the person the other side");
+
+            checkEqual(3, asBlack.limits().depth, "the limits must carry the level's depth");
+            checkEqual(asBlack.noiseCentipawns(), asBlack.limits().noiseCentipawns,
+                    "and its carelessness");
+        });
+
+        test("EngineSettings: settings that mean nothing are refused", () -> {
+            boolean badColour = false;
+            try {
+                new EngineSettings(true, 7, 3, 1000, 1000, 0, false);
+            } catch (IllegalArgumentException e) {
+                badColour = true;
+            }
+            check(badColour, "a colour that is neither side must be refused");
+
+            boolean badLevel = false;
+            try {
+                EngineSettings.level(EngineSettings.MAX_LEVEL + 1, Pieces.WHITE);
+            } catch (IllegalArgumentException e) {
+                badLevel = true;
+            }
+            check(badLevel, "a level nobody offers must be refused");
+        });
+
+        test("EnginePlayer: it moves only when the turn is its own", () -> {
+            GameSession session = new GameSession();
+            EnginePlayer asWhite = new EnginePlayer(EngineSettings.level(1, Pieces.WHITE));
+            EnginePlayer asBlack = new EnginePlayer(EngineSettings.level(1, Pieces.BLACK));
+            EnginePlayer human = new EnginePlayer(EngineSettings.humanOpponent());
+
+            check(asWhite.isEngineTurn(session), "White is to move at the start");
+            check(!asBlack.isEngineTurn(session), "so Black's engine must wait");
+            check(!human.isEngineTurn(session), "and a game between two people never has an engine turn");
+        });
+
+        test("EnginePlayer: a finished game has no turn left", () -> {
+            // the quickest mate there is, so the game is over after four half moves
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("f2"), Bitboards.squareOf("f3")));
+            session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+            session.play(session.moveFor(Bitboards.squareOf("g2"), Bitboards.squareOf("g4")));
+            session.play(session.moveFor(Bitboards.squareOf("d8"), Bitboards.squareOf("h4")));
+
+            check(session.result().isFinished(), "the game must really be over");
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(1, Pieces.WHITE));
+            check(!player.isEngineTurn(session), "a finished game must not ask for another move");
+        });
+
+        test("EnginePlayer: it chooses a move it is allowed to play", () -> {
+            GameSession session = new GameSession();
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(2, Pieces.WHITE));
+
+            int move = player.chooseMove(session);
+            check(move != Moves.NONE, "it must find something to play from the starting position");
+            check(session.isLegal(move), "and it must be a move the rules allow");
+            checkEqual(Fen.START_POSITION, Fen.write(session.position()),
+                    "thinking must not have changed the game it was thinking about");
+            check(session.getMoveLog().isEmpty(), "and must not have played anything by itself");
+        });
+
+        test("EnginePlayer: even the weakest level takes a mate in one", () -> {
+            GameSession session = new GameSession(Fen.parse("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1"));
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(1, Pieces.WHITE));
+
+            checkEqual("a1a8", Moves.toUci(player.chooseMove(session)),
+                    "a mate in one is not a close decision, so carelessness must not lose it");
+        });
+
+        test("EnginePlayer: it plays its move without holding anybody up", () -> {
+            GameSession session = new GameSession();
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(1, Pieces.WHITE));
+
+            CountDownLatch played = new CountDownLatch(1);
+            check(player.moveIfItsTurn(session, played::countDown), "it must take its turn");
+            check(played.await(30, TimeUnit.SECONDS), "and must finish thinking in good time");
+
+            checkEqual(1, session.getMoveLog().size(), "exactly one move must have been played");
+            check(!session.isWhiteToMove(), "and the turn must have passed to the other side");
+            check(!player.isThinking(), "and it must not still be thinking");
+        });
+
+        test("EnginePlayer: it answers as soon as a move is played", () -> {
+            GameSession session = new GameSession();
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(1, Pieces.BLACK));
+
+            CountDownLatch answered = new CountDownLatch(1);
+            session.setMoveLogView(player.watching(session, null, answered::countDown));
+
+            // the move is played the way the board plays one, on the thread that draws it
+            SwingUtilities.invokeAndWait(() ->
+                    session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4"))));
+
+            check(answered.await(30, TimeUnit.SECONDS), "the program must answer in good time");
+            checkEqual(2, session.getMoveLog().size(), "one move each must have been played");
+            check(session.isWhiteToMove(), "and the turn must be back with the person");
+        });
+
+        test("EnginePlayer: it does not answer a game that has just ended", () -> {
+            // White mates with the move that is played, so there is nothing left to answer
+            GameSession session = new GameSession(Fen.parse("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1"));
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(1, Pieces.BLACK));
+            session.setMoveLogView(player.watching(session, null, null));
+
+            SwingUtilities.invokeAndWait(() ->
+                    session.play(session.moveFor(Bitboards.squareOf("a1"), Bitboards.squareOf("a8"))));
+
+            // the session writes a move down before it works out that the game is over, so an answer
+            // made on the spot would be an answer to a position that is already mate
+            check(session.result().isFinished(), "the game must be over");
+            SwingUtilities.invokeAndWait(() -> { });
+            checkEqual(1, session.getMoveLog().size(), "the mating move must be the last one");
+        });
+
+        test("EnginePlayer: it keeps showing whatever was showing the move log", () -> {
+            GameSession session = new GameSession();
+            EnginePlayer player = new EnginePlayer(EngineSettings.humanOpponent());
+
+            List<String> seen = new ArrayList<>();
+            GameSession.MoveLog delegate = new GameSession.MoveLog() {
+                @Override
+                public void update(List<String> pMoveLog, String pCurrentFen) {
+                    seen.clear();
+                    seen.addAll(pMoveLog);
+                }
+
+                @Override
+                public void clear() {
+                    seen.clear();
+                }
+            };
+            session.setMoveLogView(player.watching(session, delegate, null));
+
+            SwingUtilities.invokeAndWait(() ->
+                    session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4"))));
+
+            checkEqual(1, seen.size(), "the move log behind it must still be told about the move");
+            checkEqual("e4", seen.get(0), "and told the right one");
+        });
+
+        test("EnginePlayer: it stays out of a turn that is not its own", () -> {
+            GameSession session = new GameSession();
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(1, Pieces.BLACK));
+
+            check(!player.moveIfItsTurn(session, null), "Black must not move while White is to move");
+            check(session.getMoveLog().isEmpty(), "and nothing may have been played");
+        });
+
+        test("EnginePlayer: a paused game holds the program's turn back", () -> {
+            GameSession session = new GameSession();
+            EnginePlayer player = new EnginePlayer(EngineSettings.level(1, Pieces.WHITE));
+            player.setHold(() -> true);
+
+            check(!player.isEngineTurn(session), "a held program must not think it is its turn");
+            check(!player.moveIfItsTurn(session, null), "and must not start thinking");
+            player.setHold(null);
+            check(player.isEngineTurn(session), "once nothing holds it back the turn is its own again");
+        });
+
+        test("Board: against the program a takeback goes back to the person's own move", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited(), Board.MIN_TILE_SIZE,
+                            EngineSettings.level(1, Pieces.BLACK));
+                    GameSession session = board.getSession();
+                    check(board.playMove(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4"))),
+                            "the person moves");
+                    check(!board.playMove(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5"))),
+                            "the person must not move the program's pieces");
+                    // the program's answer, played the way the program plays it
+                    session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+
+                    check(board.takeBack(), "the takeback must go through without asking anybody");
+                    check(session.getMoveLog().isEmpty(), "both the answer and the person's move must be gone");
+                    check(session.isWhiteToMove(), "so the person is to move again");
+
+                    check(board.replayMove(), "the moves must come back");
+                    checkEqual(2, session.getMoveLog().size(), "the person's move and the program's answer");
+                    check(session.isWhiteToMove(), "and it is the person's turn once more");
+                }));
+
+        test("EngineDrawOfferArbiter: the program takes a draw only when it does not stand better", () -> {
+            // White has a queen more, Black has nothing but the king
+            Position whiteAhead = Fen.parse("4k3/8/8/8/8/8/8/3QK3 w - - 0 1");
+            check(!EngineDrawOfferArbiter.accepts(whiteAhead, Pieces.WHITE), "a program a queen up plays on");
+            check(EngineDrawOfferArbiter.accepts(whiteAhead, Pieces.BLACK), "a program a queen down takes the draw");
         });
 
         // =================================================================

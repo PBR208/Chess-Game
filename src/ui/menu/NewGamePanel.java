@@ -2,15 +2,20 @@ package ui.menu;
 
 /*
  * Purpose: NewGamePanel is the screen where players set up a new game before it starts. It asks for
- * both player names and a time control, either one of the presets or a custom duration, and for the
- * two things that change how a clock behaves rather than how long it runs: which mode it plays and
- * how much time one side gets when the players want a game at odds. I collect everything into a
- * GameConfig, so the board, the clocks and the saved game all start from the same settings.
+ * both player names, who the second player is, and a time control, either one of the presets or a
+ * custom duration, together with the two things that change how a clock behaves rather than how long
+ * it runs: which mode it plays and how much time one side gets when the players want a game at odds.
+ * I collect the names and the clocks into a GameConfig and the opponent into EngineSettings, so the
+ * board, the clocks and the saved game all start from the same answers. The side and level choices
+ * are only enabled while the program is the opponent, because against another person they would
+ * change nothing.
  *
  * Owner: PBR208 - https://github.com/PBR208/
  * Version: 1.1
  */
 
+import engine.core.Pieces;
+import engine.model.EngineSettings;
 import engine.model.ClockMode;
 import engine.model.ClockStage;
 import engine.model.GameConfig;
@@ -45,6 +50,19 @@ public class NewGamePanel extends JPanel {
     private final JToggleButton customBtn = new JToggleButton(Messages.get("newgame.custom"));
     // explains why a custom time can't be used, a single space keeps the line's height
     private final JLabel customError = new JLabel(" ");
+
+    // who the second player is, and which side and level to use when it is the program
+    private final JToggleButton personOpponent = new JToggleButton(Messages.get("newgame.opponentPerson"));
+    private final JToggleButton computerOpponent = new JToggleButton(Messages.get("newgame.opponentComputer"));
+    private final JToggleButton playWhite = new JToggleButton(Messages.get("newgame.playWhite"));
+    private final JToggleButton playBlack = new JToggleButton(Messages.get("newgame.playBlack"));
+    private final JToggleButton[] levels =
+            new JToggleButton[EngineSettings.MAX_LEVEL - EngineSettings.MIN_LEVEL + 1];
+
+    // the level that is selected when the screen opens, in the middle of what is on offer
+    private static final int DEFAULT_LEVEL = 3;
+
+    private int selectedLevel = DEFAULT_LEVEL;
 
     // longest custom time the screen accepts
     private static final long MAX_CUSTOM_TIME_MS = 24 * 60 * 60 * 1000L;
@@ -108,6 +126,47 @@ public class NewGamePanel extends JPanel {
         names.add(blackField);
         card.add(names);
         card.add(Box.createVerticalStrut(28));
+
+        card.add(sectionLabel(Messages.get("newgame.opponent")));
+        card.add(Box.createVerticalStrut(10));
+
+        JPanel opponentRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        opponentRow.setBackground(Theme.PANEL_BG);
+        ButtonGroup opponentGroup = new ButtonGroup();
+        choiceButton(personOpponent, "opponentPerson", opponentGroup, opponentRow);
+        choiceButton(computerOpponent, "opponentComputer", opponentGroup, opponentRow);
+        card.add(opponentRow);
+        card.add(Box.createVerticalStrut(10));
+
+        JPanel sideRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        sideRow.setBackground(Theme.PANEL_BG);
+        ButtonGroup sideGroup = new ButtonGroup();
+        choiceButton(playWhite, "sideWhite", sideGroup, sideRow);
+        choiceButton(playBlack, "sideBlack", sideGroup, sideRow);
+        card.add(sideRow);
+        card.add(Box.createVerticalStrut(10));
+
+        JPanel levelRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        levelRow.setBackground(Theme.PANEL_BG);
+        levelRow.add(fieldLabel(Messages.get("newgame.level")));
+        ButtonGroup levelGroup = new ButtonGroup();
+        for (int level = EngineSettings.MIN_LEVEL; level <= EngineSettings.MAX_LEVEL; level++) {
+            JToggleButton button = new JToggleButton(String.valueOf(level));
+            int chosen = level;
+            button.addActionListener(e -> selectedLevel = chosen);
+            choiceButton(button, "level" + level, levelGroup, levelRow);
+            levels[level - EngineSettings.MIN_LEVEL] = button;
+        }
+        card.add(levelRow);
+        card.add(Box.createVerticalStrut(28));
+
+        // a game between two people starts with White at the bottom and needs no level
+        select(personOpponent);
+        select(playWhite);
+        select(levels[DEFAULT_LEVEL - EngineSettings.MIN_LEVEL]);
+        personOpponent.addActionListener(e -> showEngineChoices());
+        computerOpponent.addActionListener(e -> showEngineChoices());
+        showEngineChoices();
 
         card.add(sectionLabel(Messages.get("newgame.timeControl")));
         card.add(Box.createVerticalStrut(10));
@@ -224,7 +283,7 @@ public class NewGamePanel extends JPanel {
         startBtn.addActionListener(e -> {
             GameConfig config = createConfig();
             if (config != null) {
-                Main.startGame(config);
+                Main.startGame(config, createEngineSettings());
             }
         });
 
@@ -424,6 +483,81 @@ public class NewGamePanel extends JPanel {
         } catch (NumberFormatException e) {
             return pWhiteMs;
         }
+    }
+
+    /**
+     * Builds the opponent for the next game from the current selections.
+     * <p>
+     * A game against another person needs no side and no level, so those answers are thrown away
+     * rather than carried into a game nobody asked them for. Against the program the person picks
+     * the colour they want and the program takes the other one, which is the way round a player
+     * thinks about it: nobody chooses which colour their opponent has.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the settings.
+     *
+     * @return the opponent for the new game, never null
+     */
+    public EngineSettings createEngineSettings() {
+        if (!computerOpponent.isSelected()) {
+            return EngineSettings.humanOpponent();
+        }
+        // the person names their own colour, so the program plays the other one
+        int engineColour = playWhite.isSelected() ? Pieces.BLACK : Pieces.WHITE;
+        return EngineSettings.level(selectedLevel, engineColour);
+    }
+
+    /**
+     * Shows the side and level choices only while the program is the opponent.
+     * <p>
+     * Leaving them enabled against another person would offer a choice that changes nothing, which
+     * is worse than offering none: a player who sets one is entitled to expect it to matter.
+     * <p>
+     * Time complexity: O(k) for the k levels. Space complexity: O(1).
+     */
+    private void showEngineChoices() {
+        boolean againstComputer = computerOpponent.isSelected();
+        playWhite.setEnabled(againstComputer);
+        playBlack.setEnabled(againstComputer);
+        for (JToggleButton level : levels) {
+            level.setEnabled(againstComputer);
+        }
+    }
+
+    /**
+     * Gives a toggle button the look of this screen and puts it in a group.
+     * <p>
+     * The opponent, the side and the level are all one choice out of several, and they share the
+     * look the time control presets already use, including going to the accent colour when chosen.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pButton button to style, never null
+     * @param pName   component name that identifies it, never null
+     * @param pGroup  group that keeps one of the choices selected, never null
+     * @param pParent panel the button is added to, never null
+     */
+    private void choiceButton(JToggleButton pButton, String pName, ButtonGroup pGroup, JPanel pParent) {
+        UiComponents.style(pButton, new Font(Font.SANS_SERIF, Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
+        pButton.setName(pName);
+        pButton.addItemListener(e ->
+                pButton.setBackground(pButton.isSelected() ? Theme.ACCENT : Theme.BUTTON_SECONDARY));
+        pGroup.add(pButton);
+        pParent.add(pButton);
+    }
+
+    /**
+     * Selects a choice and colours it, the way clicking it would.
+     * <p>
+     * Selecting a button in code does not run its action, so the starting choices are set here and
+     * their colour set with them.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pButton the button to select, never null
+     */
+    private void select(JToggleButton pButton) {
+        pButton.setSelected(true);
+        pButton.setBackground(Theme.ACCENT);
     }
 
     /**

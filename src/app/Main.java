@@ -17,11 +17,13 @@ import engine.core.GameSession;
 import engine.core.Position;
 import engine.core.Pieces;
 import engine.core.Termination;
+import engine.model.EngineSettings;
 import engine.model.GameConfig;
 import engine.model.GameRecord;
 import engine.persistence.PgnManager;
 import ui.board.Board;
 import ui.board.EndScreen;
+import ui.board.EnginePlayer;
 import ui.board.MoveLogPanel;
 import ui.i18n.Messages;
 import ui.menu.MainMenu;
@@ -126,17 +128,23 @@ public class Main {
      * @param pConfig names, times and increment of the new game; null starts an unlimited game
      */
     public static void startGame(GameConfig pConfig) {
-        startGame(pConfig, null);
+        startGame(pConfig, EngineSettings.humanOpponent(), null);
     }
 
     /**
-     * Opens the game screen for a new game that starts from a given position.
+     * Opens the game screen for a new game against a given opponent.
      * <p>
-     * A game can begin from a position that was set up in the editor rather than from the standard
-     * one. I read the FEN into a position, falling back to the standard one when no FEN is given, and
-     * otherwise set the game up exactly as a normal one. The FEN is parsed here rather than trusted,
-     * so an unusable one is refused before a window is built, which the editor prevents anyway by
-     * only offering to start a position it could parse itself.
+     * Time complexity: O(p) for the starting pieces. Space complexity: O(p) for the new board.
+     *
+     * @param pConfig   names, times and increment of the new game; null starts an unlimited game
+     * @param pSettings who the second player is; null means another person
+     */
+    public static void startGame(GameConfig pConfig, EngineSettings pSettings) {
+        startGame(pConfig, pSettings, null);
+    }
+
+    /**
+     * Opens the game screen for a game between two people that starts from a given position.
      * <p>
      * Time complexity: O(p) for the p pieces of the position. Space complexity: O(p) for the board.
      *
@@ -146,8 +154,36 @@ public class Main {
      * @throws IllegalArgumentException if pStartFen is not a legal chess position
      */
     public static void startGame(GameConfig pConfig, String pStartFen) {
+        startGame(pConfig, EngineSettings.humanOpponent(), pStartFen);
+    }
+
+    /**
+     * Opens the game screen for a new game against a given opponent from a given position.
+     * <p>
+     * A game can begin from a position that was set up in the editor rather than from the standard
+     * one. I read the FEN into a position, falling back to the standard one when no FEN is given, and
+     * otherwise set the game up exactly as a normal one. The FEN is parsed here rather than trusted,
+     * so an unusable one is refused before a window is built, which the editor prevents anyway by
+     * only offering to start a position it could parse itself.
+     * <p>
+     * A game against the program needs three things a game between two people does not: the board
+     * has to stop turning round, somebody has to answer each move, and the program has to move first
+     * when it is the side to move. The answering hangs off the move log, which is told about every
+     * move that is played, so nothing else had to grow a hook for it. The program also holds its
+     * move back while the game is paused and takes it once the game is resumed.
+     * <p>
+     * Time complexity: O(p) for the p pieces of the position. Space complexity: O(p) for the board.
+     *
+     * @param pConfig   names, times and increment of the new game; null starts an unlimited game
+     * @param pSettings who the second player is; null means another person
+     * @param pStartFen position to begin from in Forsyth Edwards notation; null or blank starts from
+     *                  the standard position
+     * @throws IllegalArgumentException if pStartFen is not a legal chess position
+     */
+    public static void startGame(GameConfig pConfig, EngineSettings pSettings, String pStartFen) {
         // no configuration means a casual game without clocks
         final GameConfig cfg = pConfig == null ? GameConfig.unlimited() : pConfig;
+        final EngineSettings opponent = pSettings == null ? EngineSettings.humanOpponent() : pSettings;
         // no FEN means the game begins where chess begins
         final Position start = pStartFen == null || pStartFen.isBlank()
                 ? Position.startPosition()
@@ -158,10 +194,16 @@ public class Main {
         SwingUtilities.invokeLater(() -> {
             // squares small enough for the whole game screen to fit on this screen
             Rectangle usableArea = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
-            Board board = new Board(cfg, Board.tileSizeFor(usableArea.width, usableArea.height), start);
+            Board board = new Board(cfg, Board.tileSizeFor(usableArea.width, usableArea.height), start, opponent);
             MoveLogPanel logPanel = new MoveLogPanel(board.getPreferredSize().height);
             GameSession session = board.getSession();
-            session.setMoveLogView(logPanel);
+
+            EnginePlayer engine = new EnginePlayer(opponent);
+            // the log hears about every move, so that is where the answer hangs off
+            session.setMoveLogView(engine.watching(session, logPanel, board::repaint));
+            // a paused game keeps the program from moving, and resuming lets it take its turn
+            engine.setHold(board::isPaused);
+            board.setResumeListener(() -> engine.moveIfItsTurn(session, board::repaint));
             // clicking a move in the log takes the game back to it, or forward again
             logPanel.setPlySelectedListener(session::goToPly);
 
@@ -201,6 +243,9 @@ public class Main {
             frame.setContentPane(wrapper);
             frame.revalidate();
             frame.repaint();
+
+            // with the side to move the program has to open the game rather than wait to be asked
+            engine.moveIfItsTurn(session, board::repaint);
         });
     }
 
@@ -257,9 +302,10 @@ public class Main {
         JButton claimDraw = UiComponents.button(Messages.get("game.claimDraw"), buttonFont, Theme.BUTTON_SECONDARY);
         claimDraw.setName("claimDraw");
 
-        // the session decides whether the move really comes back, since a timed game asks the opponent
-        takeBack.addActionListener(e -> session.requestTakeback());
-        replay.addActionListener(e -> session.redo());
+        // the session decides whether the move really comes back, since a timed game asks the opponent,
+        // and against the program the board steps back to the person's own move
+        takeBack.addActionListener(e -> pBoard.takeBack());
+        replay.addActionListener(e -> pBoard.replayMove());
         pause.addActionListener(e -> {
             pBoard.setPaused(!pBoard.isPaused());
             // the button names what pressing it will do next, not what the game is doing now
@@ -270,8 +316,11 @@ public class Main {
             int answer = JOptionPane.showConfirmDialog(pBoard, Messages.get("game.resignQuestion"),
                     Messages.get("game.resign"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
             if (answer == JOptionPane.YES_OPTION) {
-                // the player to move is the one who gives up
-                session.resign(session.isWhiteToMove() ? Pieces.WHITE : Pieces.BLACK);
+                // the person gives up against the program, and between two people the player to move
+                EngineSettings settings = pBoard.getSettings();
+                int colour = settings.engineOpponent() ? settings.humanColour()
+                        : session.isWhiteToMove() ? Pieces.WHITE : Pieces.BLACK;
+                session.resign(colour);
             }
         });
         // the session asks the opponent, and the rules answer the claim

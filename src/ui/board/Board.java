@@ -3,11 +3,13 @@ package ui.board;
 /*
  * Purpose: Board is the Swing panel that shows a running game. It paints the tiles, the pieces, the
  * legal move hints, the move that was just played, a king in check and both player clocks, and it
- * translates between screen pixels and the squares the engine counts in, while turning the view
- * towards the player to move. A move can also be typed rather than moved with the mouse, which is
- * why this panel takes the keyboard focus. The game itself lives in a GameSession on the bitboard
- * core, so this class holds no position data of its own and only asks the session what stands where
- * and which squares a picked up piece may go to.
+ * translates between screen pixels and the squares the engine counts in. Between two people at one
+ * screen it turns the view towards whoever is to move; against the program it holds still and faces
+ * the person, because there is only one of them and a board that turned would hand them their
+ * opponent's view. A move can also be typed rather than moved with the mouse, which is why this panel
+ * takes the keyboard focus. The game itself lives in a GameSession on the bitboard core, so this
+ * class holds no position data of its own and only asks the session what stands where and which
+ * squares a picked up piece may go to.
  *
  * Owner: PBR208 - https://github.com/PBR208/
  * Version: 2.0
@@ -20,6 +22,7 @@ import engine.core.Moves;
 import engine.core.Pieces;
 import engine.core.Position;
 import engine.core.San;
+import engine.model.EngineSettings;
 import engine.model.GameConfig;
 import ui.i18n.Messages;
 import ui.theme.Theme;
@@ -54,6 +57,9 @@ public class Board extends JPanel implements GameSession.View {
 
     private final GameSession session;
 
+    // who the second player is, which also decides whether the board turns round after a move
+    private final EngineSettings settings;
+
     // square of the piece the mouse picked up, or NO_SQUARE while nothing is dragged
     private int selectedSquare = NO_SQUARE;
     // squares that piece may move to, filled when it is picked up
@@ -84,6 +90,10 @@ public class Board extends JPanel implements GameSession.View {
     // while a game is paused both clocks stand still and the board takes no moves
     private boolean paused;
 
+    // told when a paused game runs again, so the program can take a turn it was holding back
+    private Runnable onResume = () -> {
+    };
+
     // laid over the squares while the game is paused, dark enough to say "not now"
     private static final Color PAUSE_VEIL = new Color(0, 0, 0, 150);
     // what both clocks showed after each ply, White's first, index 0 being the start of the game
@@ -111,10 +121,12 @@ public class Board extends JPanel implements GameSession.View {
     }
 
     /**
-     * Builds the game board for a new game from the standard starting position.
+     * Builds the game board for a game between two people at one screen.
      * <p>
-     * Almost every game begins where chess begins, so this is the constructor the New Game screen
-     * uses. I forward to the full one with the standard starting position.
+     * Most games are played by two people taking turns at one screen and begin where chess begins,
+     * so this is the ordinary way in. I forward to the full constructor with the standard starting
+     * position and settings that have no engine in them, which is also what makes the board turn
+     * round after every move.
      * <p>
      * Time complexity: O(p) for the p starting pieces. Space complexity: O(s^2) for the sprites
      * scaled to squares of s pixels.
@@ -125,19 +137,27 @@ public class Board extends JPanel implements GameSession.View {
      * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
      */
     public Board(GameConfig pConfig, int pTileSize) {
-        this(pConfig, pTileSize, Position.startPosition());
+        this(pConfig, pTileSize, Position.startPosition(), EngineSettings.humanOpponent());
     }
 
     /**
-     * Builds the game board for a game that starts from a given position.
+     * Builds the game board for a new game against a given opponent.
      * <p>
-     * A game does not have to begin from the standard position: it can start from one that was set
-     * up in the position editor or loaded from a FEN, which is what studying an endgame needs. The
-     * session already accepts a position to begin from, so this only has to pass one on rather than
-     * place any pieces itself. I store the square size first, since everything else is measured in
-     * squares, create the session on that position and hand it this board as its view, the promotion
-     * dialog and the draw dialogs, build both clocks with the configured times, size the panel for
-     * the board and the two clock bars, hook up the mouse and start the clock of the side to move.
+     * Time complexity: O(p) for the p starting pieces. Space complexity: O(s^2) for the sprites
+     * scaled to squares of s pixels.
+     *
+     * @param pConfig   names, times and increment of the new game, never null
+     * @param pTileSize edge length of one square in pixels, at least MIN_TILE_SIZE
+     * @param pSettings who the second player is and which way the board faces, never null
+     * @throws NullPointerException     if pConfig or pSettings is null
+     * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
+     */
+    public Board(GameConfig pConfig, int pTileSize, EngineSettings pSettings) {
+        this(pConfig, pTileSize, Position.startPosition(), pSettings);
+    }
+
+    /**
+     * Builds the game board for a game between two people that starts from a given position.
      * <p>
      * Time complexity: O(p) for the p pieces of the position. Space complexity: O(s^2) for the
      * sprites scaled to squares of s pixels.
@@ -149,12 +169,41 @@ public class Board extends JPanel implements GameSession.View {
      * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
      */
     public Board(GameConfig pConfig, int pTileSize, Position pStart) {
+        this(pConfig, pTileSize, pStart, EngineSettings.humanOpponent());
+    }
+
+    /**
+     * Builds the game board for a game from a given position against a given opponent.
+     * <p>
+     * A game does not have to begin from the standard position: it can start from one that was set
+     * up in the position editor or loaded from a FEN, which is what studying an endgame needs. The
+     * session already accepts a position to begin from, so this only has to pass one on rather than
+     * place any pieces itself. I store the square size first, since everything else is measured in
+     * squares, create the session on that position and hand it this board as its view, the promotion
+     * dialog and the draw dialogs, build both clocks with the configured times, size the panel for
+     * the board and the two clock bars, hook up the mouse and start the clock of the side to move.
+     * The settings are kept because they decide which way round the board is drawn, and against the
+     * program they also decide who answers a draw offer or a takeback: the program itself, rather than
+     * a dialog the person would have to answer on its behalf.
+     * <p>
+     * Time complexity: O(p) for the p pieces of the position. Space complexity: O(s^2) for the
+     * sprites scaled to squares of s pixels.
+     *
+     * @param pConfig   names, times and increment of the new game, never null
+     * @param pTileSize edge length of one square in pixels, at least MIN_TILE_SIZE
+     * @param pStart    position the game begins from, never null
+     * @param pSettings who the second player is and which way the board faces, never null
+     * @throws NullPointerException     if pConfig, pStart or pSettings is null
+     * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
+     */
+    public Board(GameConfig pConfig, int pTileSize, Position pStart, EngineSettings pSettings) {
         // pieces this small would be hard to see and click
         if (pTileSize < MIN_TILE_SIZE) {
             throw new IllegalArgumentException("tile size " + pTileSize + " is below " + MIN_TILE_SIZE);
         }
         this.tileSize = pTileSize;
         this.clockHeight = pTileSize;
+        this.settings = pSettings;
         // the board draws the pieces, so it owns their images
         this.sprites = new PieceSprites(pTileSize);
 
@@ -162,10 +211,14 @@ public class Board extends JPanel implements GameSession.View {
         session.setView(this);
         session.setPromotionPicker(new SwingPromotionChooser(this));
         session.setDrawArbiter(new SwingDrawOfferResolver(this));
-        // a draw one player offers the other is a different question from a draw the rules allow
-        session.setDrawOfferArbiter(new SwingDrawOfferArbiter(this));
-        // a game on a clock asks the opponent before a move is taken back, a casual one does not
-        session.setTakebackArbiter(new SwingTakebackArbiter(this, pConfig.whiteTimeMs() > 0));
+        // a draw one player offers the other is a different question from a draw the rules allow, and
+        // the program answers an offer itself rather than asking the person to answer for it
+        session.setDrawOfferArbiter(pSettings.engineOpponent()
+                ? new EngineDrawOfferArbiter(this) : new SwingDrawOfferArbiter(this));
+        // a game on a clock asks the opponent before a move is taken back, a casual one does not, and
+        // the program never minds
+        session.setTakebackArbiter(new SwingTakebackArbiter(this,
+                pConfig.whiteTimeMs() > 0 && !pSettings.engineOpponent()));
 
         // both clocks play the same time control, but they may start from different times
         this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), pConfig.clockMode(),
@@ -263,7 +316,7 @@ public class Board extends JPanel implements GameSession.View {
         g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,
                 RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
-        boolean whiteAtBottom = session.isWhiteToMove();
+        boolean whiteAtBottom = isWhiteAtBottom();
         int boardWidth = cols * tileSize;
         int bottomY = clockHeight + rows * tileSize;
 
@@ -372,10 +425,41 @@ public class Board extends JPanel implements GameSession.View {
     }
 
     /**
+     * Tells whether White is drawn along the bottom edge.
+     * <p>
+     * Two people at one screen want the board to turn after every move, so whoever is to move always
+     * sees their own pieces nearest to them and reaches for the right end. Against the program that
+     * is exactly wrong: there is only one person sitting there, and a board that spun away every time
+     * the program answered would hand them the opponent's view of their own game. So a game against
+     * the program holds the board still, facing the side the person is playing.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return true if White is at the bottom of the screen
+     */
+    private boolean isWhiteAtBottom() {
+        return settings.autoFlip()
+                ? session.isWhiteToMove()
+                : settings.humanColour() == Pieces.WHITE;
+    }
+
+    /**
+     * Returns who this board thinks the second player is.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the settings the board was built with, never null
+     */
+    public EngineSettings getSettings() {
+        return settings;
+    }
+
+    /**
      * Plays a move a player made on this board.
      * <p>
      * Every move a player makes comes through here, whether it was dragged, clicked or typed, so this
-     * is where a paused game refuses it and where an accepted move clicks. The session still decides
+     * is where a paused game refuses it, where a move on the program's turn is refused, and where an
+     * accepted move clicks. The session still decides
      * whether the move is legal, and it is also what remembers the move, so the board can mark the
      * last move however it was played, including one played again after a takeback.
      * <p>
@@ -386,8 +470,8 @@ public class Board extends JPanel implements GameSession.View {
      * @return true if the move was played
      */
     public boolean playMove(int pMove) {
-        // a paused game takes no moves, whichever way they arrive
-        if (paused) {
+        // a paused game takes no moves, whichever way they arrive, and the program moves its own pieces
+        if (paused || settings.playsFor(session.position().sideToMove())) {
             return false;
         }
         // a pair of squares that is no legal move simply puts the piece back
@@ -397,6 +481,47 @@ public class Board extends JPanel implements GameSession.View {
         // a move that was accepted should say so through more than one sense
         sounds.playMove();
         repaint();
+        return true;
+    }
+
+    /**
+     * Takes the last move back, or against the program the last move the person made.
+     * <p>
+     * The session decides whether a move comes back at all, because a timed game between two people
+     * asks the opponent first. Against the program one move back would hand the turn to the program,
+     * which would simply play its answer again, so I keep taking moves back until the person is to
+     * move, which also covers a takeback while the program is still thinking.
+     * <p>
+     * Time complexity: O(p) for the p plies each undo rebuilds its repetition counts from.
+     * Space complexity: O(1).
+     *
+     * @return true if a move was taken back
+     */
+    public boolean takeBack() {
+        if (!session.requestTakeback()) {
+            return false;
+        }
+        while (session.canUndo() && settings.playsFor(session.position().sideToMove())) {
+            session.undo();
+        }
+        return true;
+    }
+
+    /**
+     * Plays a taken back move again, and against the program the answer it had given as well.
+     * <p>
+     * Time complexity: O(m) for the m legal moves of each move played again. Space complexity: O(1).
+     *
+     * @return true if a move was played again
+     */
+    public boolean replayMove() {
+        if (!session.redo()) {
+            return false;
+        }
+        // the program's answer was taken back together with the person's move, so it comes back too
+        while (session.canRedo() && settings.playsFor(session.position().sideToMove())) {
+            session.redo();
+        }
         return true;
     }
 
@@ -836,6 +961,25 @@ public class Board extends JPanel implements GameSession.View {
             }
         }
         repaint();
+        // a program that held its move back while the game was paused may move now
+        if (!paused) {
+            onResume.run();
+        }
+    }
+
+    /**
+     * Sets who is told when a paused game runs again.
+     * <p>
+     * A program opponent does not move while the game is paused, so it needs to hear when the game
+     * goes on, since nothing else about the game changes at that moment.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pListener run whenever the game is resumed, or null for nobody
+     */
+    public void setResumeListener(Runnable pListener) {
+        this.onResume = pListener == null ? () -> {
+        } : pListener;
     }
 
     /**
@@ -896,7 +1040,7 @@ public class Board extends JPanel implements GameSession.View {
      * @return the horizontal pixel of that column's left edge
      */
     public int toVisualX(int pCol) {
-        return (session.isWhiteToMove() ? pCol : 7 - pCol) * tileSize;
+        return (isWhiteAtBottom() ? pCol : 7 - pCol) * tileSize;
     }
 
     /**
@@ -908,7 +1052,7 @@ public class Board extends JPanel implements GameSession.View {
      * @return the vertical pixel of that row's upper edge
      */
     public int toVisualY(int pRow) {
-        return clockHeight + (session.isWhiteToMove() ? pRow : 7 - pRow) * tileSize;
+        return clockHeight + (isWhiteAtBottom() ? pRow : 7 - pRow) * tileSize;
     }
 
     /**
@@ -943,7 +1087,7 @@ public class Board extends JPanel implements GameSession.View {
      */
     public int toLogicalCol(int pX) {
         int col = Math.floorDiv(pX, tileSize);
-        return session.isWhiteToMove() ? col : 7 - col;
+        return isWhiteAtBottom() ? col : 7 - col;
     }
 
     /**
@@ -959,7 +1103,7 @@ public class Board extends JPanel implements GameSession.View {
      */
     public int toLogicalRow(int pY) {
         int row = Math.floorDiv(pY - clockHeight, tileSize);
-        return session.isWhiteToMove() ? row : 7 - row;
+        return isWhiteAtBottom() ? row : 7 - row;
     }
 
     /**
