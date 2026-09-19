@@ -17,6 +17,7 @@ import engine.model.*;
 import engine.persistence.*;
 import engine.pieces.*;
 import ui.board.*;
+import ui.i18n.*;
 import ui.menu.*;
 import ui.theme.*;
 
@@ -536,6 +537,9 @@ public class GameTest {
             check(title.contains("Bob"), "title must contain black name");
             check(title.contains("1-0"), "title must contain result");
             check(title.contains("Blitz 5+0"), "title must contain time control");
+            // the separator has to be a real em dash rather than the text of its escape, which is
+            // what a doubled backslash in the source would silently turn it into
+            check(title.contains(String.valueOf((char) 0x2014)), "the parts must be separated by an em dash");
         });
 
         // =================================================================
@@ -776,6 +780,203 @@ public class GameTest {
                     "the deleted game must not be listed any more");
             // deleting the same entry twice is harmless, but it must not claim to have deleted it
             check(!PgnManager.delete(mine.file), "deleting a game that is already gone must report nothing");
+        });
+
+        test("PgnManager: every game of a shared file is listed and marked as sharing it", () -> {
+            String white = "SharedWhite" + System.nanoTime();
+            java.nio.file.Path dir = PgnManager.getGamesDirectory();
+            Files.createDirectories(dir);
+            // two games in one file, the way a tournament download arrives
+            Files.writeString(dir.resolve("2026.01.01_" + white + ".pgn"),
+                    "[Event \"Club Night\"]\n[White \"" + white + "\"]\n[Black \"First\"]\n[Result \"1-0\"]\n\n1. e4 1-0\n\n"
+                            + "[Event \"Club Night\"]\n[White \"" + white + "\"]\n[Black \"Second\"]\n[Result \"0-1\"]\n\n1. d4 0-1\n");
+
+            List<PgnManager.SavedGame> mine = PgnManager.loadLibrary().stream()
+                    .filter(g -> g.record.whiteName.equals(white)).toList();
+            checkEqual(2, mine.size(), "both games of the file must be listed");
+            for (PgnManager.SavedGame game : mine) {
+                check(game.sharesFile, "a game from a file of two must know it shares the file");
+                check(game.name.isEmpty(), "and is listed by its players, got: " + game.name);
+            }
+            cleanupSavedGame(white);
+
+            String alone = "AloneWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(alone, "AloneBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+            PgnManager.SavedGame single = PgnManager.loadLibrary().stream()
+                    .filter(g -> g.record.whiteName.equals(alone)).findFirst().orElse(null);
+            checkNotNull(single, "the saved game must appear in the library");
+            check(!single.sharesFile, "a game saved here has a file of its own");
+            cleanupSavedGame(alone);
+        });
+
+        // =================================================================
+        System.out.println();
+        System.out.println("-- PGN import and export ----------------------------------------");
+        // =================================================================
+
+        test("PgnWriter: the roster comes first, then the tags a saved game needs", () -> {
+            GameRecord record = new GameRecord("Alice", "Bob", "1-0", "2026.01.02", "Blitz 5+0",
+                    "300+5", GameRecord.TERMINATION_TIME_FORFEIT, null,
+                    List.of("e4", "e5"), List.of());
+
+            List<String> lines = PgnWriter.write(record).lines().toList();
+            List<String> tagNames = lines.stream()
+                    .filter(line -> line.startsWith("["))
+                    .map(line -> line.substring(1, line.indexOf(' ')))
+                    .toList();
+
+            checkEqual(List.of("Event", "Site", "Date", "Round", "White", "Black", "Result"),
+                    tagNames.subList(0, 7), "the seven tag roster must come first and in order");
+            check(tagNames.contains("TimeControl"), "a saved game must say what it was played at");
+            check(tagNames.contains("Termination"), "a finished game must say why it ended");
+            check(lines.contains("[TimeControl " + (char) 34 + "300+5" + (char) 34 + "]"),
+                    "the time control must be written the way PGN spells it");
+        });
+
+        test("PgnWriter: the moves wrap at eighty columns and carry no position comments", () -> {
+            List<String> manyMoves = new ArrayList<>();
+            // a game long enough that the movetext cannot fit on one line
+            for (int ply = 0; ply < 60; ply++) {
+                manyMoves.add("Nf3");
+            }
+            GameRecord record = new GameRecord("Alice", "Bob", "1/2-1/2", "2026.01.02", "Blitz 5+0",
+                    "300+0", GameRecord.TERMINATION_NORMAL, null, manyMoves, List.of());
+
+            String pgn = PgnWriter.write(record);
+            for (String line : pgn.lines().toList()) {
+                check(line.length() <= 80, "no line may pass eighty columns, got " + line.length() + ": " + line);
+            }
+            check(!pgn.contains("{"), "the position after every move no longer belongs in the file");
+            check(pgn.contains("1. Nf3"), "the first move must carry its number");
+            check(pgn.trim().endsWith("1/2-1/2"), "the movetext must end with the result");
+        });
+
+        test("PgnWriter: a game that was set up says so and keeps its own numbering", () -> {
+            GameRecord record = new GameRecord("Alice", "Bob", "*", "2026.01.02", "Unlimited",
+                    "-", null, "4k3/8/8/8/8/8/8/4K3 b - - 0 12",
+                    List.of("Ke7"), List.of());
+
+            String pgn = PgnWriter.write(record);
+            check(pgn.contains("[SetUp " + (char) 34 + "1" + (char) 34 + "]"),
+                    "a set up game must be marked as one");
+            check(pgn.contains("[FEN "), "a set up game must carry the position it started from");
+            check(pgn.contains("12... Ke7"),
+                    "a game that starts with Black must number from its own move, got: " + pgn);
+        });
+
+        test("PgnReader: comments, side lines, glyphs and move numbers are not moves", () -> {
+            String pgn = """
+                    [White "A"]
+                    [Black "B"]
+                    [Result "*"]
+
+                    1. e4 {the usual start} e5 ; and a line comment
+                    2. Nf3 (2. Nc3 Nf6) 2... Nc6 $1 *
+                    """;
+
+            GameRecord record = PgnReader.read(pgn);
+            checkNotNull(record, "the game must be readable");
+            checkEqual(List.of("e4", "e5", "Nf3", "Nc6"), record.moves,
+                    "only the moves that were played belong in the game");
+            checkEqual("*", record.result, "the result token must be picked up");
+        });
+
+        test("PgnReader: every game of a file with several games comes back", () -> {
+            String pgn = """
+                    [White "First White"]
+                    [Black "First Black"]
+                    [Result "1-0"]
+
+                    1. e4 e5 2. Nf3 1-0
+
+                    [White "Second White"]
+                    [Black "Second Black"]
+                    [Result "0-1"]
+
+                    1. d4 d5 0-1
+                    """;
+
+            List<GameRecord> games = PgnReader.readAll(pgn);
+            checkEqual(2, games.size(), "both games in the file must be read");
+            checkEqual("First White", games.get(0).whiteName, "the first game keeps its players");
+            checkEqual("Second Black", games.get(1).blackName, "the second game keeps its players");
+            checkEqual(List.of("d4", "d5"), games.get(1).moves, "the games must not run into each other");
+        });
+
+        test("PgnReader: castling with zeros and annotation marks become real moves", () -> {
+            String pgn = """
+                    [White "A"]
+                    [Black "B"]
+                    [Result "*"]
+
+                    1. e4 e5 2. Nf3 Nc6 3. Bb5 a6 4. 0-0!? *
+                    """;
+
+            GameRecord record = PgnReader.read(pgn);
+            checkNotNull(record, "the game must be readable");
+            checkEqual(List.of("e4", "e5", "Nf3", "Nc6", "Bb5", "a6", "O-O"), record.moves,
+                    "castling written with zeros is still castling, and the marks say nothing about the move");
+            checkEqual(record.moves.size(), record.fenHistory.size(),
+                    "the positions are rebuilt from the moves, one per move");
+            // the last position has to be a position, which proves the replay really ran
+            Fen.parse(record.fenHistory.get(record.fenHistory.size() - 1));
+        });
+
+        test("PgnReader: a game saved in the old format keeps its positions", () -> {
+            // the writer used to put the position after every move into a comment
+            String pgn = """
+                    [White "Old"]
+                    [Black "Format"]
+                    [Result "1-0"]
+
+                    1. Zz9 {rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1} 1-0
+                    """;
+
+            GameRecord record = PgnReader.read(pgn);
+            checkNotNull(record, "a game from an older version must still open");
+            checkEqual(1, record.fenHistory.size(),
+                    "a move that cannot be replayed falls back on the position in its comment");
+            check(record.fenHistory.get(0).startsWith("rnbqkbnr"),
+                    "the position must be the one the file recorded");
+        });
+
+        test("PgnWriter and PgnReader: a game survives being written and read back", () -> {
+            // the two characters a tag value has to protect, built from their codes so this test
+            // cannot be broken by an escape being doubled somewhere along the way
+            String tricky = "Magnus " + (char) 34 + "The Hammer" + (char) 34 + " " + (char) 92;
+            GameRecord original = new GameRecord(tricky, "Bob [Blitz]", "1-0", "2026.01.02",
+                    "Blitz 5+0", "300+5", GameRecord.TERMINATION_NORMAL, null,
+                    List.of("e4", "e5", "Nf3"), List.of());
+
+            GameRecord reread = PgnReader.read(PgnWriter.write(original));
+
+            checkNotNull(reread, "a game I wrote myself must be readable again");
+            checkEqual(tricky, reread.whiteName, "quotes and backslashes in a name must survive");
+            checkEqual("Bob [Blitz]", reread.blackName, "brackets in a name must survive");
+            checkEqual("1-0", reread.result, "the result must survive");
+            checkEqual("300+5", reread.pgnTimeControl, "the time control must survive");
+            checkEqual(GameRecord.TERMINATION_NORMAL, reread.termination, "the reason must survive");
+            checkEqual(List.of("e4", "e5", "Nf3"), reread.moves, "the moves must survive");
+        });
+
+        test("GameRecord: the PGN termination and time control follow the standard", () -> {
+            checkEqual(GameRecord.TERMINATION_TIME_FORFEIT, GameRecord.pgnTermination(Termination.TIME_OUT),
+                    "a flag fall is a forfeit on time");
+            checkEqual(GameRecord.TERMINATION_TIME_FORFEIT,
+                    GameRecord.pgnTermination(Termination.TIME_OUT_WITHOUT_MATING_MATERIAL),
+                    "a flag fall without mating material is still a forfeit on time");
+            checkEqual(GameRecord.TERMINATION_NORMAL, GameRecord.pgnTermination(Termination.CHECKMATE),
+                    "a mate ends the game by the rules");
+            checkEqual(GameRecord.TERMINATION_NORMAL, GameRecord.pgnTermination(Termination.THREEFOLD_REPETITION),
+                    "PGN has no tag value per drawing rule");
+            check(GameRecord.pgnTermination(null) == null, "a game still running claims no reason");
+
+            checkEqual("300+5", GameRecord.pgnTimeControl(
+                            new GameConfig("A", "B", 300_000, 300_000, "Blitz 5+5", 5_000)),
+                    "the tag counts in seconds");
+            checkEqual(GameRecord.NO_TIME_CONTROL, GameRecord.pgnTimeControl(GameConfig.unlimited()),
+                    "a game without a clock has no time control at all");
         });
 
         // =================================================================
@@ -1298,6 +1499,134 @@ public class GameTest {
             check(!clock.isTicking(), "a stopped clock must stop its timer");
         });
 
+        test("ChessClock: a Fischer clock pays its increment after a move", () -> {
+            ChessClock clock = new ChessClock(true, 60_000, ClockMode.FISCHER, 2_000, 0, () -> {
+            }, w -> {
+            });
+            clock.onMoveFinished();
+            checkEqual(62_000L, clock.getTimeMs(), "the increment is paid whether the move needed it or not");
+        });
+
+        test("ChessClock: sudden death and a delay clock pay no increment", () -> {
+            ChessClock sudden = new ChessClock(true, 60_000, ClockMode.SUDDEN_DEATH, 0, 0, () -> {
+            }, w -> {
+            });
+            sudden.onMoveFinished();
+            checkEqual(60_000L, sudden.getTimeMs(), "sudden death gives a player nothing but their own time");
+
+            ChessClock delayed = new ChessClock(true, 60_000, ClockMode.SIMPLE_DELAY, 0, 3_000, () -> {
+            }, w -> {
+            });
+            delayed.onMoveFinished();
+            checkEqual(60_000L, delayed.getTimeMs(), "a delay is not an increment and is never paid out");
+        });
+
+        test("ChessClock: a simple delay charges nothing until the delay is used up", () -> {
+            ChessClock clock = new ChessClock(true, 10_000, ClockMode.SIMPLE_DELAY, 0, 5_000, () -> {
+            }, w -> {
+            });
+            clock.start();
+            Thread.sleep(200);
+            clock.stop();
+            // the whole think fitted inside the delay, so it cost nothing at all
+            checkEqual(10_000L, clock.getTimeMs(), "time spent inside the delay must not be charged");
+        });
+
+        test("ChessClock: a simple delay charges only what goes past it", () -> {
+            ChessClock clock = new ChessClock(true, 10_000, ClockMode.SIMPLE_DELAY, 0, 100, () -> {
+            }, w -> {
+            });
+            clock.start();
+            Thread.sleep(400);
+            clock.stop();
+
+            long left = clock.getTimeMs();
+            check(left < 10_000, "thinking past the delay has to cost time, got " + left);
+            check(left >= 9_000, "but only what went past it, got " + left);
+        });
+
+        test("ChessClock: Bronstein gives back what the move used, up to the delay", () -> {
+            ChessClock generous = new ChessClock(true, 10_000, ClockMode.BRONSTEIN, 0, 5_000, () -> {
+            }, w -> {
+            });
+            generous.start();
+            Thread.sleep(200);
+            generous.stop();
+            check(generous.getTimeMs() >= 9_990,
+                    "a move well inside the delay costs nothing once it is given back, got " + generous.getTimeMs());
+
+            ChessClock capped = new ChessClock(true, 10_000, ClockMode.BRONSTEIN, 0, 100, () -> {
+            }, w -> {
+            });
+            capped.start();
+            Thread.sleep(500);
+            capped.stop();
+            check(capped.getTimeMs() <= 9_700,
+                    "a move past the delay gets only the delay back, got " + capped.getTimeMs());
+        });
+
+        test("ChessClock: the display counts in tenths below ten seconds", () -> {
+            checkEqual("01:05", ChessClock.formatTime(65_000, 600_000), "minutes and seconds above ten seconds");
+            checkEqual("00:10", ChessClock.formatTime(10_000, 600_000), "ten seconds still reads as a clock");
+            checkEqual("9.4", ChessClock.formatTime(9_400, 600_000), "below ten seconds every tenth shows");
+            checkEqual("0.0", ChessClock.formatTime(0, 600_000), "a fallen flag shows no time left");
+            checkEqual("00:00", ChessClock.formatTime(0, 0), "an unlimited clock never counts tenths");
+        });
+
+        test("ClockStage: a tournament control is read the way players write it", () -> {
+            List<ClockStage> classical = ClockStage.parse("40/90, 30");
+            checkEqual(2, classical.size(), "forty moves in ninety minutes, then thirty minutes");
+            checkEqual(40, classical.get(0).moves(), "the first stage covers forty moves");
+            checkEqual(5_400_000L, classical.get(0).timeMs(), "ninety minutes, in milliseconds");
+            check(classical.get(1).runsToTheEnd(), "the last stage has no move count of its own");
+            checkEqual(1_800_000L, classical.get(1).timeMs(), "thirty minutes for the rest of the game");
+
+            checkEqual(1, ClockStage.parse("30").size(), "a control without a slash is a single stage");
+            check(ClockStage.parse("").isEmpty(), "no text means no stages");
+            check(ClockStage.parse(null).isEmpty(), "and neither does nothing at all");
+            check(ClockStage.parse("40/ninety").isEmpty(), "a control nobody can read gives no stages at all");
+        });
+
+        test("ChessClock: a staged control hands out its time when the stage is played out", () -> {
+            ChessClock clock = new ChessClock(true, 60_000, ClockMode.SUDDEN_DEATH, 0, 0, () -> {
+            }, w -> {
+            });
+            // two moves at a minute, then a minute and a half for whatever is left
+            clock.setStages(List.of(new ClockStage(2, 60_000),
+                    new ClockStage(ClockStage.UNTIL_THE_END, 30_000)));
+
+            clock.onMoveFinished();
+            checkEqual(60_000L, clock.getTimeMs(), "a move inside the stage brings nothing with it");
+
+            clock.onMoveFinished();
+            checkEqual(90_000L, clock.getTimeMs(), "playing the stage out brings the next stage's time");
+
+            clock.onMoveFinished();
+            checkEqual(90_000L, clock.getTimeMs(), "the last stage runs to the end and brings no more");
+        });
+
+        test("LowTimeSound: a warning never throws, with or without a sound card", () -> {
+            // a build server has no sound card, and a warning must never take a game down with it
+            checkEqual(!GraphicsEnvironment.isHeadless(), LowTimeSound.isAvailable(),
+                    "a machine without a screen is treated as one without sound");
+            LowTimeSound.play();
+        });
+
+        test("ChessClock: the low time warning comes once, and again after time is added", () -> {
+            ChessClock clock = new ChessClock(true, 2_000, () -> {
+            }, w -> {
+            });
+            check(!clock.isLowTimeWarned(), "a fresh clock has nothing to warn about yet");
+
+            clock.start();
+            Thread.sleep(250);
+            check(clock.isLowTimeWarned(), "a clock under the low mark warns its player");
+            clock.stop();
+
+            clock.addTime(120_000);
+            check(!clock.isLowTimeWarned(), "time back above the mark earns another warning later on");
+        });
+
         test("Board: a board whose clocks are stopped can be garbage collected", () -> {
             java.lang.ref.WeakReference<Board> ref = boardWithStoppedClocks();
             // give the collector a few chances, a live timer would keep the board reachable forever
@@ -1350,6 +1679,94 @@ public class GameTest {
                 // the size is checked before anything else is created
             }
         });
+
+        test("Main: the actions beside the board are live exactly when they would do something", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    GameSession session = board.getSession();
+                    // the board installs the real claim dialog, which a test must never open
+                    session.setDrawArbiter(null);
+
+                    JPanel bar = app.Main.actionBar(board);
+                    AbstractButton resign = findButton(bar, "resign");
+                    AbstractButton offer = findButton(bar, "offerDraw");
+                    AbstractButton claim = findButton(bar, "claimDraw");
+                    checkNotNull(resign, "the row must offer resigning");
+                    checkNotNull(offer, "and offering a draw");
+                    checkNotNull(claim, "and claiming one");
+
+                    check(resign.isEnabled(), "a running game can be resigned");
+                    check(offer.isEnabled(), "and a draw can be offered in it");
+                    check(!claim.isEnabled(), "but nothing is claimable in the starting position");
+
+                    // both knights out and back twice brings the starting position back a third time
+                    String[][] shuffle = {{"g1", "f3"}, {"g8", "f6"}, {"f3", "g1"}, {"f6", "g8"}};
+                    for (int round = 0; round < 2; round++) {
+                        for (String[] step : shuffle) {
+                            session.play(session.moveFor(Bitboards.squareOf(step[0]), Bitboards.squareOf(step[1])));
+                        }
+                    }
+                    check(claim.isEnabled(), "a threefold repetition makes the claim live");
+
+                    session.resign(Pieces.WHITE);
+                    check(!resign.isEnabled(), "a finished game cannot be resigned");
+                    check(!offer.isEnabled(), "nor drawn by agreement");
+                    check(!claim.isEnabled(), "nor claimed");
+                }));
+
+        test("Main: taking back and replaying a move are live exactly when there is one", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    GameSession session = board.getSession();
+
+                    JPanel bar = app.Main.actionBar(board);
+                    AbstractButton takeBack = findButton(bar, "takeBack");
+                    AbstractButton replay = findButton(bar, "replayMove");
+                    checkNotNull(takeBack, "the row must offer taking a move back");
+                    checkNotNull(replay, "and playing it again");
+                    check(!takeBack.isEnabled(), "there is nothing to take back before the first move");
+                    check(!replay.isEnabled(), "and nothing to play again");
+
+                    session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+                    check(takeBack.isEnabled(), "a played move can be taken back");
+
+                    session.undo();
+                    check(!takeBack.isEnabled(), "the only move is gone again");
+                    check(replay.isEnabled(), "so it can be played again");
+
+                    session.redo();
+                    check(takeBack.isEnabled(), "a replayed move can be taken back once more");
+                    check(!replay.isEnabled(), "and there is nothing left to play again");
+                }));
+
+        test("Board: pausing stops both clocks and resuming starts the one to move", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(new GameConfig("Alice", "Bob", 120_000, 120_000, "Bullet 2+1", 1_000));
+                    check(board.areClocksRunning(), "a new game runs White's clock");
+
+                    board.setPaused(true);
+                    check(board.isPaused(), "the board has to know it is paused");
+                    check(!board.areClocksRunning(), "a paused game stops both clocks");
+
+                    board.setPaused(true);
+                    check(board.isPaused(), "pausing an already paused game changes nothing");
+
+                    board.setPaused(false);
+                    check(!board.isPaused(), "the game runs again");
+                    check(board.isClockRunning(true), "and the clock of the player to move carries on");
+                }));
+
+        test("Board: a paused board takes no moves", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    Input input = new Input(board, board.getSession());
+                    board.setPaused(true);
+
+                    // the middle of e2, which holds a pawn in the starting position
+                    input.mousePressed(new java.awt.event.MouseEvent(board, java.awt.event.MouseEvent.MOUSE_PRESSED,
+                            System.currentTimeMillis(), 0, 382, 637, 1, false));
+                    check(board.getSelectedSquare() < 0, "nothing may be picked up while the game is paused");
+                }));
 
         test("Main: the window size is cut down to the usable screen area", () -> {
             Rectangle laptop = new Rectangle(0, 0, 1366, 728);
@@ -1580,6 +1997,28 @@ public class GameTest {
                     check(hasButton(d, "Bishop"), "Must have 'Bishop'");
                     check(hasButton(d, "Knight"), "Must have 'Knight'");
                     d.dispose();
+                }));
+
+        guiTest("PromoteGUI: the buttons keep their names and are described in the chosen language", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    java.util.Locale previous = Messages.getLocale();
+                    try {
+                        Messages.setLocale(java.util.Locale.GERMAN);
+                        PromoteGUI dialog = new PromoteGUI(frame, TILE_SIZE);
+
+                        // the name is how a test finds an icon with no text, so it stays English
+                        AbstractButton queen = findButton(dialog, "Queen");
+                        checkNotNull(queen, "the button must still be found by its English name");
+                        // what a player reads, and what a screen reader says, follows the language
+                        checkEqual("Dame", queen.getToolTipText(), "a German player reads the German name");
+                        checkEqual("Dame", queen.getAccessibleContext().getAccessibleName(),
+                                "and a screen reader announces the same");
+
+                        dialog.dispose();
+                    } finally {
+                        // the rest of the suite reads English
+                        Messages.setLocale(previous);
+                    }
                 }));
 
         guiTest("PromoteGUI: Queen -> Choice.QUEEN", () -> {
@@ -2094,6 +2533,35 @@ public class GameTest {
                     check(hasTitle, "Must show the 'CHESS' title label");
                 }));
 
+        test("MainMenu: the menu is written in the language that was chosen", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    java.util.Locale previous = Messages.getLocale();
+                    try {
+                        Messages.setLocale(java.util.Locale.GERMAN);
+                        MainMenu german = new MainMenu();
+                        check(hasButton(german, "Neues Spiel"), "the German menu offers a new game in German");
+                        boolean germanTitle = findAllLabels(german).stream()
+                                .anyMatch(l -> "SCHACH".equals(l.getText()));
+                        check(germanTitle, "and carries the German title");
+
+                        Messages.setLocale(java.util.Locale.ENGLISH);
+                        check(hasButton(new MainMenu(), "New Game"), "the English menu reads as it always did");
+                    } finally {
+                        // the rest of the suite reads English
+                        Messages.setLocale(previous);
+                    }
+                }));
+
+        test("MainMenu: every shipped language can be picked from the menu", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    MainMenu menu = new MainMenu();
+                    // the buttons keep their names whatever language they are written in
+                    for (java.util.Locale supported : Messages.supportedLocales()) {
+                        check(hasButton(menu, "language-" + supported.getLanguage()),
+                                "the menu must offer " + supported.getDisplayLanguage());
+                    }
+                }));
+
         guiTest("MainMenu: New Game navigates to NewGamePanel via ancestor frame", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     JFrame testFrame = new JFrame();
@@ -2215,6 +2683,54 @@ public class GameTest {
                     boolean explained = findAllLabels(p).stream()
                             .anyMatch(l -> l.getText() != null && l.getText().contains("minutes"));
                     check(explained, "the reason must be shown on the screen");
+                }));
+
+        test("NewGamePanel: an untouched screen keeps the mode its time control implies", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    checkEqual(ClockMode.SUDDEN_DEATH, p.createConfig().clockMode(),
+                            "Rapid 10+0 has no increment, so it is played as sudden death");
+
+                    findButton(p, "Bullet 2+1").doClick();
+                    checkEqual(ClockMode.FISCHER, p.createConfig().clockMode(),
+                            "a preset with an increment is a Fischer clock");
+                }));
+
+        test("NewGamePanel: picking Bronstein trades the increment for a delay", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    // a preset that does have an increment, to prove the mode wins over it
+                    findButton(p, "Rapid 15+10").doClick();
+                    findButton(p, "Bronstein").doClick();
+                    // the delay field sits behind the two names and the two custom time fields
+                    findAllTextFields(p).get(4).setText("5");
+
+                    GameConfig cfg = p.createConfig();
+                    checkEqual(ClockMode.BRONSTEIN, cfg.clockMode(), "the mode the player picked must win");
+                    checkEqual(5_000L, cfg.delayMs(), "the delay is read from the delay field");
+                    checkEqual(0L, cfg.incrementMs(), "a Bronstein clock pays no increment");
+                }));
+
+        test("NewGamePanel: picking Delay reads the same field", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    findButton(p, "Delay").doClick();
+                    findAllTextFields(p).get(4).setText("3");
+
+                    GameConfig cfg = p.createConfig();
+                    checkEqual(ClockMode.SIMPLE_DELAY, cfg.clockMode(), "the delay mode must reach the game");
+                    checkEqual(3_000L, cfg.delayMs(), "with the seconds that were typed");
+                }));
+
+        test("NewGamePanel: Black can start with a time of their own", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    NewGamePanel p = new NewGamePanel();
+                    // the odds field is the last one on the screen
+                    findAllTextFields(p).get(5).setText("3");
+
+                    GameConfig cfg = p.createConfig();
+                    checkEqual(600_000L, cfg.whiteTimeMs(), "White keeps the time of the preset");
+                    checkEqual(180_000L, cfg.blackTimeMs(), "Black gets the time from the odds field");
                 }));
 
         // =================================================================
@@ -2391,6 +2907,52 @@ public class GameTest {
                 check(PgnManager.loadLibrary().stream().noneMatch(g -> g.record.whiteName.equals(white)),
                         "the deleted game must be gone from the disk as well");
             });
+        });
+
+        test("PastGamesPanel: a game that shares its file is neither renamed nor deleted", () -> {
+            String white = "PanelSharedWhite" + System.nanoTime();
+            java.nio.file.Path file = PgnManager.getGamesDirectory().resolve("2026.01.01_" + white + ".pgn");
+            Files.createDirectories(file.getParent());
+            String pgn = "[White \"" + white + "\"]\n[Black \"First\"]\n[Result \"1-0\"]\n\n1. e4 1-0\n\n"
+                    + "[White \"" + white + "\"]\n[Black \"Second\"]\n[Result \"0-1\"]\n\n1. d4 0-1\n";
+            Files.writeString(file, pgn);
+
+            SwingUtilities.invokeAndWait(() -> {
+                PastGamesPanel p = new PastGamesPanel();
+                JTextField search = (JTextField) findByName(p, "librarySearch");
+                search.setText(white);
+                JList<String> list = findList(p);
+                list.setSelectedIndex(0);
+
+                int[] refusals = {0};
+                p.setPrompts(new PastGamesPanel.LibraryPrompts() {
+                    @Override
+                    public boolean confirmDelete(String pTitle) {
+                        check(false, "a shared file must be refused before anybody is asked");
+                        return true;
+                    }
+
+                    @Override
+                    public String askName(String pTitle, String pCurrentName) {
+                        check(false, "a shared file must be refused before anybody is asked");
+                        return "Renamed";
+                    }
+
+                    @Override
+                    public void sayFailed(String pMessage) {
+                        refusals[0]++;
+                    }
+                });
+
+                check(!p.renameSelected(), "renaming one game of a shared file must be refused");
+                check(!p.deleteSelected(), "and so must deleting it");
+                checkEqual(2, refusals[0], "the player must be told why, both times");
+            });
+            try {
+                check(Files.readString(file).equals(pgn), "the shared file must be left exactly as it was");
+            } finally {
+                cleanupSavedGame(white);
+            }
         });
 
         test("PastGamesPanel: selecting a game populates the move log", () -> {
@@ -4158,6 +4720,365 @@ public class GameTest {
                     "and moves are accepted again");
         });
 
+        // =================================================================
+        System.out.println();
+        System.out.println("-- Resigning, offering and claiming -----------------------------");
+        // =================================================================
+
+        test("GameSession: a draw can be claimed once the position has come back three times", () -> {
+            GameSession session = new GameSession();
+            // both knights out and back twice brings the starting position back for the third time
+            String[][] shuffle = {{"g1", "f3"}, {"g8", "f6"}, {"f3", "g1"}, {"f6", "g8"}};
+            for (int round = 0; round < 2; round++) {
+                for (String[] step : shuffle) {
+                    session.play(session.moveFor(Bitboards.squareOf(step[0]), Bitboards.squareOf(step[1])));
+                }
+            }
+
+            check(session.isRepetitionClaimable(), "the third occurrence may be claimed");
+            check(session.isDrawClaimable(), "so a draw is claimable at all");
+            check(session.claimDraw(), "and claiming it ends the game");
+            checkEqual(GameResult.DRAW, session.result(), "a claimed repetition is a draw");
+            checkEqual(Termination.THREEFOLD_REPETITION, session.termination(), "and says which rule drew it");
+        });
+
+        test("GameSession: the fifty move rule can be claimed once fifty moves have passed", () -> {
+            GameSession session = new GameSession(Fen.parse("4k3/8/8/8/8/8/8/R3K3 w - - 99 60"));
+            check(!session.isFiftyMoveClaimable(), "ninety nine half moves are not yet fifty moves");
+
+            session.play(session.moveFor(Bitboards.squareOf("a1"), Bitboards.squareOf("a2")));
+            check(session.isFiftyMoveClaimable(), "the hundredth half move makes it claimable");
+
+            check(session.claimDraw(), "claiming it ends the game");
+            checkEqual(GameResult.DRAW, session.result(), "the fifty move rule draws");
+            checkEqual(Termination.FIFTY_MOVE_RULE, session.termination(), "and names itself as the reason");
+        });
+
+        test("GameSession: a claim nobody is entitled to changes nothing", () -> {
+            GameSession session = new GameSession();
+            check(!session.isDrawClaimable(), "nothing is claimable in the starting position");
+            check(!session.claimDraw(), "so claiming does nothing");
+            checkEqual(GameResult.ONGOING, session.result(), "and the game carries on");
+        });
+
+        test("GameSession: an offered draw ends the game only when the opponent accepts", () -> {
+            GameSession session = new GameSession();
+            session.setDrawOfferArbiter(pWhiteOffers -> false);
+            check(!session.offerDraw(), "a refused offer draws nothing");
+            checkEqual(GameResult.ONGOING, session.result(), "and leaves the game running");
+
+            boolean[] whiteOffered = {false};
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.setDrawOfferArbiter(pWhiteOffers -> {
+                whiteOffered[0] = pWhiteOffers;
+                return true;
+            });
+
+            check(session.offerDraw(), "an accepted offer ends the game");
+            check(!whiteOffered[0], "Black is to move after e4, so Black is the one offering");
+            checkEqual(GameResult.DRAW, session.result(), "an agreed draw is a draw");
+            checkEqual(Termination.DRAW_AGREED, session.termination(), "and says it was agreed");
+        });
+
+        test("GameSession: the screen is told whenever the game changes", () -> {
+            int[] changes = {0};
+            GameSession session = new GameSession();
+            session.setStateListener(() -> changes[0]++);
+
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            check(changes[0] >= 1, "a played move changes the game");
+
+            int afterMove = changes[0];
+            session.resign(Pieces.WHITE);
+            check(changes[0] > afterMove, "and so does the end of it");
+        });
+
+        // =================================================================
+        System.out.println();
+        System.out.println("-- Languages ----------------------------------------------------");
+        // =================================================================
+
+        test("Messages: every text exists in both languages", () -> {
+            java.util.Properties english = loadBundle("/resources/messages.properties");
+            java.util.Properties german = loadBundle("/resources/messages_de.properties");
+
+            check(!english.isEmpty(), "the English bundle must not be empty");
+            // a key only one language has is a line that silently reads in the wrong language
+            for (String key : english.stringPropertyNames()) {
+                check(german.containsKey(key), "the German bundle is missing " + key);
+            }
+            for (String key : german.stringPropertyNames()) {
+                check(english.containsKey(key), "the English bundle is missing " + key);
+            }
+        });
+
+        test("Messages: a text comes back in the language that was chosen", () -> {
+            java.util.Locale previous = Messages.getLocale();
+            try {
+                Messages.setLocale(java.util.Locale.ENGLISH);
+                checkEqual("New Game", Messages.get("menu.newGame"), "English comes from the base bundle");
+
+                Messages.setLocale(java.util.Locale.GERMAN);
+                checkEqual("Neues Spiel", Messages.get("menu.newGame"), "German comes from its own bundle");
+
+                checkEqual("menu.nothingHasThisKey", Messages.get("menu.nothingHasThisKey"),
+                        "a key nobody wrote a text for shows itself rather than taking a screen down");
+            } finally {
+                // the rest of the suite reads English
+                Messages.setLocale(previous);
+            }
+        });
+
+        test("Messages: a sentence with a name in it is filled in for each language", () -> {
+            java.util.Locale previous = Messages.getLocale();
+            try {
+                Messages.setLocale(java.util.Locale.ENGLISH);
+                checkEqual("Alice wins by checkmate!", Messages.format("end.checkmate", "Alice"),
+                        "the name goes into the English sentence");
+
+                Messages.setLocale(java.util.Locale.GERMAN);
+                checkEqual("Alice gewinnt durch Schachmatt!", Messages.format("end.checkmate", "Alice"),
+                        "and into the German one, where the rest of the sentence differs");
+            } finally {
+                Messages.setLocale(previous);
+            }
+        });
+
+        test("Messages: the game ships the languages the menu offers", () -> {
+            check(Messages.supportedLocales().contains(java.util.Locale.ENGLISH), "English is shipped");
+            check(Messages.supportedLocales().contains(java.util.Locale.GERMAN), "German is shipped");
+            for (java.util.Locale supported : Messages.supportedLocales()) {
+                Messages.setLocale(supported);
+                checkEqual(true, !Messages.get("menu.newGame").equals("menu.newGame"),
+                        "every offered language must actually have text, missing: " + supported);
+            }
+            Messages.setLocale(java.util.Locale.ENGLISH);
+        });
+
+        // =================================================================
+        System.out.println();
+        System.out.println("-- Undo, redo and takebacks -------------------------------------");
+        // =================================================================
+
+        test("GameSession: taking a move back restores the position exactly", () -> {
+            GameSession session = new GameSession();
+            String before = Fen.write(session.position());
+
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            check(session.undo(), "a played move can be taken back");
+
+            checkEqual(before, Fen.write(session.position()),
+                    "the pieces, the rights, the en passant square and both counters must all come back");
+            checkEqual(0, session.getMoveLog().size(), "the record loses the move as well");
+            checkEqual(0, session.getFenHistory().size(), "and the position it produced");
+            check(session.isWhiteToMove(), "White is to move again");
+            check(!session.canUndo(), "there is nothing left to take back");
+            check(session.canRedo(), "but the move is waiting to be played again");
+        });
+
+        test("GameSession: taking back a rook move gives the castling right back", () -> {
+            GameSession session = new GameSession(Fen.parse("r3k2r/8/8/8/8/8/8/R3K2R w KQkq - 0 1"));
+            String before = Fen.write(session.position());
+
+            session.play(session.moveFor(Bitboards.squareOf("h1"), Bitboards.squareOf("g1")));
+            check(!Fen.write(session.position()).contains("KQkq"),
+                    "moving the rook costs White the kingside right");
+
+            check(session.undo(), "the rook move can be taken back");
+            checkEqual(before, Fen.write(session.position()),
+                    "a right the move gave away has to come back with it");
+        });
+
+        test("GameSession: a move played after an undo throws the redo branch away", () -> {
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.undo();
+            check(session.canRedo(), "the move is waiting to be played again");
+
+            session.play(session.moveFor(Bitboards.squareOf("d2"), Bitboards.squareOf("d4")));
+            check(!session.canRedo(), "playing something else abandons what was taken back");
+            checkEqual(List.of("d4"), session.getMoveLog(), "the game follows the move that was really played");
+        });
+
+        test("GameSession: redo replays the moves in order and keeps the rest of the branch", () -> {
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+            session.undo();
+            session.undo();
+            checkEqual(0, session.getMoveLog().size(), "both moves are taken back");
+
+            check(session.redo(), "the first move comes back");
+            checkEqual(List.of("e4"), session.getMoveLog(), "and it is the one that was played first");
+            check(session.canRedo(), "the second move is still waiting");
+
+            check(session.redo(), "which comes back as well");
+            checkEqual(List.of("e4", "e5"), session.getMoveLog(), "the game stands where it stood");
+            check(!session.canRedo(), "and nothing is left to replay");
+        });
+
+        test("GameSession: taking back the mating move lets the game go on", () -> {
+            GameSession session = new GameSession();
+            // 1. f3 e5 2. g4 Qh4 mate
+            session.play(session.moveFor(Bitboards.squareOf("f2"), Bitboards.squareOf("f3")));
+            session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+            session.play(session.moveFor(Bitboards.squareOf("g2"), Bitboards.squareOf("g4")));
+            session.play(session.moveFor(Bitboards.squareOf("d8"), Bitboards.squareOf("h4")));
+            checkEqual(GameResult.BLACK_WINS, session.result(), "the game is over");
+
+            check(session.undo(), "the mating move can be taken back");
+            checkEqual(GameResult.ONGOING, session.result(), "which puts the game back to running");
+            check(session.termination() == null, "with no reason left for it having ended");
+            check(session.play(session.moveFor(Bitboards.squareOf("d8"), Bitboards.squareOf("h4"))),
+                    "and the mate can be played all over again");
+        });
+
+        test("GameSession: taking back an irreversible move brings the repetition counts back", () -> {
+            int[] repetitionOffers = {0};
+            GameSession session = new GameSession();
+            session.setDrawArbiter(new GameSession.DrawArbiter() {
+                @Override
+                public boolean offerFiftyMoveDraw() {
+                    return false;
+                }
+
+                @Override
+                public boolean offerRepetitionDraw() {
+                    repetitionOffers[0]++;
+                    return false;
+                }
+
+                @Override
+                public void notifyForcedDraw() {
+                }
+            });
+
+            // both knights out and back brings the starting position back for the second time
+            String[][] shuffle = {{"g1", "f3"}, {"g8", "f6"}, {"f3", "g1"}, {"f6", "g8"}};
+            for (String[] step : shuffle) {
+                session.play(session.moveFor(Bitboards.squareOf(step[0]), Bitboards.squareOf(step[1])));
+            }
+
+            // a pawn move makes every earlier position unreachable and clears the counts
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            check(session.undo(), "taking the pawn move back has to bring those counts back");
+
+            for (String[] step : shuffle) {
+                session.play(session.moveFor(Bitboards.squareOf(step[0]), Bitboards.squareOf(step[1])));
+            }
+            checkEqual(1, repetitionOffers[0],
+                    "the third occurrence must still be noticed after the counts were rebuilt");
+        });
+
+        test("GameSession: clicking a move jumps the game to it and back again", () -> {
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+            session.play(session.moveFor(Bitboards.squareOf("g1"), Bitboards.squareOf("f3")));
+
+            check(session.goToPly(1), "the game can go back to just after the first move");
+            checkEqual(List.of("e4"), session.getMoveLog(), "only the first move is played there");
+
+            check(session.goToPly(3), "and forward to the end again");
+            checkEqual(3, session.getMoveLog().size(), "all three moves are back");
+            check(!session.goToPly(9), "a ply the game never reached is refused");
+        });
+
+        test("GameSession: a refused takeback leaves the game exactly as it was", () -> {
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            String afterMove = Fen.write(session.position());
+
+            session.setTakebackArbiter(pWhiteAsks -> false);
+            check(!session.requestTakeback(), "a refused request takes nothing back");
+            checkEqual(afterMove, Fen.write(session.position()), "the position stays where it was");
+            checkEqual(1, session.getMoveLog().size(), "and so does the record");
+
+            boolean[] asked = {false};
+            session.setTakebackArbiter(pWhiteAsks -> {
+                asked[0] = pWhiteAsks;
+                return true;
+            });
+            check(session.requestTakeback(), "an agreed request takes the move back");
+            check(asked[0], "White played the last move, so White is the one asking");
+            checkEqual(0, session.getMoveLog().size(), "and the move is gone");
+        });
+
+        test("GameSession: the clocks are recorded after a move and restored when it is taken back", () -> {
+            List<String> calls = new ArrayList<>();
+            GameSession session = new GameSession();
+            session.setView(new GameSession.View() {
+                @Override
+                public void switchClocks(boolean pWhiteToMove) {
+                }
+
+                @Override
+                public void stopClocks() {
+                }
+
+                @Override
+                public void resetClocks() {
+                }
+
+                @Override
+                public void repaint() {
+                }
+
+                @Override
+                public void recordClocks(int pPly) {
+                    calls.add("record " + pPly);
+                }
+
+                @Override
+                public void restoreClocks(int pPly, boolean pWhiteToMove) {
+                    calls.add("restore " + pPly);
+                }
+            });
+
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.undo();
+            checkEqual(List.of("record 1", "restore 0"), calls,
+                    "a move records the clocks at its ply, and taking it back restores the ply before it");
+        });
+
+        test("ChessClock: a restored time replaces whatever the clock was showing", () -> {
+            ChessClock clock = new ChessClock(true, 60_000, () -> {
+            }, w -> {
+            });
+            clock.setTimeMs(12_345);
+            checkEqual(12_345L, clock.getTimeMs(), "the clock shows the time it was given back");
+            clock.setTimeMs(-5);
+            checkEqual(0L, clock.getTimeMs(), "a time below zero means no time left");
+
+            ChessClock unlimited = new ChessClock(true, 0, () -> {
+            }, w -> {
+            });
+            unlimited.setTimeMs(5_000);
+            checkEqual(0L, unlimited.getTimeMs(), "an unlimited clock has no time to restore");
+        });
+
+        test("ChessClock: a restored reading takes a move back out of its stage as well", () -> {
+            ChessClock clock = new ChessClock(true, 60_000, ClockMode.SUDDEN_DEATH, 0, 0, () -> {
+            }, w -> {
+            });
+            // two moves at a minute, then half a minute more for whatever is left
+            clock.setStages(List.of(new ClockStage(2, 60_000),
+                    new ClockStage(ClockStage.UNTIL_THE_END, 30_000)));
+
+            clock.onMoveFinished();
+            ChessClock.Reading afterFirstMove = clock.reading();
+            clock.onMoveFinished();
+            checkEqual(90_000L, clock.getTimeMs(), "the second move plays the stage out");
+
+            // taking the second move back, then playing it again, must hand the stage's time out once
+            clock.restore(afterFirstMove);
+            checkEqual(60_000L, clock.getTimeMs(), "the time goes back to before the second move");
+            clock.onMoveFinished();
+            checkEqual(90_000L, clock.getTimeMs(), "the move played again finishes the stage exactly once");
+            clock.onMoveFinished();
+            checkEqual(90_000L, clock.getTimeMs(), "and the last stage brings nothing more");
+        });
+
         // -- Summary ------------------------------------------------------
         // the host frame is null on a headless run
         if (frame != null) SwingUtilities.invokeAndWait(frame::dispose);
@@ -4206,6 +5127,30 @@ public class GameTest {
             }
         }
         return null;
+    }
+
+    /**
+     * Reads one language bundle straight from the classpath, without any fallback.
+     * <p>
+     * The missing key test has to compare what each file really holds, and a bundle loaded the
+     * normal way inherits every key from the English one, which would make the comparison pass
+     * whatever is missing. So I read the file itself, as UTF-8, because that is what properties
+     * files have been since Java 9 while the old stream based load still assumes ISO-8859-1 and
+     * would quietly turn every German umlaut into nonsense.
+     * <p>
+     * Time complexity: O(n) in the size of the file. Space complexity: O(n) for the entries.
+     *
+     * @param pResource classpath path of the bundle, such as /resources/messages.properties
+     * @return the entries of that file alone, never null
+     * @throws Exception if the file is missing or cannot be read
+     */
+    private static java.util.Properties loadBundle(String pResource) throws Exception {
+        java.util.Properties properties = new java.util.Properties();
+        try (java.io.InputStream stream = GameTest.class.getResourceAsStream(pResource)) {
+            checkNotNull(stream, "the bundle must be on the classpath: " + pResource);
+            properties.load(new java.io.InputStreamReader(stream, java.nio.charset.StandardCharsets.UTF_8));
+        }
+        return properties;
     }
 
     /**

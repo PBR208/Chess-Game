@@ -47,3 +47,31 @@ jobs:
         with:
           name: Chess-Game-jar
           path: out/Chess-Game.jar
+
+  # An application image carries its own Java runtime, so a player needs nothing installed. jpackage
+  # cannot build for another operating system, so every platform builds its own image on its own
+  # runner. This stays an app image on purpose: an msi or exe would additionally need WiX on the
+  # Windows runner, and a signed, notarized macOS app needs an Apple developer account, which is a
+  # manual release step rather than something a build can do.
+  package:
+    name: Application image for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # one platform failing to package must not hide whether the others did
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # the image is built with the oldest supported Java, which the classes target anyway
+          java-version: '17'
+      - name: Build the application image
+        run: java build/Build.java package
+      - name: Upload the application image
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chess-Game-${{ matrix.os }}
+          path: out/package/
