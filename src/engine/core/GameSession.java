@@ -29,6 +29,29 @@ public final class GameSession {
         void resetClocks();
 
         void repaint();
+
+        /**
+         * Remembers what both clocks show after the move that was just played.
+         * <p>
+         * A screen without clocks has nothing to remember, so this does nothing unless a view says
+         * otherwise.
+         *
+         * @param pPly how many moves have been played, 1 after the first move
+         */
+        default void recordClocks(int pPly) {
+        }
+
+        /**
+         * Puts both clocks back to what they showed at a ply and hands them to the player to move.
+         * <p>
+         * This is what a taken back move uses instead of switching the clocks, because switching
+         * them would pay out the increment of a move that is no longer played.
+         *
+         * @param pPly         how many moves are played now, 0 at the starting position
+         * @param pWhiteToMove true if White is to move at that ply
+         */
+        default void restoreClocks(int pPly, boolean pWhiteToMove) {
+        }
     }
 
     /** Where the written record of the game is shown. */
@@ -64,6 +87,18 @@ public final class GameSession {
         boolean acceptsDrawOffer(boolean pWhiteOffers);
     }
 
+    /** Asked whether a move may be taken back, which is the opponent's decision in a timed game. */
+    public interface TakebackArbiter {
+
+        /**
+         * Answers whether the player who just moved may have that move back.
+         *
+         * @param pWhiteAsks true when White made the last move and wants it back
+         * @return true if the move may be taken back
+         */
+        boolean agreesToTakeback(boolean pWhiteAsks);
+    }
+
     /** Told once when the game ends, with the result and the reason. */
     public interface EndListener {
         void onGameEnd(GameResult pResult, Termination pTermination);
@@ -80,6 +115,17 @@ public final class GameSession {
     // how often each position occurred since the last capture or pawn move, by Zobrist key
     private final Map<Long, Integer> positionCounts = new HashMap<>();
 
+    // every move as it was played, packed, because taking a move back needs the move itself
+    private final ArrayList<Integer> playedMoves = new ArrayList<>();
+    // whether the move at that ply made every earlier position unreachable
+    private final ArrayList<Boolean> irreversibleMoves = new ArrayList<>();
+    // the key of the position after each ply, which is what the repetition counts are rebuilt from
+    private final ArrayList<Long> positionKeys = new ArrayList<>();
+    // moves that were taken back and can be played again, the next one to redo last
+    private final ArrayList<Integer> redoMoves = new ArrayList<>();
+    // the key of the position this session started from, before any move was played
+    private long startKey;
+
     private GameResult result = GameResult.ONGOING;
     private Termination termination;
 
@@ -92,6 +138,7 @@ public final class GameSession {
     private PromotionPicker promotionPicker;
     private DrawArbiter drawArbiter = NO_ARBITER;
     private DrawOfferArbiter drawOfferArbiter = NO_DRAW_OFFER;
+    private TakebackArbiter takebackArbiter = FREE_TAKEBACK;
     private EndListener endListener;
     // run after every change to the game, so the actions beside the board can follow it
     private Runnable stateListener = () -> {
@@ -121,6 +168,8 @@ public final class GameSession {
 
     // nobody to ask means nobody agreed, which leaves the game running rather than drawing it
     private static final DrawOfferArbiter NO_DRAW_OFFER = pWhiteOffers -> false;
+    // a casual game takes moves back freely, which is what a session without an arbiter assumes
+    private static final TakebackArbiter FREE_TAKEBACK = pWhiteAsks -> true;
 
     // a session nobody can answer never agrees to a claimable draw
     private static final DrawArbiter NO_ARBITER = new DrawArbiter() {
@@ -161,6 +210,8 @@ public final class GameSession {
      */
     public GameSession(Position pPosition) {
         this.position = pPosition;
+        // the position the game starts from is where rebuilding the repetition counts stops
+        this.startKey = pPosition.key();
         countCurrentPosition();
     }
 
@@ -197,6 +248,13 @@ public final class GameSession {
         String notation = San.of(position, pMove);
         position.makeMove(pMove);
 
+        // the move itself is what taking it back needs, the notation cannot be unplayed
+        playedMoves.add(pMove);
+        irreversibleMoves.add(irreversible);
+        positionKeys.add(position.key());
+        // playing on abandons whatever was taken back before, there is only one line of play
+        redoMoves.clear();
+
         moveLog.add(notation);
         fenHistory.add(Fen.write(position));
         if (moveLogView != null) {
@@ -213,6 +271,8 @@ public final class GameSession {
 
         // the clock goes over first, so a draw claim below runs on the claiming player's time
         view.switchClocks(position.sideToMove() == Pieces.WHITE);
+        // the times as they stand after this move, so taking it back can put them back
+        view.recordClocks(playedMoves.size());
         view.repaint();
 
         checkForEnd(repetitions);
@@ -495,9 +555,14 @@ public final class GameSession {
      */
     public void restart() {
         position = Position.startPosition();
+        startKey = position.key();
         moveLog.clear();
         fenHistory.clear();
         positionCounts.clear();
+        playedMoves.clear();
+        irreversibleMoves.clear();
+        positionKeys.clear();
+        redoMoves.clear();
         result = GameResult.ONGOING;
         termination = null;
         whiteWasOfferedFiftyMoveDraw = false;
@@ -510,6 +575,219 @@ public final class GameSession {
             moveLogView.clear();
         }
         notifyStateChanged();
+    }
+
+    /**
+     * Asks whether the last move may be taken back and takes it back when the answer is yes.
+     * <p>
+     * A move back is free between friends and not free at all on a clock, where the moves a player
+     * is allowed to unplay decide games. So the session does not decide it: it works out who is
+     * asking, which is whoever made the last move, and puts the question to the arbiter the screen
+     * installed. A casual game answers yes without asking anybody, a timed game asks the opponent.
+     * Only after a yes does the move actually come back, through the same undo a casual game uses.
+     * <p>
+     * Time complexity: O(p) for the p plies since the last capture or pawn move, as for any undo,
+     * plus however long the opponent takes to answer. Space complexity: O(1).
+     *
+     * @return true if the move was taken back, false when there is none or the answer was no
+     */
+    public boolean requestTakeback() {
+        // nothing to ask about before the first move
+        if (!canUndo()) {
+            return false;
+        }
+        // the player who just moved is the one who wants the move back, so the other one decides
+        boolean whiteAsks = position.sideToMove() != Pieces.WHITE;
+        if (!takebackArbiter.agreesToTakeback(whiteAsks)) {
+            return false;
+        }
+        return undo();
+    }
+
+    /**
+     * Takes back the move that was played last.
+     * <p>
+     * Players want a move back, whether they mis-clicked or want to try something else, and a game
+     * that ended by a mistake should be playable again. I unplay the move on the position itself,
+     * which restores the castling rights, the en passant square, the fifty move counter and the
+     * position key exactly rather than recomputing them, drop the last entry from the written record
+     * and put the move on the redo branch. A game that was already finished goes back to running,
+     * because the move that ended it is gone, and both players may be asked about the fifty move
+     * claim again. The repetition counts are rebuilt, since a count cannot simply be decremented
+     * once an irreversible move has cleared it.
+     * <p>
+     * Time complexity: O(p) for the p plies since the last capture or pawn move, which is what the
+     * repetition counts are rebuilt from. Space complexity: O(1).
+     *
+     * @return true if a move was taken back, false when the game is at its starting position
+     */
+    public boolean undo() {
+        // there is nothing to take back before the first move
+        if (playedMoves.isEmpty()) {
+            return false;
+        }
+
+        int lastMove = playedMoves.remove(playedMoves.size() - 1);
+        irreversibleMoves.remove(irreversibleMoves.size() - 1);
+        positionKeys.remove(positionKeys.size() - 1);
+        redoMoves.add(lastMove);
+
+        // the position restores itself from what it saved when the move was made
+        position.unmakeMove(lastMove);
+        moveLog.remove(moveLog.size() - 1);
+        fenHistory.remove(fenHistory.size() - 1);
+
+        // the move that ended the game has been taken back, so the game runs again
+        result = GameResult.ONGOING;
+        termination = null;
+        whiteWasOfferedFiftyMoveDraw = false;
+        blackWasOfferedFiftyMoveDraw = false;
+
+        rebuildPositionCounts();
+        refreshAfterCursorMove();
+        return true;
+    }
+
+    /**
+     * Plays a move that was taken back again.
+     * <p>
+     * Undo and redo belong together, so a player can step back and forth through the game. I replay
+     * the move through the normal path, so everything a move records is recorded again. That path
+     * abandons the redo branch, which is exactly right for a new move and wrong for this one, so I
+     * put the rest of the branch back afterwards.
+     * <p>
+     * Time complexity: O(m) for the m legal moves, as for any played move.
+     * Space complexity: O(r) for the r moves of the redo branch that are kept.
+     *
+     * @return true if a move was played again, false when nothing was taken back
+     */
+    public boolean redo() {
+        // nothing was taken back, so there is nothing to play again
+        if (redoMoves.isEmpty()) {
+            return false;
+        }
+
+        int move = redoMoves.get(redoMoves.size() - 1);
+        // play abandons the branch, so the rest of it is kept here and put back afterwards
+        List<Integer> remaining = new ArrayList<>(redoMoves.subList(0, redoMoves.size() - 1));
+        if (!play(move)) {
+            return false;
+        }
+        redoMoves.clear();
+        redoMoves.addAll(remaining);
+        return true;
+    }
+
+    /**
+     * Steps the game back or forward until a given number of moves is played.
+     * <p>
+     * Clicking a move in the log means "show me the game as it stood there", which can be several
+     * moves in either direction. I take moves back or play them again until the game is at that ply,
+     * so the position, the record, the repetition counts and both clocks all arrive there the same
+     * way they would one move at a time. A ply the game never reached is refused rather than walked
+     * towards, since there is nothing to walk to.
+     * <p>
+     * Time complexity: O(d * p) for a jump of d moves over stretches of p plies, because each step
+     * rebuilds the repetition counts. Space complexity: O(1).
+     *
+     * @param pPly how many moves should be played, 0 for the position the game started from
+     * @return true if the game moved to that ply, false when it is already there or cannot reach it
+     */
+    public boolean goToPly(int pPly) {
+        // a negative ply and one beyond the end of the game are both nothing to jump to
+        if (pPly < 0 || pPly > playedMoves.size() + redoMoves.size()) {
+            return false;
+        }
+
+        boolean moved = false;
+        while (playedMoves.size() > pPly && undo()) {
+            moved = true;
+        }
+        while (playedMoves.size() < pPly && redo()) {
+            moved = true;
+        }
+        return moved;
+    }
+
+    /**
+     * Tells whether there is a move to take back.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return true if at least one move has been played in this session
+     */
+    public boolean canUndo() {
+        return !playedMoves.isEmpty();
+    }
+
+    /**
+     * Tells whether there is a move to play again.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return true if a move was taken back and no new move was played since
+     */
+    public boolean canRedo() {
+        return !redoMoves.isEmpty();
+    }
+
+    /**
+     * Counts the positions of the current stretch again from the start.
+     * <p>
+     * A repetition count cannot be decremented on the way back, because an irreversible move clears
+     * the whole map, and undoing that move has to bring the earlier counts back. Everything before
+     * the last capture or pawn move can never occur again, so I walk back to it and count the
+     * position it left behind together with every position since.
+     * <p>
+     * Time complexity: O(p) for the p plies of the current stretch. Space complexity: O(p) for the
+     * counts of those positions.
+     */
+    private void rebuildPositionCounts() {
+        positionCounts.clear();
+
+        // everything before the last irreversible move is unreachable and does not count
+        int stretchStart = 0;
+        for (int ply = irreversibleMoves.size() - 1; ply >= 0; ply--) {
+            if (irreversibleMoves.get(ply)) {
+                stretchStart = ply + 1;
+                break;
+            }
+        }
+
+        // the position the stretch began in counts as an occurrence of its own
+        long beforeStretch = stretchStart == 0 ? startKey : positionKeys.get(stretchStart - 1);
+        positionCounts.merge(beforeStretch, 1, Integer::sum);
+        for (int ply = stretchStart; ply < positionKeys.size(); ply++) {
+            positionCounts.merge(positionKeys.get(ply), 1, Integer::sum);
+        }
+    }
+
+    /**
+     * Hands the clock over and refreshes the screen after the game moved back or forward.
+     * <p>
+     * Stepping through the game changes whose turn it is and what the record says, and the screen
+     * has to follow both. I hand the clock to whoever is to move now, show the record as it stands,
+     * ask for a repaint and tell the listener, since the moves that can be taken back or played
+     * again have changed.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
+    private void refreshAfterCursorMove() {
+        // the clocks go back to what they showed at this ply, which also hands them to the right
+        // player. Switching them instead would pay out the increment of a move nobody plays now.
+        view.restoreClocks(playedMoves.size(), position.sideToMove() == Pieces.WHITE);
+        view.repaint();
+        // a move taken back or played again changes what the actions beside the board can do
+        notifyStateChanged();
+        if (moveLogView == null) {
+            return;
+        }
+        // a game back at its start has an empty record rather than a last position
+        if (moveLog.isEmpty()) {
+            moveLogView.clear();
+        } else {
+            moveLogView.update(getMoveLog(), fenHistory.get(fenHistory.size() - 1));
+        }
     }
 
     /**
@@ -754,6 +1032,17 @@ public final class GameSession {
      */
     public void setDrawArbiter(DrawArbiter pArbiter) {
         this.drawArbiter = pArbiter == null ? NO_ARBITER : pArbiter;
+    }
+
+    /**
+     * Sets who decides whether a move may be taken back.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pArbiter asked before every takeback, or null to take moves back freely
+     */
+    public void setTakebackArbiter(TakebackArbiter pArbiter) {
+        this.takebackArbiter = pArbiter == null ? FREE_TAKEBACK : pArbiter;
     }
 
     /**

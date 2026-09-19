@@ -13,6 +13,7 @@ package ui.board;
  */
 
 import engine.core.GameSession;
+import ui.i18n.Messages;
 
 import javax.swing.*;
 
@@ -40,12 +41,14 @@ public class SwingDrawOfferArbiter implements GameSession.DrawOfferArbiter {
      */
     @Override
     public boolean acceptsDrawOffer(boolean pWhiteOffers) {
-        String offering = pWhiteOffers ? "White" : "Black";
-        String deciding = pWhiteOffers ? "Black" : "White";
+        String white = Messages.get("newgame.white");
+        String black = Messages.get("newgame.black");
+        String offering = pWhiteOffers ? white : black;
+        String deciding = pWhiteOffers ? black : white;
 
         int answer = JOptionPane.showConfirmDialog(board,
-                offering + " offers a draw. " + deciding + ", do you accept?",
-                "Draw offer", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+                Messages.format("drawOffer.question", offering, deciding),
+                Messages.get("drawOffer.title"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
         // only a clear yes draws the game
         return answer == JOptionPane.YES_OPTION;
     }
