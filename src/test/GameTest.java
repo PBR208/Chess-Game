@@ -2306,6 +2306,20 @@ public class GameTest {
                             "and it belongs to no move, got: " + lbl.getText());
                 }));
 
+        test("ReplayPanel: a game that began from a position of its own opens on that position", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    String endgame = "8/8/8/4k3/8/8/4P3/4K3 w - - 0 1";
+                    ReplayPanel p = new ReplayPanel(endgame, List.of("e4"),
+                            List.of("8/8/8/4k3/4P3/8/8/4K3 b - - 0 1"));
+                    JTextArea fen = (JTextArea) findByName(p, "replayFen");
+                    checkNotNull(fen, "the replay must show the FEN of the frame");
+                    checkEqual(endgame, fen.getText(), "the first frame must be the position the game began from");
+
+                    ReplayPanel usual = new ReplayPanel(null, List.of(), List.of());
+                    checkEqual(Fen.START_POSITION, ((JTextArea) findByName(usual, "replayFen")).getText(),
+                            "a game without a starting FEN begins where chess begins");
+                }));
+
         test("ReplayPanel: next button advances position", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);

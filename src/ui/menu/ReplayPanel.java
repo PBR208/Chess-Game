@@ -78,12 +78,30 @@ public class ReplayPanel extends JPanel {
      * @param pFens  FEN after each move, in the same order as the moves; never null, may be empty
      */
     public ReplayPanel(List<String> pMoves, List<String> pFens) {
+        this(null, pMoves, pFens);
+    }
+
+    /**
+     * Builds the replay view for a saved game that may have begun from a position of its own.
+     * <p>
+     * An imported game can start from any position its FEN tag names, and replaying it from the
+     * standard one would show a board the moves never happened on. So the first frame is the
+     * position the game really began from, and the standard one only when it began the usual way.
+     * <p>
+     * Time complexity: O(m) for filling the move list with m moves.
+     * Space complexity: O(m) for the move list text.
+     *
+     * @param pStartFen the position the game began from, null or blank for the standard one
+     * @param pMoves    moves of the game in SAN, never null
+     * @param pFens     FEN after each move, in the same order as the moves; never null, may be empty
+     */
+    public ReplayPanel(String pStartFen, List<String> pMoves, List<String> pFens) {
         this.moves = pMoves;
         // the replay used to open on the position after White's first move, so the one position
         // every game has in common, the board before anybody moved, could not be looked at at all.
         // The frames start there now, which also gives a game with no moves something to show.
         List<String> frames = new ArrayList<>(pFens.size() + 1);
-        frames.add(Fen.START_POSITION);
+        frames.add(pStartFen == null || pStartFen.isBlank() ? Fen.START_POSITION : pStartFen);
         frames.addAll(pFens);
         this.fens = frames;
         setBackground(Theme.BG);
@@ -204,6 +222,8 @@ public class ReplayPanel extends JPanel {
 
         fenArea = new JTextArea();
         fenArea.setEditable(false);
+        // named for the same reason as the move list, a test has to tell the two areas apart
+        fenArea.setName("replayFen");
         fenArea.setBackground(new Color(28, 28, 30));
         fenArea.setForeground(new Color(210, 210, 210));
         fenArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 10));

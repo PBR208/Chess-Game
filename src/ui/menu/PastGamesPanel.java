@@ -458,7 +458,7 @@ public class PastGamesPanel extends JPanel {
 
         replayHolder.removeAll();
         if (!record.fenHistory.isEmpty()) {
-            replayHolder.add(new ReplayPanel(record.moves, record.fenHistory), BorderLayout.CENTER);
+            replayHolder.add(new ReplayPanel(record.startFen, record.moves, record.fenHistory), BorderLayout.CENTER);
         } else {
             JLabel noReplay = new JLabel(Messages.get("past.noPositions"), SwingConstants.CENTER);
             noReplay.setForeground(new Color(120, 120, 120));
