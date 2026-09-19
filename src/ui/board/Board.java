@@ -7,9 +7,11 @@ package ui.board;
  * screen it turns the view towards whoever is to move; against the program it holds still and faces
  * the person, because there is only one of them and a board that turned would hand them their
  * opponent's view. A move can also be typed rather than moved with the mouse, which is why this panel
- * takes the keyboard focus. The game itself lives in a GameSession on the bitboard core, so this
- * class holds no position data of its own and only asks the session what stands where and which
- * squares a picked up piece may go to.
+ * takes the keyboard focus. It can also be asked what to play here and what the other side is
+ * threatening, and draws either as an arrow, working both out away from the thread that draws so the
+ * window stays alive while it thinks. The game itself lives in a GameSession on the bitboard core,
+ * so this class holds no position data of its own and only asks the session what stands where and
+ * which squares a picked up piece may go to.
  *
  * Owner: PBR208 - https://github.com/PBR208/
  * Version: 2.0
@@ -24,15 +26,19 @@ import engine.core.Position;
 import engine.core.San;
 import engine.model.EngineSettings;
 import engine.model.GameConfig;
+import engine.search.Analyst;
+import engine.search.Searcher;
 import ui.i18n.Messages;
 import ui.theme.Theme;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.geom.Path2D;
 import java.util.ArrayList;
 import java.util.Locale;
 
@@ -104,6 +110,29 @@ public class Board extends JPanel implements GameSession.View {
     // the square markings live in the theme, because which colours can be told apart is a decision
     // about the whole program rather than about this panel
     private final Color HINT_COLOR = Theme.HINT;
+
+    // A hint and a threat have to be told apart at a glance, and they are often on the board at the
+    // same time. Blue and orange stay distinguishable for a red green blind player, which green and
+    // red would not.
+    private static final Color ADVICE_COLOR = new Color(0, 114, 178, 220);
+    private static final Color THREAT_COLOR = new Color(230, 126, 34, 220);
+
+    // How hard to think about a hint. It has to answer while somebody is waiting for it, so it is
+    // capped three ways over and the time cap is the one that usually decides.
+    private static final Searcher.Limits ADVICE_LIMITS = new Searcher.Limits(4, 200_000, 1_500);
+
+    // the move a hint is offering, and the one the other side is threatening, or NONE for neither
+    private int hintMove = Moves.NONE;
+    private int threatMove = Moves.NONE;
+
+    // works hints and threats out, and can be called off when the position moves on
+    private final Analyst analyst = new Analyst();
+
+    // true while one is being worked out, so a key held down cannot start a second
+    private volatile boolean advising;
+
+    // counts the positions advice was cleared for, so an answer about an earlier one is recognised
+    private volatile int adviceGeneration;
 
     /**
      * Builds the game board for a new game with squares of the default size.
@@ -249,7 +278,10 @@ public class Board extends JPanel implements GameSession.View {
         this.addKeyListener(new KeyAdapter() {
             @Override
             public void keyTyped(KeyEvent pEvent) {
-                typeCharacter(pEvent.getKeyChar());
+                // a character the move took is used up, so an h on the h-file does not ask for a hint
+                if (typeCharacter(pEvent.getKeyChar())) {
+                    pEvent.consume();
+                }
             }
 
             @Override
@@ -262,6 +294,24 @@ public class Board extends JPanel implements GameSession.View {
                         // every other key is either a move character or none of my business
                     }
                 }
+            }
+        });
+
+        // H asks what to play and T asks what is coming. Bound to the window rather than to this
+        // panel, so they work without the player first having to click the board to give it focus.
+        // An h typed into a move on the focused board is taken by the move instead, see keyTyped.
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke('h'), "hint");
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke('t'), "threat");
+        getActionMap().put("hint", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent pEvent) {
+                showHint(null);
+            }
+        });
+        getActionMap().put("threat", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent pEvent) {
+                showThreat(null);
             }
         });
 
@@ -369,6 +419,14 @@ public class Board extends JPanel implements GameSession.View {
             }
         }
 
+        // over the pieces, because an arrow behind them says nothing
+        if (threatMove != Moves.NONE) {
+            drawArrow(g2d, threatMove, THREAT_COLOR);
+        }
+        if (hintMove != Moves.NONE) {
+            drawArrow(g2d, hintMove, ADVICE_COLOR);
+        }
+
         if (whiteAtBottom) {
             whiteClock.draw(g2d, bottomY, boardWidth, clockHeight);
         } else {
@@ -389,6 +447,52 @@ public class Board extends JPanel implements GameSession.View {
             g2d.drawString(text, (boardWidth - metrics.stringWidth(text)) / 2,
                     clockHeight + rows * tileSize / 2);
         }
+    }
+
+    /**
+     * Draws one move as an arrow from the square it starts on to the one it ends on.
+     * <p>
+     * A move is two squares, and naming them in writing makes a player hunt for them. An arrow says
+     * it without being read. The line stops short of the middle of the target square so the head
+     * sits inside it rather than over the piece standing there, and the head is drawn as a filled
+     * triangle turned along the line, which is why the arrow reads the same in every direction.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) beyond the shape.
+     *
+     * @param pGraphics graphics context of this panel, never null
+     * @param pMove     the move to draw
+     * @param pColour   the colour to draw it in, never null
+     */
+    private void drawArrow(Graphics2D pGraphics, int pMove, Color pColour) {
+        int from = Moves.from(pMove);
+        int to = Moves.to(pMove);
+        int half = tileSize / 2;
+
+        int startX = toVisualX(colOf(from)) + half;
+        int startY = toVisualY(rowOf(from)) + half;
+        int endX = toVisualX(colOf(to)) + half;
+        int endY = toVisualY(rowOf(to)) + half;
+
+        double angle = Math.atan2(endY - startY, endX - startX);
+        int headLength = Math.max(10, tileSize / 3);
+        // the line ends where the head begins, so the two do not overlap into a blob
+        int lineEndX = endX - (int) (Math.cos(angle) * headLength * 0.8);
+        int lineEndY = endY - (int) (Math.sin(angle) * headLength * 0.8);
+
+        pGraphics.setColor(pColour);
+        pGraphics.setStroke(new BasicStroke(Math.max(3f, tileSize / 10f),
+                BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        pGraphics.drawLine(startX, startY, lineEndX, lineEndY);
+
+        // a triangle turned along the line, so the arrow points the same way whatever the direction
+        Path2D head = new Path2D.Double();
+        head.moveTo(endX, endY);
+        head.lineTo(endX - Math.cos(angle - Math.PI / 7) * headLength,
+                endY - Math.sin(angle - Math.PI / 7) * headLength);
+        head.lineTo(endX - Math.cos(angle + Math.PI / 7) * headLength,
+                endY - Math.sin(angle + Math.PI / 7) * headLength);
+        head.closePath();
+        pGraphics.fill(head);
     }
 
     /**
@@ -422,6 +526,108 @@ public class Board extends JPanel implements GameSession.View {
     public void clearSelection() {
         selectedSquare = NO_SQUARE;
         targetCount = 0;
+    }
+
+    /**
+     * Works out what to play here and shows it, waiting for the answer.
+     * <p>
+     * The hint comes from the same search the program plays with, so it can never be advice the
+     * program itself would not take. This waits, which is what makes it usable from a test; the game
+     * screen presses a key and gets the version that does not wait.
+     * <p>
+     * Time complexity: as for a search with the advice limits, capped in depth, positions and time.
+     * Space complexity: O(1) beyond the copy the search works on.
+     *
+     * @return true if there was a move to suggest
+     */
+    public boolean showHintNow() {
+        int generation = adviceGeneration;
+        int move = analyst.analyse(session.position(), ADVICE_LIMITS).bestMove;
+        // advice about a position the game has left since would point at the wrong board
+        if (generation == adviceGeneration) {
+            hintMove = move;
+        }
+        repaint();
+        return move != Moves.NONE;
+    }
+
+    /**
+     * Works out what the other side is threatening and shows it, waiting for the answer.
+     * <p>
+     * Time complexity: as for a search with the advice limits. Space complexity: O(1) beyond the copy.
+     *
+     * @return true if there was a threat to show
+     */
+    public boolean showThreatNow() {
+        int generation = adviceGeneration;
+        int move = analyst.threatMove(session.position(), ADVICE_LIMITS);
+        if (generation == adviceGeneration) {
+            threatMove = move;
+        }
+        repaint();
+        return move != Moves.NONE;
+    }
+
+    /**
+     * Asks what to play here without holding the board up.
+     * <p>
+     * The thinking happens away from the thread that draws, so the window stays alive while it goes
+     * on, and the arrow appears back on that thread because that is where everything else drawn on
+     * this panel is decided. Asking twice at once does nothing the second time.
+     * <p>
+     * Time complexity: O(1) here. Space complexity: O(1).
+     *
+     * @param pAfter run on the drawing thread once the answer is showing, may be null
+     * @return true if the question was asked, false if one was already being answered
+     */
+    public boolean showHint(Runnable pAfter) {
+        return adviseInBackground(this::showHintNow, pAfter);
+    }
+
+    /**
+     * Asks what the other side is threatening without holding the board up.
+     * <p>
+     * Time complexity: O(1) here. Space complexity: O(1).
+     *
+     * @param pAfter run on the drawing thread once the answer is showing, may be null
+     * @return true if the question was asked, false if one was already being answered
+     */
+    public boolean showThreat(Runnable pAfter) {
+        return adviseInBackground(this::showThreatNow, pAfter);
+    }
+
+    /**
+     * Runs one piece of advice away from the drawing thread.
+     * <p>
+     * Time complexity: O(1) here, the thinking costs what the advice limits allow elsewhere.
+     * Space complexity: O(1).
+     *
+     * @param pWork  the waiting version of the question, never null
+     * @param pAfter run on the drawing thread when it is answered, may be null
+     * @return true if the work was started
+     */
+    private boolean adviseInBackground(Runnable pWork, Runnable pAfter) {
+        if (advising) {
+            return false;
+        }
+        advising = true;
+        Thread thread = new Thread(() -> {
+            try {
+                pWork.run();
+            } finally {
+                // an answer that threw must not leave the board refusing to be asked again
+                advising = false;
+            }
+            SwingUtilities.invokeLater(() -> {
+                repaint();
+                if (pAfter != null) {
+                    pAfter.run();
+                }
+            });
+        }, "board advice");
+        thread.setDaemon(true);
+        thread.start();
+        return true;
     }
 
     /**
@@ -482,6 +688,24 @@ public class Board extends JPanel implements GameSession.View {
         sounds.playMove();
         repaint();
         return true;
+    }
+
+    /**
+     * Takes the hint and the threat off the board.
+     * <p>
+     * Advice is about one position, so it stops being true as soon as anybody moves, a move is taken
+     * back or the game starts again, which is why every one of those clears it. Anything still being
+     * worked out is called off as well, and its answer is dropped when it arrives, because it would
+     * be about a board that has already gone.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
+    public void clearAdvice() {
+        adviceGeneration++;
+        analyst.cancel();
+        hintMove = Moves.NONE;
+        threatMove = Moves.NONE;
+        repaint();
     }
 
     /**
@@ -591,14 +815,38 @@ public class Board extends JPanel implements GameSession.View {
      * Time complexity: O(1). Space complexity: O(1), the text has a fixed limit.
      *
      * @param pCharacter the character that was typed
+     * @return true if the character became part of the move
      */
-    public void typeCharacter(char pCharacter) {
+    public boolean typeCharacter(char pCharacter) {
         boolean acceptable = MOVE_CHARACTERS.indexOf(pCharacter) >= 0;
         if (!acceptable || paused || session.result().isFinished() || typedMove.length() >= MAX_TYPED_LENGTH) {
-            return;
+            return false;
         }
         typedMove.append(pCharacter);
         repaint();
+        return true;
+    }
+
+    /**
+     * Returns the move a hint is currently offering.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the packed move, or Moves.NONE when no hint is showing
+     */
+    public int getHintMove() {
+        return hintMove;
+    }
+
+    /**
+     * Returns the move the other side is currently shown to be threatening.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the packed move, or Moves.NONE when no threat is showing
+     */
+    public int getThreatMove() {
+        return threatMove;
     }
 
     /**
@@ -831,6 +1079,8 @@ public class Board extends JPanel implements GameSession.View {
             whiteClock.onMoveFinished();
             blackClock.start();
         }
+        // a hint or a threat was about the position before this move
+        clearAdvice();
     }
 
     /**
@@ -857,6 +1107,7 @@ public class Board extends JPanel implements GameSession.View {
         // a new game keeps none of the times the finished one left behind
         clockSnapshots.clear();
         clockSnapshots.add(readClocks());
+        clearAdvice();
     }
 
     /**
@@ -927,6 +1178,8 @@ public class Board extends JPanel implements GameSession.View {
                 blackClock.start();
             }
         }
+        // the game is at another position now, so advice about the old one is gone
+        clearAdvice();
     }
 
     /**

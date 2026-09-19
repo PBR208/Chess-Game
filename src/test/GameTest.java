@@ -613,6 +613,30 @@ public class GameTest {
     }
 
     /**
+     * Paints any component into an image at a size of its own.
+     * <p>
+     * A panel inside split panes is left with no size at all when nothing has laid it out, and
+     * painting it then draws nothing, which makes a test of what it draws pass for the wrong reason.
+     * Giving it a size first is what makes the picture real. This goes through paint rather than
+     * paintComponent, which is not public on an ordinary panel.
+     * <p>
+     * Time complexity: O(n) for whatever the component draws. Space complexity: O(w * h).
+     *
+     * @param pComponent component to paint, never null
+     * @param pWidth     width in pixels, greater than 0
+     * @param pHeight    height in pixels, greater than 0
+     * @return the painted component, never null
+     */
+    private static BufferedImage paintPanel(JComponent pComponent, int pWidth, int pHeight) {
+        pComponent.setSize(pWidth, pHeight);
+        BufferedImage image = new BufferedImage(pWidth, pHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        pComponent.paint(graphics);
+        graphics.dispose();
+        return image;
+    }
+
+    /**
      * Compares two painted boards over a band of rows.
      * <p>
      * Only part of the panel is worth comparing, because the clock bars are painted as well and a
@@ -3112,6 +3136,258 @@ public class GameTest {
             check(Theme.LAST_MOVE.getAlpha() < 255,
                     "the last move must be see through, got: " + Theme.LAST_MOVE.getAlpha());
             check(Theme.CHECK.getAlpha() < 255, "the check must be see through, got: " + Theme.CHECK.getAlpha());
+        });
+
+        // =================================================================
+        System.out.println("\n-- Analysis ------------------------------------------------------");
+        // =================================================================
+
+        test("ReplayPanel: a move that threw the queen away is marked as a blunder", () -> {
+            // 1. e4 e5 2. Qh5 Nc6 3. Qxf7+ and the king simply takes the queen
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+            session.play(session.moveFor(Bitboards.squareOf("d1"), Bitboards.squareOf("h5")));
+            session.play(session.moveFor(Bitboards.squareOf("b8"), Bitboards.squareOf("c6")));
+            session.play(session.moveFor(Bitboards.squareOf("h5"), Bitboards.squareOf("f7")));
+            checkEqual(5, session.getMoveLog().size(), "the game must have gone as intended");
+
+            List<String> playedMoves = new ArrayList<>(session.getMoveLog());
+            List<String> playedFens = new ArrayList<>(session.getFenHistory());
+
+            ReplayPanel[] holder = new ReplayPanel[1];
+            SwingUtilities.invokeAndWait(() -> holder[0] = new ReplayPanel(playedMoves, playedFens));
+            ReplayPanel panel = holder[0];
+
+            panel.reviewNow();
+            checkEqual("??", panel.markerFor(4), "giving the queen away must be marked as a blunder");
+            checkEqual("", panel.markerFor(0), "and an ordinary opening move must not be marked");
+        });
+
+        test("ReplayPanel: the marks reach the move list a reader actually sees", () -> {
+            GameSession session = new GameSession();
+            session.play(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+            session.play(session.moveFor(Bitboards.squareOf("e7"), Bitboards.squareOf("e5")));
+            session.play(session.moveFor(Bitboards.squareOf("d1"), Bitboards.squareOf("h5")));
+            session.play(session.moveFor(Bitboards.squareOf("b8"), Bitboards.squareOf("c6")));
+            session.play(session.moveFor(Bitboards.squareOf("h5"), Bitboards.squareOf("f7")));
+
+            List<String> playedMoves = new ArrayList<>(session.getMoveLog());
+            List<String> playedFens = new ArrayList<>(session.getFenHistory());
+
+            ReplayPanel[] holder = new ReplayPanel[1];
+            SwingUtilities.invokeAndWait(() -> holder[0] = new ReplayPanel(playedMoves, playedFens));
+            ReplayPanel panel = holder[0];
+
+            panel.reviewNow();
+            // a mark that is worked out but never written down would pass the easier test
+            SwingUtilities.invokeAndWait(() -> {
+                Component found = findByName(panel, "replayMoveList");
+                checkNotNull(found, "the replay must show a move list");
+                JTextArea list = (JTextArea) found;
+                check(list.getText().contains("??"),
+                        "the blunder must be marked in the list, got: " + list.getText());
+            });
+        });
+
+        test("ReplayPanel: the bar says who is standing better", () -> {
+            // a position nobody has looked at is drawn level rather than guessed at
+            check(Math.abs(ReplayPanel.barShareForWhite(ReplayPanel.UNKNOWN_SCORE) - 0.5) < 1e-9,
+                    "an unscored position must be drawn level");
+
+            check(ReplayPanel.barShareForWhite(400) > 0.5, "White ahead must fill more than half");
+            check(ReplayPanel.barShareForWhite(-400) < 0.5, "and Black ahead must fill less");
+            check(ReplayPanel.barShareForWhite(400) > ReplayPanel.barShareForWhite(100),
+                    "and further ahead must fill more still");
+
+            check(Math.abs(ReplayPanel.barShareForWhite(Searcher.MATE_SCORE - 1) - 1.0) < 1e-9,
+                    "a mate for White must fill the bar");
+            check(Math.abs(ReplayPanel.barShareForWhite(-(Searcher.MATE_SCORE - 1))) < 1e-9,
+                    "and a mate against White must empty it");
+
+            // a winning position is not a finished one, so the other side keeps a sliver
+            check(ReplayPanel.barShareForWhite(5_000) <= 0.95,
+                    "a won position must still leave the other side something");
+            check(ReplayPanel.barShareForWhite(-5_000) >= 0.05, "and the same the other way round");
+        });
+
+        test("ReplayPanel: the bar is really drawn beside the board", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    ReplayPanel panel = new ReplayPanel(
+                            new ArrayList<>(List.of("e4")),
+                            new ArrayList<>(List.of("rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1")));
+
+                    Component canvas = findByName(panel, "replayBoard");
+                    checkNotNull(canvas, "the replay must have a board to draw on");
+                    BufferedImage picture = paintPanel((JComponent) canvas, 400, 400);
+
+                    // At this size the board takes eight squares of 48 and the strip sits just past
+                    // it, so the bar is drawn around x 393 with its two halves meeting in the middle.
+                    int barX = 393;
+                    int blackEnd = picture.getRGB(barX, 20);
+                    int whiteEnd = picture.getRGB(barX, 360);
+
+                    check(blackEnd != whiteEnd, "the bar must have two ends that differ");
+                    check(brightnessOf(new Color(whiteEnd)) > brightnessOf(new Color(blackEnd)),
+                            "and White's end must be the lighter one, at the bottom where it belongs");
+                }));
+
+        test("ReplayPanel: a game with no positions still draws without complaining", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    ReplayPanel panel = new ReplayPanel(new ArrayList<>(), new ArrayList<>());
+                    Component canvas = findByName(panel, "replayBoard");
+                    checkNotNull(canvas, "there must still be a board to draw on");
+                    // an empty game has no score and no position, and must not throw over either
+                    checkNotNull(paintPanel((JComponent) canvas, 200, 200),
+                            "drawing an empty replay must produce a picture rather than an error");
+                }));
+
+        test("Board: asking what to play offers a move the rules allow", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    checkEqual(Moves.NONE, board.getHintMove(), "nothing is suggested until it is asked");
+
+                    check(board.showHintNow(), "there must be something to suggest");
+                    check(board.getSession().isLegal(board.getHintMove()),
+                            "and a hint must be a move that could actually be played");
+                    check(board.getSession().getMoveLog().isEmpty(),
+                            "asking must not play anything by itself");
+                }));
+
+        test("Board: asking what is coming shows the other side's plan", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    checkEqual(Moves.NONE, board.getThreatMove(), "nothing is shown until it is asked");
+
+                    check(board.showThreatNow(), "the other side must have something in mind");
+                    check(board.getThreatMove() != Moves.NONE, "and it must be a move");
+                    checkEqual(Fen.START_POSITION, Fen.write(board.getSession().position()),
+                            "and looking at it must leave the game exactly as it was");
+                }));
+
+        test("Board: advice is really drawn, and clearing it puts the board back", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    int width = board.getPreferredSize().width;
+                    int height = board.getPreferredSize().height;
+                    board.setSize(width, height);
+
+                    // only the squares, so a clock that counts cannot decide the comparison
+                    int tile = board.getTileSize();
+                    int top = tile;
+                    int bottom = tile + 8 * tile;
+
+                    BufferedImage plain = paintBoard(board, width, height);
+                    board.showHintNow();
+                    BufferedImage advised = paintBoard(board, width, height);
+                    check(!sameRows(plain, advised, top, bottom), "a hint must show up on the board");
+
+                    board.clearAdvice();
+                    check(sameRows(plain, paintBoard(board, width, height), top, bottom),
+                            "and clearing it must leave the board as it was");
+                }));
+
+        test("Board: advice is about one position, so a move takes it away", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    board.showHintNow();
+                    board.showThreatNow();
+                    check(board.getHintMove() != Moves.NONE, "there must be advice to lose");
+
+                    board.clearAdvice();
+                    checkEqual(Moves.NONE, board.getHintMove(), "the hint must go");
+                    checkEqual(Moves.NONE, board.getThreatMove(), "and so must the threat");
+                }));
+
+        test("Board: a move, a takeback and a new game each take the advice away", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    GameSession session = board.getSession();
+
+                    board.showHintNow();
+                    check(board.getHintMove() != Moves.NONE, "there must be advice to lose");
+                    board.playMove(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+                    checkEqual(Moves.NONE, board.getHintMove(), "a move must take the hint away");
+
+                    board.showThreatNow();
+                    session.undo();
+                    checkEqual(Moves.NONE, board.getThreatMove(), "and so must a takeback");
+
+                    board.showHintNow();
+                    session.restart();
+                    checkEqual(Moves.NONE, board.getHintMove(), "and a new game");
+                }));
+
+        test("Board: an h typed into a move belongs to the move", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    // the key listener uses the character up when this says it was taken, which is
+                    // what keeps the hint shortcut from firing on a move along the h-file
+                    check(board.typeCharacter('h'), "an h starts a move on the h-file");
+                    check(board.typeCharacter('3'), "and the rank follows");
+                    checkEqual("h3", board.getTypedMove(), "the move must read as it was typed");
+                    check(!board.typeCharacter('t'), "a t is in no move, so it is left for the threat");
+                }));
+
+        test("Analyst: a hint is the move the search would play", () -> {
+            Position position = Fen.parse("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1");
+            Searcher.Result hint = new Analyst().analyse(position, Searcher.Limits.toDepth(3));
+
+            checkEqual("a1a8", Moves.toUci(hint.bestMove), "the hint must be the mate that is there");
+            checkEqual("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1", Fen.write(position),
+                    "and asking for it must not disturb the position being looked at");
+        });
+
+        test("Analyst: a threat is what the other side would do if you did nothing", () -> {
+            // White to move, but Black's rook mates on the back rank the moment White wastes a move.
+            // White keeps its f2, g2 and h2 pawns, which is what seals the king in: without them it
+            // simply steps up a rank and there is no threat worth naming.
+            Position position = Fen.parse("r5k1/5ppp/8/8/8/8/5PPP/6K1 w - - 0 1");
+            int threat = new Analyst().threatMove(position, Searcher.Limits.toDepth(2));
+
+            check(threat != Moves.NONE, "there must be a threat to report");
+            checkEqual("a8a1", Moves.toUci(threat), "and it must be the mate Black is threatening");
+            checkEqual(Pieces.WHITE, position.sideToMove(),
+                    "looking at the threat must leave it White's turn");
+        });
+
+        test("Analyst: a check leaves nothing to show but the check", () -> {
+            // handing the turn over while in check would describe a board where a king can be taken
+            Position position = Fen.parse("6k1/8/8/8/8/8/8/r5K1 w - - 0 1");
+            checkEqual(Moves.NONE, new Analyst().threatMove(position, Searcher.Limits.toDepth(2)),
+                    "a side that is in check has nothing to worry about except the check");
+        });
+
+        test("Analyst: a move is judged by what it gave away", () -> {
+            // both numbers are read from the point of view of the player who moved
+            check(Analyst.isBlunder(50, -200), "throwing away two and a half pawns is a blunder");
+            check(!Analyst.isBlunder(50, 20), "and giving up a third of a pawn is not");
+            check(Analyst.isMistake(50, -60), "a mistake is smaller than a blunder");
+            check(!Analyst.isMistake(50, -200), "and a blunder is not also called a mistake");
+            check(!Analyst.isBlunder(-200, 50), "a move that gains ground is neither");
+            checkEqual(250, Analyst.costOf(50, -200), "the cost is the ground that was lost");
+        });
+
+        test("Searcher: a search can be called off while it is running", () -> {
+            String fen = "r3k2r/pp3ppp/2n2n2/2bpp3/4P3/2NP1N2/PPP2PPP/R1B1KB1R w KQkq - 4 8";
+            Position position = Fen.parse(fen);
+            Searcher searcher = new Searcher();
+            Searcher.Result[] result = new Searcher.Result[1];
+
+            // deep enough that it would run for a very long time if nobody stopped it
+            Thread thinking = new Thread(() ->
+                    result[0] = searcher.search(position, Searcher.Limits.toDepth(40)), "long search");
+            thinking.start();
+
+            // let it get going, so stopping is not lost against the search clearing the flag
+            Thread.sleep(150);
+            searcher.stop();
+            thinking.join(15_000);
+
+            check(!thinking.isAlive(), "a search that was called off must stop rather than run on");
+            checkNotNull(result[0], "and must still hand back what it had finished");
+            checkEqual(fen, Fen.write(position),
+                    "and must leave the position as it found it even when cut short");
         });
 
         // =================================================================

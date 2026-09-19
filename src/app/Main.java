@@ -258,7 +258,8 @@ public class Main {
      * game, and stopping the clock should not mean ending it. The pause button pauses and resumes the
      * board and says which of the two it will do next, so a player always reads the action rather
      * than the state. Everything it needs is on the board itself, which stops the clocks and refuses
-     * moves while it is paused.
+     * moves while it is paused. A hint and a threat sit on the same row, since the keys that ask for
+     * them are easy to miss and an h typed on the board belongs to a move.
      * <p>
      * Games between people end by agreement or by resignation far more often than by mate, so the
      * second row resigns, offers a draw and claims one. Resigning asks once, because it is final and a
@@ -272,7 +273,7 @@ public class Main {
      * worth checking, and a test should be able to build the rows from a board without starting the
      * whole application around it.
      * <p>
-     * Time complexity: O(1). Space complexity: O(1) apart from the panels and their six buttons.
+     * Time complexity: O(1). Space complexity: O(1) apart from the panels and their eight buttons.
      *
      * @param pBoard the board of the running game, never null
      * @return the panel holding both rows of actions, never null
@@ -295,6 +296,12 @@ public class Main {
         replay.setName("replayMove");
         JButton pause = UiComponents.button(Messages.get("game.pause"), buttonFont, Theme.BUTTON_SECONDARY);
         pause.setName("pause");
+        JButton hint = UiComponents.button(Messages.get("game.hint"), buttonFont, Theme.BUTTON_SECONDARY);
+        hint.setName("hint");
+        hint.setToolTipText(Messages.get("game.hintTip"));
+        JButton threat = UiComponents.button(Messages.get("game.threat"), buttonFont, Theme.BUTTON_SECONDARY);
+        threat.setName("threat");
+        threat.setToolTipText(Messages.get("game.threatTip"));
         JButton resign = UiComponents.button(Messages.get("game.resign"), buttonFont, Theme.BUTTON_SECONDARY);
         resign.setName("resign");
         JButton offerDraw = UiComponents.button(Messages.get("game.offerDraw"), buttonFont, Theme.BUTTON_SECONDARY);
@@ -311,6 +318,9 @@ public class Main {
             // the button names what pressing it will do next, not what the game is doing now
             pause.setText(Messages.get(pBoard.isPaused() ? "game.resume" : "game.pause"));
         });
+        // the board works both out away from the drawing thread and draws them as arrows
+        hint.addActionListener(e -> pBoard.showHint(null));
+        threat.addActionListener(e -> pBoard.showThreat(null));
         resign.addActionListener(e -> {
             // giving up is final, so it is the one action worth asking about twice
             int answer = JOptionPane.showConfirmDialog(pBoard, Messages.get("game.resignQuestion"),
@@ -342,6 +352,8 @@ public class Main {
         moveRow.add(takeBack);
         moveRow.add(replay);
         moveRow.add(pause);
+        moveRow.add(hint);
+        moveRow.add(threat);
         endRow.add(resign);
         endRow.add(offerDraw);
         endRow.add(claimDraw);
