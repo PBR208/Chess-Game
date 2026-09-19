@@ -21,6 +21,7 @@ import engine.persistence.PgnManager;
 import ui.board.Board;
 import ui.board.EndScreen;
 import ui.board.MoveLogPanel;
+import ui.i18n.Messages;
 import ui.menu.MainMenu;
 import ui.menu.PastGamesPanel;
 import ui.theme.Theme;
@@ -132,11 +133,15 @@ public class Main {
             MoveLogPanel logPanel = new MoveLogPanel(board.getPreferredSize().height);
             GameSession session = board.getSession();
             session.setMoveLogView(logPanel);
+            // clicking a move in the log takes the game back to it, or forward again
+            logPanel.setPlySelectedListener(session::goToPly);
 
             session.setEndListener((pResult, pTermination) -> {
-                // the session owns the moves and the result, the names and the time control come from the config
-                GameRecord record = new GameRecord(cfg, pResult.pgnToken(),
-                        session.getMoveLog(), session.getFenHistory());
+                // the session owns the moves and the result, the names and the clock come from the config,
+                // and the reason it ended is what the PGN Termination tag gets written from. The board
+                // always starts a game from the usual position, so there is no starting FEN to record.
+                GameRecord record = new GameRecord(cfg, pResult.pgnToken(), pTermination,
+                        session.getMoveLog(), session.getFenHistory(), null);
                 // a game that couldn't be written must not disappear without a word
                 boolean saved = PgnManager.save(record);
                 // the engine reports a result and a reason, the sentence the players read is built here
@@ -171,46 +176,70 @@ public class Main {
     }
 
     /**
-     * Builds the row of actions under the board.
+     * Builds the rows of actions under the board.
      * <p>
-     * Games between people end by agreement or by resignation far more often than by mate, and until
-     * now neither was possible here. The three actions sit beside the board rather than in a dialog
-     * that interrupts, so they are available without getting in the way. Resigning asks once, because
-     * it is final and a misclick would end the game. Offering a draw goes to the opponent, and
-     * claiming one goes to the rules, which is why claiming is only live while a rule actually allows
-     * it. The session says whenever the game changed, so the buttons are grey exactly when pressing
-     * them would do nothing.
+     * Players need a way to take a move back and to play it again, and both only make sense while
+     * there is something to take back or replay. The session asks the opponent before a move comes
+     * back in a timed game, so the button only hands the click over. Players also step away from a
+     * game, and stopping the clock should not mean ending it. The pause button pauses and resumes the
+     * board and says which of the two it will do next, so a player always reads the action rather
+     * than the state. Everything it needs is on the board itself, which stops the clocks and refuses
+     * moves while it is paused.
      * <p>
-     * Time complexity: O(1). Space complexity: O(1) apart from the panel and its three buttons.
-     *
+     * Games between people end by agreement or by resignation far more often than by mate, so the
+     * second row resigns, offers a draw and claims one. Resigning asks once, because it is final and a
+     * misclick would end the game. Offering a draw goes to the opponent, and claiming one goes to the
+     * rules, which is why claiming is only live while a rule actually allows it. The session says
+     * whenever the game changed, so every button is grey exactly when pressing it would do nothing.
+     * I keep the two groups on rows of their own, so the longer German labels still fit beside a
+     * small board.
+     * <p>
      * It is public for the same reason fitToScreen is: the rule about when each action is live is
-     * worth checking, and a test should be able to build the row from a board without starting the
+     * worth checking, and a test should be able to build the rows from a board without starting the
      * whole application around it.
      * <p>
-     * Time complexity: O(1). Space complexity: O(1) apart from the panel and its three buttons.
+     * Time complexity: O(1). Space complexity: O(1) apart from the panels and their six buttons.
      *
      * @param pBoard the board of the running game, never null
-     * @return the action row, never null
+     * @return the panel holding both rows of actions, never null
      * @throws NullPointerException if pBoard is null
      */
     public static JPanel actionBar(Board pBoard) {
         GameSession session = pBoard.getSession();
 
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 6));
+        JPanel bar = new JPanel(new GridLayout(2, 1));
         bar.setBackground(Theme.PANEL_BG);
+        JPanel moveRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 6));
+        moveRow.setBackground(Theme.PANEL_BG);
+        JPanel endRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 6));
+        endRow.setBackground(Theme.PANEL_BG);
 
         Font buttonFont = new Font(Font.SANS_SERIF, Font.PLAIN, 13);
-        JButton resign = UiComponents.button("Resign", buttonFont, Theme.BUTTON_SECONDARY);
+        JButton takeBack = UiComponents.button(Messages.get("game.takeBack"), buttonFont, Theme.BUTTON_SECONDARY);
+        takeBack.setName("takeBack");
+        JButton replay = UiComponents.button(Messages.get("game.replayMove"), buttonFont, Theme.BUTTON_SECONDARY);
+        replay.setName("replayMove");
+        JButton pause = UiComponents.button(Messages.get("game.pause"), buttonFont, Theme.BUTTON_SECONDARY);
+        pause.setName("pause");
+        JButton resign = UiComponents.button(Messages.get("game.resign"), buttonFont, Theme.BUTTON_SECONDARY);
         resign.setName("resign");
-        JButton offerDraw = UiComponents.button("Offer draw", buttonFont, Theme.BUTTON_SECONDARY);
+        JButton offerDraw = UiComponents.button(Messages.get("game.offerDraw"), buttonFont, Theme.BUTTON_SECONDARY);
         offerDraw.setName("offerDraw");
-        JButton claimDraw = UiComponents.button("Claim draw", buttonFont, Theme.BUTTON_SECONDARY);
+        JButton claimDraw = UiComponents.button(Messages.get("game.claimDraw"), buttonFont, Theme.BUTTON_SECONDARY);
         claimDraw.setName("claimDraw");
 
+        // the session decides whether the move really comes back, since a timed game asks the opponent
+        takeBack.addActionListener(e -> session.requestTakeback());
+        replay.addActionListener(e -> session.redo());
+        pause.addActionListener(e -> {
+            pBoard.setPaused(!pBoard.isPaused());
+            // the button names what pressing it will do next, not what the game is doing now
+            pause.setText(Messages.get(pBoard.isPaused() ? "game.resume" : "game.pause"));
+        });
         resign.addActionListener(e -> {
             // giving up is final, so it is the one action worth asking about twice
-            int answer = JOptionPane.showConfirmDialog(pBoard,
-                    "Resign this game?", "Resign", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+            int answer = JOptionPane.showConfirmDialog(pBoard, Messages.get("game.resignQuestion"),
+                    Messages.get("game.resign"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
             if (answer == JOptionPane.YES_OPTION) {
                 // the player to move is the one who gives up
                 session.resign(session.isWhiteToMove() ? Pieces.WHITE : Pieces.BLACK);
@@ -220,9 +249,11 @@ public class Main {
         offerDraw.addActionListener(e -> session.offerDraw());
         claimDraw.addActionListener(e -> session.claimDraw());
 
-        // an action that would do nothing says so by being grey
+        // a button that would do nothing says so by being grey
         Runnable refresh = () -> {
             boolean running = !session.result().isFinished();
+            takeBack.setEnabled(session.canUndo());
+            replay.setEnabled(session.canRedo());
             resign.setEnabled(running);
             offerDraw.setEnabled(running);
             claimDraw.setEnabled(running && session.isDrawClaimable());
@@ -230,9 +261,14 @@ public class Main {
         session.setStateListener(refresh);
         refresh.run();
 
-        bar.add(resign);
-        bar.add(offerDraw);
-        bar.add(claimDraw);
+        moveRow.add(takeBack);
+        moveRow.add(replay);
+        moveRow.add(pause);
+        endRow.add(resign);
+        endRow.add(offerDraw);
+        endRow.add(claimDraw);
+        bar.add(moveRow);
+        bar.add(endRow);
         return bar;
     }
 
@@ -256,18 +292,20 @@ public class Main {
     private static String endMessage(GameConfig pConfig, GameResult pResult, Termination pTermination) {
         // only mate, a resignation and a flag fall have a winner to name
         String winner = pResult == GameResult.WHITE_WINS ? pConfig.whiteName() : pConfig.blackName();
+        // the three reasons with a winner put the name into the sentence, because where the name
+        // belongs in a sentence is not the same in every language
         return switch (pTermination) {
-            case CHECKMATE -> winner + " wins by checkmate!";
-            case RESIGNATION -> winner + " wins by resignation!";
-            case TIME_OUT -> winner + " wins on time!";
-            case STALEMATE -> "Draw by stalemate!";
-            case INSUFFICIENT_MATERIAL -> "Draw: neither side has enough material to mate!";
-            case TIME_OUT_WITHOUT_MATING_MATERIAL -> "Draw: time ran out, but no mate was possible!";
-            case FIFTY_MOVE_RULE -> "Draw by the 50-move rule!";
-            case SEVENTY_FIVE_MOVE_RULE -> "Draw by the 75-move rule!";
-            case THREEFOLD_REPETITION -> "Draw by threefold repetition!";
-            case FIVEFOLD_REPETITION -> "Draw by fivefold repetition!";
-            case DRAW_AGREED -> "Draw by agreement!";
+            case CHECKMATE -> Messages.format("end.checkmate", winner);
+            case RESIGNATION -> Messages.format("end.resignation", winner);
+            case TIME_OUT -> Messages.format("end.timeOut", winner);
+            case STALEMATE -> Messages.get("end.stalemate");
+            case INSUFFICIENT_MATERIAL -> Messages.get("end.insufficientMaterial");
+            case TIME_OUT_WITHOUT_MATING_MATERIAL -> Messages.get("end.timeOutNoMaterial");
+            case FIFTY_MOVE_RULE -> Messages.get("end.fiftyMoveRule");
+            case SEVENTY_FIVE_MOVE_RULE -> Messages.get("end.seventyFiveMoveRule");
+            case THREEFOLD_REPETITION -> Messages.get("end.threefoldRepetition");
+            case FIVEFOLD_REPETITION -> Messages.get("end.fivefoldRepetition");
+            case DRAW_AGREED -> Messages.get("end.drawAgreed");
         };
     }
 
