@@ -704,6 +704,112 @@ public class GameTest {
             }
         });
 
+        test("PgnManager: the library pairs every game with the file it came from", () -> {
+            String white = "LibraryWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(white, "LibraryBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+
+            List<PgnManager.SavedGame> library = PgnManager.loadLibrary();
+            PgnManager.SavedGame mine = library.stream()
+                    .filter(g -> g.record.whiteName.equals(white)).findFirst().orElse(null);
+            checkNotNull(mine, "the saved game must appear in the library");
+            check(Files.exists(mine.file), "the library must name a file that is really there");
+            // both views have to stay in step, a file that fails to parse must drop out of each
+            checkEqual(PgnManager.loadAll().size(), library.size(),
+                    "the record list and the library must hold the same games");
+            cleanupSavedGame(white);
+        });
+
+        test("PgnManager: a game nobody renamed is listed by its players", () -> {
+            String white = "UnnamedWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(white, "UnnamedBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+
+            PgnManager.SavedGame mine = PgnManager.loadLibrary().stream()
+                    .filter(g -> g.record.whiteName.equals(white)).findFirst().orElse(null);
+            checkNotNull(mine, "the saved game must appear in the library");
+            check(mine.name.isEmpty(), "a game carrying the default event must count as unnamed, got: " + mine.name);
+            checkEqual(mine.record.getDisplayTitle(), mine.title(),
+                    "an unnamed game must be listed by who played it");
+            cleanupSavedGame(white);
+        });
+
+        test("PgnManager: renaming a game survives quotes and shows up in the library", () -> {
+            String white = "RenameWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(white, "RenameBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+
+            PgnManager.SavedGame mine = PgnManager.loadLibrary().stream()
+                    .filter(g -> g.record.whiteName.equals(white)).findFirst().orElse(null);
+            checkNotNull(mine, "the saved game must appear in the library");
+
+            // a name with a quote and a backslash is exactly what broke tag values before
+            String name = "My best \"win\" \\ ever";
+            check(PgnManager.rename(mine.file, name), "renaming must report success");
+
+            PgnManager.SavedGame renamed = PgnManager.loadLibrary().stream()
+                    .filter(g -> g.record.whiteName.equals(white)).findFirst().orElse(null);
+            checkNotNull(renamed, "the renamed game must still be in the library");
+            checkEqual(name, renamed.name, "the name must come back exactly as it was typed");
+            check(renamed.title().contains(name), "the library must list the game under its name");
+            check(renamed.title().contains(white), "and must still show who played it");
+            checkEqual(mine.record.moves.size(), renamed.record.moves.size(),
+                    "renaming must not touch the moves");
+
+            // an empty name puts the game back to being listed by its players
+            check(PgnManager.rename(renamed.file, "  "), "clearing a name must report success");
+            PgnManager.SavedGame cleared = PgnManager.loadLibrary().stream()
+                    .filter(g -> g.record.whiteName.equals(white)).findFirst().orElse(null);
+            checkNotNull(cleared, "the game must survive losing its name");
+            check(cleared.name.isEmpty(), "a blank name must make the game unnamed again, got: " + cleared.name);
+            cleanupSavedGame(white);
+        });
+
+        test("PgnManager: deleting a game removes it from the library and the disk", () -> {
+            String white = "DeleteWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(white, "DeleteBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+
+            PgnManager.SavedGame mine = PgnManager.loadLibrary().stream()
+                    .filter(g -> g.record.whiteName.equals(white)).findFirst().orElse(null);
+            checkNotNull(mine, "the saved game must appear in the library");
+
+            check(PgnManager.delete(mine.file), "deleting must report that a game went");
+            check(!Files.exists(mine.file), "the file must really be gone");
+            check(PgnManager.loadLibrary().stream().noneMatch(g -> g.record.whiteName.equals(white)),
+                    "the deleted game must not be listed any more");
+            // deleting the same entry twice is harmless, but it must not claim to have deleted it
+            check(!PgnManager.delete(mine.file), "deleting a game that is already gone must report nothing");
+        });
+
+        test("PgnManager: every game of a shared file is listed and marked as sharing it", () -> {
+            String white = "SharedWhite" + System.nanoTime();
+            java.nio.file.Path dir = PgnManager.getGamesDirectory();
+            Files.createDirectories(dir);
+            // two games in one file, the way a tournament download arrives
+            Files.writeString(dir.resolve("2026.01.01_" + white + ".pgn"),
+                    "[Event \"Club Night\"]\n[White \"" + white + "\"]\n[Black \"First\"]\n[Result \"1-0\"]\n\n1. e4 1-0\n\n"
+                            + "[Event \"Club Night\"]\n[White \"" + white + "\"]\n[Black \"Second\"]\n[Result \"0-1\"]\n\n1. d4 0-1\n");
+
+            List<PgnManager.SavedGame> mine = PgnManager.loadLibrary().stream()
+                    .filter(g -> g.record.whiteName.equals(white)).toList();
+            checkEqual(2, mine.size(), "both games of the file must be listed");
+            for (PgnManager.SavedGame game : mine) {
+                check(game.sharesFile, "a game from a file of two must know it shares the file");
+                check(game.name.isEmpty(), "and is listed by its players, got: " + game.name);
+            }
+            cleanupSavedGame(white);
+
+            String alone = "AloneWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(alone, "AloneBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+            PgnManager.SavedGame single = PgnManager.loadLibrary().stream()
+                    .filter(g -> g.record.whiteName.equals(alone)).findFirst().orElse(null);
+            checkNotNull(single, "the saved game must appear in the library");
+            check(!single.sharesFile, "a game saved here has a file of its own");
+            cleanupSavedGame(alone);
+        });
+
         // =================================================================
         System.out.println();
         System.out.println("-- PGN import and export ----------------------------------------");
@@ -2188,12 +2294,30 @@ public class GameTest {
                 "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 2"
         );
 
-        test("ReplayPanel: displays first position's move label on construction", () ->
+        // three recorded positions plus the board before anybody moved makes four frames
+        test("ReplayPanel: opens on the position before anybody moved", () ->
                 SwingUtilities.invokeAndWait(() -> {
                     ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
                     JLabel lbl = findMoveLabel(p);
                     checkNotNull(lbl, "ReplayPanel must show a move-index label");
-                    check(lbl.getText().contains("1/3"), "Should start at position 1 of 3, got: " + lbl.getText());
+                    check(lbl.getText().contains("1/4"),
+                            "the starting position is the first of four frames, got: " + lbl.getText());
+                    check(lbl.getText().contains("Start position"),
+                            "and it belongs to no move, got: " + lbl.getText());
+                }));
+
+        test("ReplayPanel: a game that began from a position of its own opens on that position", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    String endgame = "8/8/8/4k3/8/8/4P3/4K3 w - - 0 1";
+                    ReplayPanel p = new ReplayPanel(endgame, List.of("e4"),
+                            List.of("8/8/8/4k3/4P3/8/8/4K3 b - - 0 1"));
+                    JTextArea fen = (JTextArea) findByName(p, "replayFen");
+                    checkNotNull(fen, "the replay must show the FEN of the frame");
+                    checkEqual(endgame, fen.getText(), "the first frame must be the position the game began from");
+
+                    ReplayPanel usual = new ReplayPanel(null, List.of(), List.of());
+                    checkEqual(Fen.START_POSITION, ((JTextArea) findByName(usual, "replayFen")).getText(),
+                            "a game without a starting FEN begins where chess begins");
                 }));
 
         test("ReplayPanel: next button advances position", () ->
@@ -2203,7 +2327,9 @@ public class GameTest {
                     checkNotNull(next, "Must have a next button");
                     next.doClick();
                     JLabel lbl = findMoveLabel(p);
-                    check(lbl.getText().contains("2/3"), "Should be at position 2 of 3, got: " + lbl.getText());
+                    check(lbl.getText().contains("2/4"), "Should be at position 2 of 4, got: " + lbl.getText());
+                    check(lbl.getText().contains("(White)"),
+                            "the second frame follows White's first move, got: " + lbl.getText());
                 }));
 
         test("ReplayPanel: last button jumps to final position", () ->
@@ -2213,7 +2339,7 @@ public class GameTest {
                     checkNotNull(last, "Must have a last button");
                     last.doClick();
                     JLabel lbl = findMoveLabel(p);
-                    check(lbl.getText().contains("3/3"), "Should be at the final position, got: " + lbl.getText());
+                    check(lbl.getText().contains("4/4"), "Should be at the final position, got: " + lbl.getText());
                 }));
 
         test("ReplayPanel: next button does not overrun the list", () ->
@@ -2222,7 +2348,7 @@ public class GameTest {
                     AbstractButton next = findButton(p, "next");
                     for (int i = 0; i < 10; i++) next.doClick(); // click far past the end
                     JLabel lbl = findMoveLabel(p);
-                    check(lbl.getText().contains("3/3"), "Cursor must clamp at the last position, got: " + lbl.getText());
+                    check(lbl.getText().contains("4/4"), "Cursor must clamp at the last position, got: " + lbl.getText());
                 }));
 
         test("ReplayPanel: first button returns to position 1", () ->
@@ -2233,7 +2359,7 @@ public class GameTest {
                     checkNotNull(first, "Must have a first button");
                     first.doClick();
                     JLabel lbl = findMoveLabel(p);
-                    check(lbl.getText().contains("1/3"), "Should be back at position 1, got: " + lbl.getText());
+                    check(lbl.getText().contains("1/4"), "Should be back at position 1, got: " + lbl.getText());
                 }));
 
         test("ReplayPanel: prev button does not underrun position 1", () ->
@@ -2242,7 +2368,7 @@ public class GameTest {
                     AbstractButton prev = findButton(p, "previous");
                     for (int i = 0; i < 5; i++) prev.doClick(); // click before the start
                     JLabel lbl = findMoveLabel(p);
-                    check(lbl.getText().contains("1/3"), "Cursor must clamp at the first position, got: " + lbl.getText());
+                    check(lbl.getText().contains("1/4"), "Cursor must clamp at the first position, got: " + lbl.getText());
                 }));
 
         test("ReplayPanel: empty FEN list shows 'No moves' without throwing", () ->
@@ -2254,6 +2380,83 @@ public class GameTest {
                     BufferedImage img = new BufferedImage(600, 600, BufferedImage.TYPE_INT_ARGB);
                     p.setSize(600, 600);
                     p.paint(img.createGraphics());
+                }));
+
+        test("ReplayPanel: turning the board round changes what is drawn", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
+                    // the board has to be painted on its own. Painting the whole panel without a
+                    // window draws nothing at all, because the split panes leave the board no size,
+                    // which is also why the older paint test could only check that nothing threw.
+                    Component canvas = findByName(p, "replayBoard");
+                    checkNotNull(canvas, "the replay must have a board to draw on");
+                    canvas.setSize(480, 480);
+
+                    // comparing the picture is what proves the board really turned, without the
+                    // panel having to expose which way round it happens to be
+                    BufferedImage before = new BufferedImage(480, 480, BufferedImage.TYPE_INT_ARGB);
+                    canvas.paint(before.createGraphics());
+
+                    AbstractButton flip = findButton(p, "flip");
+                    checkNotNull(flip, "the replay must offer turning the board round");
+                    flip.doClick();
+
+                    BufferedImage after = new BufferedImage(480, 480, BufferedImage.TYPE_INT_ARGB);
+                    canvas.paint(after.createGraphics());
+
+                    boolean identical = java.util.Arrays.equals(
+                            before.getRGB(0, 0, 480, 480, null, 0, 480),
+                            after.getRGB(0, 0, 480, 480, null, 0, 480));
+                    check(!identical, "the same position from the other side has to look different");
+                }));
+
+        test("ReplayPanel: the copy buttons are there and never throw", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
+                    AbstractButton copyFen = findButton(p, "copyFen");
+                    AbstractButton copyMoves = findButton(p, "copyMoves");
+                    checkNotNull(copyFen, "the position must be copyable");
+                    checkNotNull(copyMoves, "and so must the moves");
+                    // a machine with no clipboard has to stay quiet rather than throw out of a click
+                    copyFen.doClick();
+                    copyMoves.doClick();
+                }));
+
+        test("ReplayPanel: asking for a move shows the position after it", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
+
+                    // White's second move is the third half move, so its position is the last frame
+                    p.showMove(2);
+                    JLabel lbl = findMoveLabel(p);
+                    check(lbl.getText().contains("4/4"),
+                            "move three must show the position after it, got: " + lbl.getText());
+
+                    p.showMove(0);
+                    check(findMoveLabel(p).getText().contains("2/4"),
+                            "White's first move must show the second frame, got: " + findMoveLabel(p).getText());
+
+                    // a move this game never had leaves the replay where it was
+                    p.showMove(99);
+                    check(findMoveLabel(p).getText().contains("2/4"),
+                            "a move that was never played must change nothing, got: " + findMoveLabel(p).getText());
+                    p.showMove(-1);
+                    check(findMoveLabel(p).getText().contains("2/4"),
+                            "and neither must a move before the first, got: " + findMoveLabel(p).getText());
+                }));
+
+        guiTest("ReplayPanel: copying the position puts its FEN on the clipboard", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    ReplayPanel p = new ReplayPanel(sampleMoves, sampleFens);
+                    findButton(p, "copyFen").doClick();
+                    try {
+                        String copied = (String) Toolkit.getDefaultToolkit().getSystemClipboard()
+                                .getData(java.awt.datatransfer.DataFlavor.stringFlavor);
+                        checkEqual(Fen.START_POSITION, copied,
+                                "the replay opens on the starting position, so that is what gets copied");
+                    } catch (Exception problem) {
+                        check(false, "the clipboard could not be read back: " + problem);
+                    }
                 }));
 
         // =================================================================
@@ -2590,6 +2793,180 @@ public class GameTest {
             });
 
             cleanupSavedGame(uniqueWhite);
+        });
+
+        test("PastGamesPanel: searching narrows the list down to the matching games", () -> {
+            String white = "SearchWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(white, "SearchBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+
+            SwingUtilities.invokeAndWait(() -> {
+                PastGamesPanel p = new PastGamesPanel();
+                JList<String> list = findList(p);
+                checkNotNull(list, "Must find the game list");
+                Component field = findByName(p, "librarySearch");
+                checkNotNull(field, "the library must have a search field");
+                JTextField search = (JTextField) field;
+
+                int everything = list.getModel().getSize();
+                check(everything >= 1, "the library must list the game that was just saved");
+
+                // typing filters straight away, there is nothing to confirm
+                search.setText(white);
+                checkEqual(1, list.getModel().getSize(), "only the searched game may be left");
+                check(list.getModel().getElementAt(0).contains(white),
+                        "the one left must be the searched game, got: " + list.getModel().getElementAt(0));
+
+                search.setText("no game is ever called this");
+                check(list.getModel().getElementAt(0).contains("No games match"),
+                        "a search that finds nothing must say so, got: " + list.getModel().getElementAt(0));
+
+                search.setText("");
+                checkEqual(everything, list.getModel().getSize(),
+                        "clearing the search must bring the whole library back");
+            });
+
+            cleanupSavedGame(white);
+        });
+
+        test("PastGamesPanel: renaming the selected game shows the new name in the list", () -> {
+            String white = "PanelRenameWhite" + System.nanoTime();
+            String name = "Sunday club final";
+            PgnManager.save(new GameRecord(white, "PanelRenameBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+
+            SwingUtilities.invokeAndWait(() -> {
+                PastGamesPanel p = new PastGamesPanel();
+                JTextField search = (JTextField) findByName(p, "librarySearch");
+                search.setText(white);
+                JList<String> list = findList(p);
+
+                // answering in code instead of in a dialog, which a test run has nobody to click
+                String[] asked = {null};
+                p.setPrompts(new PastGamesPanel.LibraryPrompts() {
+                    @Override
+                    public boolean confirmDelete(String pTitle) {
+                        check(false, "renaming must never ask about deleting");
+                        return false;
+                    }
+
+                    @Override
+                    public String askName(String pTitle, String pCurrentName) {
+                        asked[0] = pCurrentName;
+                        return name;
+                    }
+
+                    @Override
+                    public void sayFailed(String pMessage) {
+                        check(false, "nothing must fail here, got: " + pMessage);
+                    }
+                });
+
+                check(!p.renameSelected(), "renaming with nothing selected must do nothing");
+                list.setSelectedIndex(0);
+                check(p.renameSelected(), "renaming must report success");
+                checkEqual("", asked[0], "a game nobody named yet must offer an empty name");
+                check(list.getModel().getElementAt(0).contains(name),
+                        "the list must show the new name, got: " + list.getModel().getElementAt(0));
+                check(list.getModel().getElementAt(0).contains(white),
+                        "and must still show who played, got: " + list.getModel().getElementAt(0));
+            });
+
+            cleanupSavedGame(white);
+        });
+
+        test("PastGamesPanel: deleting asks first and then takes the game out of the library", () -> {
+            String white = "PanelDeleteWhite" + System.nanoTime();
+            PgnManager.save(new GameRecord(white, "PanelDeleteBlack", "1-0", "2026.01.01", "Blitz 5+0",
+                    List.of("e4"), List.of("fen1")));
+
+            SwingUtilities.invokeAndWait(() -> {
+                PastGamesPanel p = new PastGamesPanel();
+                JTextField search = (JTextField) findByName(p, "librarySearch");
+                search.setText(white);
+                JList<String> list = findList(p);
+                list.setSelectedIndex(0);
+
+                boolean[] answer = {false};
+                p.setPrompts(new PastGamesPanel.LibraryPrompts() {
+                    @Override
+                    public boolean confirmDelete(String pTitle) {
+                        check(pTitle.contains(white), "the question must name the game, got: " + pTitle);
+                        return answer[0];
+                    }
+
+                    @Override
+                    public String askName(String pTitle, String pCurrentName) {
+                        check(false, "deleting must never ask for a name");
+                        return null;
+                    }
+
+                    @Override
+                    public void sayFailed(String pMessage) {
+                        check(false, "nothing must fail here, got: " + pMessage);
+                    }
+                });
+
+                // saying no has to leave the game exactly where it was
+                check(!p.deleteSelected(), "a game must survive being declined");
+                check(list.getModel().getElementAt(0).contains(white),
+                        "the declined game must still be listed, got: " + list.getModel().getElementAt(0));
+
+                answer[0] = true;
+                check(p.deleteSelected(), "deleting must report success");
+                for (int i = 0; i < list.getModel().getSize(); i++) {
+                    check(!list.getModel().getElementAt(i).contains(white),
+                            "the deleted game must be gone from the list, got: " + list.getModel().getElementAt(i));
+                }
+                check(PgnManager.loadLibrary().stream().noneMatch(g -> g.record.whiteName.equals(white)),
+                        "the deleted game must be gone from the disk as well");
+            });
+        });
+
+        test("PastGamesPanel: a game that shares its file is neither renamed nor deleted", () -> {
+            String white = "PanelSharedWhite" + System.nanoTime();
+            java.nio.file.Path file = PgnManager.getGamesDirectory().resolve("2026.01.01_" + white + ".pgn");
+            Files.createDirectories(file.getParent());
+            String pgn = "[White \"" + white + "\"]\n[Black \"First\"]\n[Result \"1-0\"]\n\n1. e4 1-0\n\n"
+                    + "[White \"" + white + "\"]\n[Black \"Second\"]\n[Result \"0-1\"]\n\n1. d4 0-1\n";
+            Files.writeString(file, pgn);
+
+            SwingUtilities.invokeAndWait(() -> {
+                PastGamesPanel p = new PastGamesPanel();
+                JTextField search = (JTextField) findByName(p, "librarySearch");
+                search.setText(white);
+                JList<String> list = findList(p);
+                list.setSelectedIndex(0);
+
+                int[] refusals = {0};
+                p.setPrompts(new PastGamesPanel.LibraryPrompts() {
+                    @Override
+                    public boolean confirmDelete(String pTitle) {
+                        check(false, "a shared file must be refused before anybody is asked");
+                        return true;
+                    }
+
+                    @Override
+                    public String askName(String pTitle, String pCurrentName) {
+                        check(false, "a shared file must be refused before anybody is asked");
+                        return "Renamed";
+                    }
+
+                    @Override
+                    public void sayFailed(String pMessage) {
+                        refusals[0]++;
+                    }
+                });
+
+                check(!p.renameSelected(), "renaming one game of a shared file must be refused");
+                check(!p.deleteSelected(), "and so must deleting it");
+                checkEqual(2, refusals[0], "the player must be told why, both times");
+            });
+            try {
+                check(Files.readString(file).equals(pgn), "the shared file must be left exactly as it was");
+            } finally {
+                cleanupSavedGame(white);
+            }
         });
 
         test("PastGamesPanel: selecting a game populates the move log", () -> {
@@ -4735,6 +5112,36 @@ public class GameTest {
     }
 
     // -- Test-only helpers ------------------------------------------------
+
+    /**
+     * Finds the component with a given name anywhere below a container.
+     * <p>
+     * Some of what a screen draws is not a button or a label but a panel that paints itself, and
+     * such a panel has no text to find it by. The ones worth checking carry a name, so this walks
+     * the tree and returns the first component wearing the one that was asked for.
+     * <p>
+     * Time complexity: O(c) for the c components below the container.
+     * Space complexity: O(d) for a tree of depth d.
+     *
+     * @param pRoot container to search below, never null
+     * @param pName component name to look for, never null
+     * @return the component with that name, or null when nothing below carries it
+     */
+    private static Component findByName(Container pRoot, String pName) {
+        for (Component child : pRoot.getComponents()) {
+            if (pName.equals(child.getName())) {
+                return child;
+            }
+            // a named component can sit at any depth, inside panels and split panes
+            if (child instanceof Container nested) {
+                Component found = findByName(nested, pName);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
 
     /**
      * Reads one language bundle straight from the classpath, without any fallback.
