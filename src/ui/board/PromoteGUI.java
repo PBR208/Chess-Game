@@ -11,6 +11,7 @@ package ui.board;
  * Version: 1.0
  */
 
+import ui.i18n.Messages;
 import ui.theme.Theme;
 import ui.theme.UiComponents;
 
@@ -83,10 +84,14 @@ public class PromoteGUI extends JDialog {
         int scale = PieceSprites.getSheetScale();
 
         // each button shows the promoting side's piece and is named after it, since it has no text
-        JButton queen = createPieceButton(getPieceImage(spritesheet, scale, QUEEN_SPRITE, pTileSize, pWhite), "Queen");
-        JButton rook = createPieceButton(getPieceImage(spritesheet, scale, ROOK_SPRITE, pTileSize, pWhite), "Rook");
-        JButton bishop = createPieceButton(getPieceImage(spritesheet, scale, BISHOP_SPRITE, pTileSize, pWhite), "Bishop");
-        JButton knight = createPieceButton(getPieceImage(spritesheet, scale, KNIGHT_SPRITE, pTileSize, pWhite), "Knight");
+        JButton queen = createPieceButton(getPieceImage(spritesheet, scale, QUEEN_SPRITE, pTileSize, pWhite),
+                "Queen", Messages.get("piece.queen"));
+        JButton rook = createPieceButton(getPieceImage(spritesheet, scale, ROOK_SPRITE, pTileSize, pWhite),
+                "Rook", Messages.get("piece.rook"));
+        JButton bishop = createPieceButton(getPieceImage(spritesheet, scale, BISHOP_SPRITE, pTileSize, pWhite),
+                "Bishop", Messages.get("piece.bishop"));
+        JButton knight = createPieceButton(getPieceImage(spritesheet, scale, KNIGHT_SPRITE, pTileSize, pWhite),
+                "Knight", Messages.get("piece.knight"));
 
         queen.addActionListener(e -> {
             choice = Choice.QUEEN;
@@ -152,22 +157,27 @@ public class PromoteGUI extends JDialog {
     /**
      * Creates one themed, icon-only promotion button.
      * <p>
-     * Each option has to match the dark UI and still be identifiable without visible text. I put
-     * the icon on a flat button, store the piece name as both the component name and the
-     * accessible name, and then apply the theme colours, cursor and hover effect.
+     * Each option has to match the dark UI and still be identifiable without visible text. I put the
+     * icon on a flat button and give it two different names on purpose. The component name stays
+     * English, because it is how tests and tooling find the button and it must not move when somebody
+     * changes the language. What a player reads, the tooltip and the name a screen reader announces,
+     * comes from the language bundle instead. Then I apply the theme colours, cursor and hover effect.
      * <p>
      * Time complexity: O(1). Space complexity: O(1) apart from the button itself.
      *
-     * @param pIcon piece image shown on the button, never null
-     * @param pName piece name such as "Queen", used to identify the button; never null
+     * @param pIcon        piece image shown on the button, never null
+     * @param pName        English piece name such as "Queen", used to identify the button; never null
+     * @param pDescription the piece in the player's language, shown and read out; never null
      * @return the fully styled button, never null
      */
-    private JButton createPieceButton(BufferedImage pIcon, String pName) {
+    private JButton createPieceButton(BufferedImage pIcon, String pName, String pDescription) {
         // the sprite is the only visible label
         JButton btn = new JButton(new ImageIcon(pIcon));
-        // name the button so tests and screen readers can find it without text
+        // the name identifies the button whatever language the game is in
         btn.setName(pName);
-        btn.getAccessibleContext().setAccessibleName(pName);
+        // what a player reads and what a screen reader says are in the player's language
+        btn.setToolTipText(pDescription);
+        btn.getAccessibleContext().setAccessibleName(pDescription);
         btn.setBackground(Theme.BUTTON_SECONDARY);
         btn.setForeground(Theme.FG);
         btn.setContentAreaFilled(false);
