@@ -14,6 +14,7 @@ package ui.menu;
 import engine.model.GameRecord;
 import engine.persistence.PgnManager;
 import app.Main;
+import ui.i18n.Messages;
 import ui.theme.Theme;
 import ui.theme.UiComponents;
 
@@ -56,11 +57,11 @@ public class PastGamesPanel extends JPanel {
         topBar.setBackground(Theme.PANEL_BG);
         topBar.setBorder(new EmptyBorder(12, 16, 12, 16));
 
-        JLabel title = new JLabel("Past Games");
+        JLabel title = new JLabel(Messages.get("past.title"));
         title.setForeground(Theme.FG);
         title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 20));
 
-        JButton backBtn = styledButton("\u2190 Back to Menu", "< Back to Menu", "backToMenu");
+        JButton backBtn = styledButton("\u2190 " + Messages.get("common.backToMenu"), "< " + Messages.get("common.backToMenu"), "backToMenu");
         backBtn.addActionListener(e -> Main.showMenu());
 
         topBar.add(title, BorderLayout.WEST);
@@ -86,7 +87,7 @@ public class PastGamesPanel extends JPanel {
         rightPanel = new JPanel(rightCards);
         rightPanel.setBackground(Theme.BG);
 
-        JLabel placeholder = new JLabel("Select a game from the list", SwingConstants.CENTER);
+        JLabel placeholder = new JLabel(Messages.get("past.selectPrompt"), SwingConstants.CENTER);
         placeholder.setForeground(new Color(120, 120, 120));
         placeholder.setFont(new Font(Font.SANS_SERIF, Font.ITALIC, 14));
         rightPanel.add(placeholder, "empty");
@@ -112,8 +113,8 @@ public class PastGamesPanel extends JPanel {
         toggleBar.setBackground(Theme.PANEL_BG);
         toggleBar.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, new Color(60, 60, 65)));
 
-        JButton showLog = styledButton("Move Log");
-        JButton showReplay = styledButton("Replay \u25b6", "Replay >", "replay");
+        JButton showLog = styledButton(Messages.get("past.moveLog"));
+        JButton showReplay = styledButton(Messages.get("past.replay") + " \u25b6", Messages.get("past.replay") + " >", "replay");
         toggleBar.add(showLog);
         toggleBar.add(showReplay);
         toggleBar.add(importButton());
@@ -165,7 +166,7 @@ public class PastGamesPanel extends JPanel {
         if (!record.fenHistory.isEmpty()) {
             replayHolder.add(new ReplayPanel(record.moves, record.fenHistory), BorderLayout.CENTER);
         } else {
-            JLabel noReplay = new JLabel("No position data for this game", SwingConstants.CENTER);
+            JLabel noReplay = new JLabel(Messages.get("past.noPositions"), SwingConstants.CENTER);
             noReplay.setForeground(new Color(120, 120, 120));
             replayHolder.add(noReplay, BorderLayout.CENTER);
         }
@@ -189,7 +190,7 @@ public class PastGamesPanel extends JPanel {
 
         listModel.clear();
         if (records.isEmpty()) {
-            listModel.addElement("No saved games yet.");
+            listModel.addElement(Messages.get("past.empty"));
         } else {
             for (GameRecord record : records) {
                 listModel.addElement(record.getDisplayTitle());
@@ -211,12 +212,12 @@ public class PastGamesPanel extends JPanel {
      * @return the finished button, never null
      */
     private JButton importButton() {
-        JButton button = styledButton("Import PGN");
+        JButton button = styledButton(Messages.get("past.importPgn"));
         button.setName("importPgn");
         button.addActionListener(e -> {
             JFileChooser chooser = new JFileChooser();
-            chooser.setDialogTitle("Import PGN");
-            chooser.setFileFilter(new FileNameExtensionFilter("PGN files", "pgn"));
+            chooser.setDialogTitle(Messages.get("past.importPgn"));
+            chooser.setFileFilter(new FileNameExtensionFilter(Messages.get("past.pgnFiles"), "pgn"));
             // a player who changes their mind leaves the library alone
             if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) {
                 return;
@@ -224,18 +225,19 @@ public class PastGamesPanel extends JPanel {
             try {
                 List<GameRecord> imported = PgnManager.importFrom(chooser.getSelectedFile().toPath());
                 if (imported.isEmpty()) {
-                    JOptionPane.showMessageDialog(this, "No game in that file could be read.",
-                            "Nothing imported", JOptionPane.WARNING_MESSAGE);
+                    JOptionPane.showMessageDialog(this, Messages.get("past.importNothing"),
+                            Messages.get("past.importNothingTitle"), JOptionPane.WARNING_MESSAGE);
                     return;
                 }
                 // the new games are on disk, so the list has to be built again
                 fillList();
                 JOptionPane.showMessageDialog(this,
-                        "Imported " + imported.size() + (imported.size() == 1 ? " game." : " games."),
-                        "Import finished", JOptionPane.INFORMATION_MESSAGE);
+                        imported.size() == 1 ? Messages.get("past.importedOne")
+                                : Messages.format("past.importedMany", imported.size()),
+                        Messages.get("past.importDoneTitle"), JOptionPane.INFORMATION_MESSAGE);
             } catch (IOException problem) {
-                JOptionPane.showMessageDialog(this, "That file could not be read: " + problem.getMessage(),
-                        "Import failed", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, Messages.format("past.importFailed", problem.getMessage()),
+                        Messages.get("past.importFailedTitle"), JOptionPane.ERROR_MESSAGE);
             }
         });
         return button;
@@ -254,18 +256,18 @@ public class PastGamesPanel extends JPanel {
      * @return the finished button, never null
      */
     private JButton exportButton() {
-        JButton button = styledButton("Export PGN");
+        JButton button = styledButton(Messages.get("past.exportPgn"));
         button.setName("exportPgn");
         button.addActionListener(e -> {
             // there is nothing to write before a game has been picked
             if (selectedRecord == null) {
-                JOptionPane.showMessageDialog(this, "Select a game in the list first.",
-                        "Nothing to export", JOptionPane.INFORMATION_MESSAGE);
+                JOptionPane.showMessageDialog(this, Messages.get("past.exportNothing"),
+                        Messages.get("past.exportNothingTitle"), JOptionPane.INFORMATION_MESSAGE);
                 return;
             }
             JFileChooser chooser = new JFileChooser();
-            chooser.setDialogTitle("Export PGN");
-            chooser.setFileFilter(new FileNameExtensionFilter("PGN files", "pgn"));
+            chooser.setDialogTitle(Messages.get("past.exportPgn"));
+            chooser.setFileFilter(new FileNameExtensionFilter(Messages.get("past.pgnFiles"), "pgn"));
             chooser.setSelectedFile(new java.io.File(suggestedFileName(selectedRecord)));
             if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
                 return;
@@ -273,8 +275,8 @@ public class PastGamesPanel extends JPanel {
             try {
                 PgnManager.exportTo(selectedRecord, chooser.getSelectedFile().toPath());
             } catch (IOException problem) {
-                JOptionPane.showMessageDialog(this, "That file could not be written: " + problem.getMessage(),
-                        "Export failed", JOptionPane.ERROR_MESSAGE);
+                JOptionPane.showMessageDialog(this, Messages.format("past.exportFailed", problem.getMessage()),
+                        Messages.get("past.exportFailedTitle"), JOptionPane.ERROR_MESSAGE);
             }
         });
         return button;

@@ -13,6 +13,7 @@ package ui.board;
  */
 
 import engine.core.GameSession;
+import ui.i18n.Messages;
 
 import javax.swing.*;
 
@@ -48,11 +49,13 @@ public class SwingTakebackArbiter implements GameSession.TakebackArbiter {
             return true;
         }
 
-        String asking = pWhiteAsks ? "White" : "Black";
-        String deciding = pWhiteAsks ? "Black" : "White";
+        String white = Messages.get("newgame.white");
+        String black = Messages.get("newgame.black");
+        String asking = pWhiteAsks ? white : black;
+        String deciding = pWhiteAsks ? black : white;
         int answer = JOptionPane.showConfirmDialog(board,
-                asking + " would like to take the last move back. " + deciding + ", do you agree?",
-                "Takeback request", JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+                Messages.format("takeback.question", asking, deciding),
+                Messages.get("takeback.title"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
         // anything but a clear yes leaves the game as it stands
         return answer == JOptionPane.YES_OPTION;
     }

@@ -13,6 +13,7 @@ package ui.board;
 
 import engine.core.GameSession;
 import engine.imports.MoveLogView;
+import ui.i18n.Messages;
 
 import javax.swing.*;
 import javax.swing.text.BadLocationException;
@@ -67,7 +68,8 @@ public class MoveLogPanel extends JPanel implements MoveLogView, GameSession.Mov
         });
 
         // Header label for moves
-        JLabel header = new JLabel("  Move History");
+        // the padding stays here, because a properties file drops the spaces in front of a value
+        JLabel header = new JLabel("  " + Messages.get("log.moveHistory"));
         header.setForeground(new Color(140, 140, 140));
         header.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
         header.setBackground(new Color(40, 40, 42));
@@ -79,7 +81,7 @@ public class MoveLogPanel extends JPanel implements MoveLogView, GameSession.Mov
         scroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 
         // Header label for FEN
-        JLabel fenHeader = new JLabel("  Current FEN");
+        JLabel fenHeader = new JLabel("  " + Messages.get("log.currentFen"));
         fenHeader.setForeground(new Color(140, 140, 140));
         fenHeader.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 12));
         fenHeader.setBackground(new Color(40, 40, 42));

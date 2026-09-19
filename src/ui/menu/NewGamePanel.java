@@ -15,6 +15,7 @@ import engine.model.ClockMode;
 import engine.model.ClockStage;
 import engine.model.GameConfig;
 import app.Main;
+import ui.i18n.Messages;
 import ui.theme.Theme;
 import ui.theme.UiComponents;
 
@@ -41,7 +42,7 @@ public class NewGamePanel extends JPanel {
     private final JTextField customMin = new JTextField("10", 4);
     private final JTextField customSec = new JTextField("0", 4);
     // selecting it makes the game use the minutes and seconds typed next to it
-    private final JToggleButton customBtn = new JToggleButton("Custom:");
+    private final JToggleButton customBtn = new JToggleButton(Messages.get("newgame.custom"));
     // explains why a custom time can't be used, a single space keeps the line's height
     private final JLabel customError = new JLabel(" ");
 
@@ -87,20 +88,20 @@ public class NewGamePanel extends JPanel {
         card.setBorder(new EmptyBorder(32, 40, 32, 40));
         card.setMaximumSize(new Dimension(520, Integer.MAX_VALUE));
 
-        JLabel title = new JLabel("New Game");
+        JLabel title = new JLabel(Messages.get("newgame.title"));
         title.setForeground(Theme.FG);
         title.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 26));
         title.setAlignmentX(CENTER_ALIGNMENT);
         card.add(title);
         card.add(Box.createVerticalStrut(28));
 
-        card.add(sectionLabel("Players"));
+        card.add(sectionLabel(Messages.get("newgame.players")));
         card.add(Box.createVerticalStrut(10));
 
         JPanel names = new JPanel(new GridLayout(2, 2, 8, 8));
         names.setBackground(Theme.PANEL_BG);
-        names.add(fieldLabel("White"));
-        names.add(fieldLabel("Black"));
+        names.add(fieldLabel(Messages.get("newgame.white")));
+        names.add(fieldLabel(Messages.get("newgame.black")));
         styleField(whiteField);
         styleField(blackField);
         names.add(whiteField);
@@ -108,7 +109,7 @@ public class NewGamePanel extends JPanel {
         card.add(names);
         card.add(Box.createVerticalStrut(28));
 
-        card.add(sectionLabel("Time Control"));
+        card.add(sectionLabel(Messages.get("newgame.timeControl")));
         card.add(Box.createVerticalStrut(10));
 
         JPanel presets = new JPanel(new GridLayout(0, 4, 6, 6));
@@ -148,10 +149,10 @@ public class NewGamePanel extends JPanel {
         JPanel modes = new JPanel(new GridLayout(0, 4, 6, 6));
         modes.setBackground(Theme.PANEL_BG);
         ButtonGroup modeGroup = new ButtonGroup();
-        addModeButton(modes, modeGroup, "Sudden death", ClockMode.SUDDEN_DEATH);
-        addModeButton(modes, modeGroup, "Fischer", ClockMode.FISCHER);
-        addModeButton(modes, modeGroup, "Bronstein", ClockMode.BRONSTEIN);
-        addModeButton(modes, modeGroup, "Delay", ClockMode.SIMPLE_DELAY);
+        addModeButton(modes, modeGroup, Messages.get("newgame.modeSuddenDeath"), ClockMode.SUDDEN_DEATH);
+        addModeButton(modes, modeGroup, Messages.get("newgame.modeFischer"), ClockMode.FISCHER);
+        addModeButton(modes, modeGroup, Messages.get("newgame.modeBronstein"), ClockMode.BRONSTEIN);
+        addModeButton(modes, modeGroup, Messages.get("newgame.modeDelay"), ClockMode.SIMPLE_DELAY);
         card.add(modes);
         card.add(Box.createVerticalStrut(10));
 
@@ -177,9 +178,9 @@ public class NewGamePanel extends JPanel {
 
         customRow.add(customBtn);
         customRow.add(customMin);
-        customRow.add(fieldLabel("min"));
+        customRow.add(fieldLabel(Messages.get("newgame.minutes")));
         customRow.add(customSec);
-        customRow.add(fieldLabel("sec"));
+        customRow.add(fieldLabel(Messages.get("newgame.seconds")));
         card.add(customRow);
 
         // these two fields come after the custom row on purpose, because the tests that check the
@@ -188,21 +189,21 @@ public class NewGamePanel extends JPanel {
         extraRow.setBackground(Theme.PANEL_BG);
         styleField(delaySec);
         styleField(blackOddsMin);
-        extraRow.add(fieldLabel("Delay"));
+        extraRow.add(fieldLabel(Messages.get("newgame.delay")));
         extraRow.add(delaySec);
-        extraRow.add(fieldLabel("sec"));
-        extraRow.add(fieldLabel("    Black gets"));
+        extraRow.add(fieldLabel(Messages.get("newgame.seconds")));
+        extraRow.add(fieldLabel("    " + Messages.get("newgame.blackGets")));
         extraRow.add(blackOddsMin);
-        extraRow.add(fieldLabel("min"));
+        extraRow.add(fieldLabel(Messages.get("newgame.minutes")));
         card.add(extraRow);
 
         // the stages field comes last, for the same reason the two above it do
         JPanel stageRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         stageRow.setBackground(Theme.PANEL_BG);
         styleField(stagesField);
-        stageRow.add(fieldLabel("Stages"));
+        stageRow.add(fieldLabel(Messages.get("newgame.stages")));
         stageRow.add(stagesField);
-        stageRow.add(fieldLabel("such as 40/90, 30"));
+        stageRow.add(fieldLabel(Messages.get("newgame.stagesExample")));
         card.add(stageRow);
 
         // tells the player why a custom time can't be used
@@ -215,8 +216,8 @@ public class NewGamePanel extends JPanel {
         JPanel buttons = new JPanel(new GridLayout(1, 2, 12, 0));
         buttons.setBackground(Theme.PANEL_BG);
 
-        JButton backBtn = actionButton("\u2190 Back", "< Back", "back", false);
-        JButton startBtn = actionButton("Start \u25b6", "Start >", "start", true);
+        JButton backBtn = actionButton("\u2190 " + Messages.get("common.back"), "< " + Messages.get("common.back"), "back", false);
+        JButton startBtn = actionButton(Messages.get("common.start") + " \u25b6", Messages.get("common.start") + " >", "start", true);
 
         backBtn.addActionListener(e -> Main.showMenu());
         // start the game with everything selected on this screen, unless the custom time is unusable
@@ -273,18 +274,18 @@ public class NewGamePanel extends JPanel {
             mins = Long.parseLong(customMin.getText().trim());
             secs = Long.parseLong(customSec.getText().trim());
         } catch (NumberFormatException ex) {
-            customError.setText("Minutes and seconds have to be whole numbers.");
+            customError.setText(Messages.get("newgame.errorWholeNumbers"));
             return -1;
         }
         // seconds above 59 belong in the minutes field
         if (mins < 0 || secs < 0 || secs > 59) {
-            customError.setText("Use 0 or more minutes and 0 to 59 seconds.");
+            customError.setText(Messages.get("newgame.errorRange"));
             return -1;
         }
         // checking the minutes first also keeps the multiplication below from overflowing
         if (mins > MAX_CUSTOM_TIME_MS / 60_000 || (mins * 60 + secs) * 1000L > MAX_CUSTOM_TIME_MS
                 || mins + secs == 0) {
-            customError.setText("The time has to be more than 0 and at most 24 hours.");
+            customError.setText(Messages.get("newgame.errorTooLong"));
             return -1;
         }
         customError.setText(" ");

@@ -16,6 +16,7 @@ import engine.core.GameSession;
 import engine.core.MoveGen;
 import engine.core.Pieces;
 import engine.model.GameConfig;
+import ui.i18n.Messages;
 
 import javax.swing.*;
 import java.awt.*;
@@ -233,7 +234,7 @@ public class Board extends JPanel implements GameSession.View {
             g2d.setColor(Color.WHITE);
             g2d.setFont(new Font(Font.SANS_SERIF, Font.BOLD, tileSize / 2));
             FontMetrics metrics = g2d.getFontMetrics();
-            String text = "PAUSED";
+            String text = Messages.get("game.paused");
             g2d.drawString(text, (boardWidth - metrics.stringWidth(text)) / 2,
                     clockHeight + rows * tileSize / 2);
         }

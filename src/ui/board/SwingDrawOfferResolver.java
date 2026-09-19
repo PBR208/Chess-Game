@@ -12,14 +12,11 @@ package ui.board;
  */
 
 import engine.core.GameSession;
+import ui.i18n.Messages;
 
 import javax.swing.*;
 
 public class SwingDrawOfferResolver implements GameSession.DrawArbiter {
-
-    // explanation shown when a position occurred for the third time
-    private static final String REPETITION_CLAIM_MESSAGE = "<html><center>A draw may be claimed. The same position<br>" +
-            "has now occurred three times.</center></html>";
 
     private final Board board;
 
@@ -80,7 +77,8 @@ public class SwingDrawOfferResolver implements GameSession.DrawArbiter {
     public boolean offerRepetitionDraw() {
         JFrame parent = (JFrame) SwingUtilities.getWindowAncestor(board);
         // same dialog as the fifty move claim, only the reason differs
-        FiftyRuleDraw dialog = new FiftyRuleDraw(parent, board.getTileSize(), REPETITION_CLAIM_MESSAGE);
+        FiftyRuleDraw dialog = new FiftyRuleDraw(parent, board.getTileSize(),
+                Messages.get("draw.claimRepetition"));
         dialog.setVisible(true);
         return dialog.getResult() == FiftyRuleDraw.DrawResult.ACCEPTED;
     }
