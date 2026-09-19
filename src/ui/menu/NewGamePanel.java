@@ -1,15 +1,18 @@
 package ui.menu;
 
 /*
- * Purpose: NewGamePanel is the screen where players set up a new game before it starts. It asks
- * for both player names and a time control, either one of the presets or a custom duration. I
- * collect everything into a GameConfig, so the board, the clocks and the saved game all start from
- * the same settings. Presets such as Bullet 2+1 also carry their increment.
+ * Purpose: NewGamePanel is the screen where players set up a new game before it starts. It asks for
+ * both player names and a time control, either one of the presets or a custom duration, and for the
+ * two things that change how a clock behaves rather than how long it runs: which mode it plays and
+ * how much time one side gets when the players want a game at odds. I collect everything into a
+ * GameConfig, so the board, the clocks and the saved game all start from the same settings.
  *
  * Owner: PBR208 - https://github.com/PBR208/
- * Version: 1.0
+ * Version: 1.1
  */
 
+import engine.model.ClockMode;
+import engine.model.ClockStage;
 import engine.model.GameConfig;
 import app.Main;
 import ui.i18n.Messages;
@@ -54,6 +57,15 @@ public class NewGamePanel extends JPanel {
     private long selectedBlackMs;
     private String selectedLabel;
     private long selectedIncrementMs;
+
+    // the clock mode a player picked, or null while the mode follows the preset's increment
+    private ClockMode selectedMode;
+    // seconds a Bronstein or simple delay clock waits on every move
+    private final JTextField delaySec = new JTextField("0", 4);
+    // Black's own starting time in minutes for a game at odds, empty for the same as White
+    private final JTextField blackOddsMin = new JTextField("", 4);
+    // a tournament control written the way players write it, such as "40/90, 30"
+    private final JTextField stagesField = new JTextField("", 10);
 
     /**
      * Builds the New Game screen with player names, time controls and the start and back buttons.
@@ -133,6 +145,17 @@ public class NewGamePanel extends JPanel {
         card.add(presets);
         card.add(Box.createVerticalStrut(10));
 
+        // the modes live in a group of their own, so picking one never deselects the time control
+        JPanel modes = new JPanel(new GridLayout(0, 4, 6, 6));
+        modes.setBackground(Theme.PANEL_BG);
+        ButtonGroup modeGroup = new ButtonGroup();
+        addModeButton(modes, modeGroup, Messages.get("newgame.modeSuddenDeath"), ClockMode.SUDDEN_DEATH);
+        addModeButton(modes, modeGroup, Messages.get("newgame.modeFischer"), ClockMode.FISCHER);
+        addModeButton(modes, modeGroup, Messages.get("newgame.modeBronstein"), ClockMode.BRONSTEIN);
+        addModeButton(modes, modeGroup, Messages.get("newgame.modeDelay"), ClockMode.SIMPLE_DELAY);
+        card.add(modes);
+        card.add(Box.createVerticalStrut(10));
+
         JPanel customRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         customRow.setBackground(Theme.PANEL_BG);
 
@@ -159,6 +182,29 @@ public class NewGamePanel extends JPanel {
         customRow.add(customSec);
         customRow.add(fieldLabel(Messages.get("newgame.seconds")));
         card.add(customRow);
+
+        // these two fields come after the custom row on purpose, because the tests that check the
+        // custom time find the minute and second fields by their place among all the text fields
+        JPanel extraRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        extraRow.setBackground(Theme.PANEL_BG);
+        styleField(delaySec);
+        styleField(blackOddsMin);
+        extraRow.add(fieldLabel(Messages.get("newgame.delay")));
+        extraRow.add(delaySec);
+        extraRow.add(fieldLabel(Messages.get("newgame.seconds")));
+        extraRow.add(fieldLabel("    " + Messages.get("newgame.blackGets")));
+        extraRow.add(blackOddsMin);
+        extraRow.add(fieldLabel(Messages.get("newgame.minutes")));
+        card.add(extraRow);
+
+        // the stages field comes last, for the same reason the two above it do
+        JPanel stageRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        stageRow.setBackground(Theme.PANEL_BG);
+        styleField(stagesField);
+        stageRow.add(fieldLabel(Messages.get("newgame.stages")));
+        stageRow.add(stagesField);
+        stageRow.add(fieldLabel(Messages.get("newgame.stagesExample")));
+        card.add(stageRow);
 
         // tells the player why a custom time can't be used
         customError.setForeground(new Color(210, 90, 90));
@@ -279,13 +325,105 @@ public class NewGamePanel extends JPanel {
             incrementMs = 0;
         }
 
+        // a player who picked no mode gets the one their time control implies, exactly as before
+        ClockMode mode = selectedMode != null ? selectedMode
+                : (incrementMs > 0 ? ClockMode.FISCHER : ClockMode.SUDDEN_DEATH);
+        // only a Fischer clock pays an increment, the two delay modes work with the delay instead
+        long increment = mode == ClockMode.FISCHER ? incrementMs : 0;
+        long delayMs = mode.usesDelay() ? readDelayMs() : 0;
+        // a game at odds gives Black a time of their own, an empty field gives both the same
+        blackMs = readBlackTimeMs(whiteMs);
+
+        // a tournament control starts on the time of its first stage, whatever the preset said
+        java.util.List<ClockStage> stages = ClockStage.parse(stagesField.getText());
+        if (!stages.isEmpty()) {
+            whiteMs = stages.get(0).timeMs();
+            blackMs = whiteMs;
+            label = "Stages " + stagesField.getText().trim();
+        }
+        // a game at odds gives Black a time of their own, and an empty field reads back as White's,
+        // which leaves whatever the stages or the preset already put there
+        long blackOddsMs = readBlackTimeMs(whiteMs);
+        blackMs = blackOddsMs == whiteMs ? blackMs : blackOddsMs;
+
         return new GameConfig(
                 whiteField.getText().trim(),
                 blackField.getText().trim(),
                 whiteMs,
                 blackMs,
                 label,
-                incrementMs);
+                increment,
+                mode,
+                delayMs,
+                stages);
+    }
+
+    /**
+     * Adds one clock mode button to the row of modes.
+     * <p>
+     * The four modes are a choice of their own, next to the time control rather than part of it, so
+     * they share a button group that has nothing to do with the presets. I style the button like the
+     * presets, let it record its mode when it is clicked and mark it while it is selected.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the button.
+     *
+     * @param pRow   the row the button is added to, never null
+     * @param pGroup the group that keeps the modes exclusive, never null
+     * @param pText  the button text, never null
+     * @param pMode  the mode this button stands for, never null
+     */
+    private void addModeButton(JPanel pRow, ButtonGroup pGroup, String pText, ClockMode pMode) {
+        JToggleButton button = new JToggleButton(pText);
+        UiComponents.style(button, new Font(Font.SANS_SERIF, Font.PLAIN, 12), Theme.BUTTON_SECONDARY);
+        button.addActionListener(e -> selectedMode = pMode);
+        button.addItemListener(e -> button.setBackground(button.isSelected() ? Theme.ACCENT : Theme.BUTTON_SECONDARY));
+        pGroup.add(button);
+        pRow.add(button);
+    }
+
+    /**
+     * Reads the delay a Bronstein or simple delay clock should work with.
+     * <p>
+     * The field holds whole seconds, because no time control in practice asks for less. A field that
+     * holds nothing readable means no delay, which is the same as not using one of those modes, so
+     * there is nothing to refuse the player over.
+     * <p>
+     * Time complexity: O(n) in the length of the field text. Space complexity: O(1).
+     *
+     * @return the delay in milliseconds, 0 or more
+     */
+    private long readDelayMs() {
+        try {
+            return Math.max(0, Long.parseLong(delaySec.getText().trim())) * 1000L;
+        } catch (NumberFormatException e) {
+            // a delay nobody can read is no delay at all
+            return 0;
+        }
+    }
+
+    /**
+     * Reads the time Black starts with, which is White's unless the players want a game at odds.
+     * <p>
+     * Giving the weaker side more time is the oldest handicap in chess, and the clocks have always
+     * been able to start from different times. An empty field means both sides get the same, and so
+     * does a field nobody can read, because refusing to start a game over it would help no one.
+     * <p>
+     * Time complexity: O(n) in the length of the field text. Space complexity: O(1).
+     *
+     * @param pWhiteMs White's starting time in milliseconds, used when Black wants no odds
+     * @return Black's starting time in milliseconds, 0 or more
+     */
+    private long readBlackTimeMs(long pWhiteMs) {
+        String text = blackOddsMin.getText().trim();
+        // an empty field is the normal case: both players start from the same time
+        if (text.isEmpty()) {
+            return pWhiteMs;
+        }
+        try {
+            return Math.max(0, Long.parseLong(text)) * 60_000L;
+        } catch (NumberFormatException e) {
+            return pWhiteMs;
+        }
     }
 
     /**
