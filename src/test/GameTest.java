@@ -410,6 +410,169 @@ public class GameTest {
     }
 
     /**
+     * Works out how bright a colour looks.
+     * <p>
+     * Two markings that differ only in hue fall together on a monochrome screen and for a player who
+     * sees no colour, so a test of the palette has to compare brightness rather than the raw values.
+     * The eye is far more sensitive to green than to red and least sensitive to blue, which is what
+     * the three weights of the standard luminance formula say.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pColour colour to measure, never null
+     * @return its brightness, 0 for black up to 255 for white
+     */
+    private static int brightnessOf(Color pColour) {
+        return (int) Math.round(0.2126 * pColour.getRed()
+                + 0.7152 * pColour.getGreen()
+                + 0.0722 * pColour.getBlue());
+    }
+
+    /**
+     * Reads the colour in the middle of one board square out of a painted board.
+     * <p>
+     * The board turns round to face the side to move, so the same square is at a different pixel
+     * after every move. Asking the board where it drew a square is the only reading that stays right.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pBoard  board that painted the image, never null
+     * @param pImage  the painted board, never null
+     * @param pSquare square to sample, 0 to 63
+     * @return the colour of that square's middle pixel
+     */
+    private static int centreColour(Board pBoard, BufferedImage pImage, int pSquare) {
+        int half = pBoard.getTileSize() / 2;
+        return pImage.getRGB(pBoard.toVisualX(Board.colOf(pSquare)) + half,
+                pBoard.toVisualY(Board.rowOf(pSquare)) + half);
+    }
+
+    /**
+     * Presses the mouse in the middle of a named square.
+     * <p>
+     * The board turns round to face the side to move, so the pixel a square sits at changes during a
+     * game. Asking the board where it draws the square keeps a test readable and right after a move.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pInput  input handler under test, never null
+     * @param pBoard  board it belongs to, never null
+     * @param pSquare square name such as "e2", never null
+     */
+    private static void pressOn(Input pInput, Board pBoard, String pSquare) {
+        int square = Bitboards.squareOf(pSquare);
+        int half = pBoard.getTileSize() / 2;
+        pInput.mousePressed(new java.awt.event.MouseEvent(pBoard, java.awt.event.MouseEvent.MOUSE_PRESSED,
+                System.currentTimeMillis(), 0, pBoard.toVisualX(Board.colOf(square)) + half,
+                pBoard.toVisualY(Board.rowOf(square)) + half, 1, false));
+    }
+
+    /**
+     * Releases the mouse in the middle of a named square.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pInput  input handler under test, never null
+     * @param pBoard  board it belongs to, never null
+     * @param pSquare square name such as "e4", never null
+     */
+    private static void releaseOn(Input pInput, Board pBoard, String pSquare) {
+        int square = Bitboards.squareOf(pSquare);
+        int half = pBoard.getTileSize() / 2;
+        pInput.mouseReleased(new java.awt.event.MouseEvent(pBoard, java.awt.event.MouseEvent.MOUSE_RELEASED,
+                System.currentTimeMillis(), 0, pBoard.toVisualX(Board.colOf(square)) + half,
+                pBoard.toVisualY(Board.rowOf(square)) + half, 1, false));
+    }
+
+    /**
+     * Clicks a named square, which is a press and a release without moving in between.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pInput  input handler under test, never null
+     * @param pBoard  board it belongs to, never null
+     * @param pSquare square name such as "e2", never null
+     */
+    private static void clickOn(Input pInput, Board pBoard, String pSquare) {
+        pressOn(pInput, pBoard, pSquare);
+        releaseOn(pInput, pBoard, pSquare);
+    }
+
+    /**
+     * Types a whole string into the board one character at a time.
+     * <p>
+     * Time complexity: O(n) for the n characters. Space complexity: O(1).
+     *
+     * @param pBoard board to type into, never null
+     * @param pText  what to type, never null
+     */
+    private static void typeInto(Board pBoard, String pText) {
+        for (char character : pText.toCharArray()) {
+            pBoard.typeCharacter(character);
+        }
+    }
+
+    /**
+     * Plays one move on a board by naming the two squares, and insists that it was legal.
+     * <p>
+     * A move used only to set a position up is refused silently otherwise, and the test that follows
+     * then fails for a reason that has nothing to do with what it was written to check.
+     * <p>
+     * Time complexity: O(m) for the m legal moves. Space complexity: O(1).
+     *
+     * @param pBoard board to play on, never null
+     * @param pFrom  square the piece stands on, such as "g1"; never null
+     * @param pTo    square it goes to, such as "f3"; never null
+     */
+    private static void playMoveOn(Board pBoard, String pFrom, String pTo) {
+        int move = pBoard.getSession().moveFor(Bitboards.squareOf(pFrom), Bitboards.squareOf(pTo));
+        check(pBoard.playMove(move), "the move " + pFrom + pTo + " must be legal while setting the position up");
+    }
+
+    /**
+     * Paints a board into an image, the way a window would.
+     * <p>
+     * Time complexity: O(64) for the squares plus the pieces. Space complexity: O(w * h).
+     *
+     * @param pBoard  board to paint, never null
+     * @param pWidth  width in pixels, greater than 0
+     * @param pHeight height in pixels, greater than 0
+     * @return the painted board, never null
+     */
+    private static BufferedImage paintBoard(Board pBoard, int pWidth, int pHeight) {
+        BufferedImage image = new BufferedImage(pWidth, pHeight, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics = image.createGraphics();
+        pBoard.paintComponent(graphics);
+        graphics.dispose();
+        return image;
+    }
+
+    /**
+     * Compares two painted boards over a band of rows.
+     * <p>
+     * Only part of the panel is worth comparing, because the clock bars are painted as well and a
+     * running clock would make two otherwise identical paintings differ.
+     * <p>
+     * Time complexity: O(w * r) for w pixels across r rows. Space complexity: O(1).
+     *
+     * @param pFirst   one painted board, never null
+     * @param pSecond  the other, never null
+     * @param pTopY    first row to compare
+     * @param pBottomY row to stop before
+     * @return true if every pixel in the band is the same
+     */
+    private static boolean sameRows(BufferedImage pFirst, BufferedImage pSecond, int pTopY, int pBottomY) {
+        for (int y = pTopY; y < pBottomY; y++) {
+            for (int x = 0; x < pFirst.getWidth(); x++) {
+                if (pFirst.getRGB(x, y) != pSecond.getRGB(x, y)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    /**
      * Finds a component by the name it was given.
      * <p>
      * Screens hold several text fields and several check boxes, and picking one by its position in
@@ -2011,6 +2174,321 @@ public class GameTest {
             // 2 is the exit code Main uses for a missing display
             checkEqual(2, process.exitValue(), "a headless start must report a failure, output: " + text);
             check(text.contains("graphical display"), "the output must explain that a display is missing, got: " + text);
+        });
+
+        // =================================================================
+        System.out.println("\n-- Input and accessibility ---------------------------------------");
+        // =================================================================
+
+        test("MoveSounds: a machine with no sound is silent rather than broken", () -> {
+            MoveSounds sounds = new MoveSounds();
+            check(sounds.isEnabled(), "moves must be heard unless somebody turns that off");
+
+            // this runs on build machines with no sound card at all, which must cost nothing
+            sounds.playMove();
+            sounds.playMove();
+
+            sounds.setEnabled(false);
+            check(!sounds.isEnabled(), "the sound must be possible to switch off");
+            sounds.playMove();
+
+            sounds.setEnabled(true);
+            check(sounds.isEnabled(), "and to switch back on");
+        });
+
+        test("Board: a move is played whether or not it can be heard", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    checkNotNull(board.getSounds(), "the board must own a move sound");
+
+                    board.getSounds().setEnabled(false);
+                    playMoveOn(board, "e2", "e4");
+                    checkEqual("e4", board.getSession().getMoveLog().get(0),
+                            "a silent move must still be a move");
+
+                    board.getSounds().setEnabled(true);
+                    playMoveOn(board, "e7", "e5");
+                    checkEqual(2, board.getSession().getMoveLog().size(),
+                            "and so must one that tries to make a sound");
+                }));
+
+        test("Board: a move can be typed in algebraic notation", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    typeInto(board, "e4");
+                    checkEqual("e4", board.getTypedMove(), "the typed move must be shown back");
+
+                    check(board.submitTypedMove(), "a move that reads correctly must be played");
+                    checkEqual("e4", board.getSession().getMoveLog().get(0), "and must be the move that was typed");
+                    checkEqual("", board.getTypedMove(), "the line must be empty again afterwards");
+                }));
+
+        test("Board: a move can be typed as the two squares it joins", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    typeInto(board, "g1f3");
+                    check(board.submitTypedMove(), "the square to square form must be understood");
+                    checkEqual("Nf3", board.getSession().getMoveLog().get(0),
+                            "and must reach the log as the notation of that move");
+                }));
+
+        test("Board: typing a move that means nothing here plays nothing and keeps the text", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    typeInto(board, "e5");
+
+                    check(!board.submitTypedMove(), "a move nobody can play must be refused");
+                    check(board.getSession().getMoveLog().isEmpty(), "and must not reach the game");
+                    checkEqual("e5", board.getTypedMove(),
+                            "the text must survive, so one wrong character can be taken back");
+
+                    board.backspaceTypedMove();
+                    checkEqual("e", board.getTypedMove(), "backspace must remove the last character");
+                    board.typeCharacter('4');
+                    check(board.submitTypedMove(), "the corrected move must be played");
+                    checkEqual("e4", board.getSession().getMoveLog().get(0), "and must be the corrected one");
+                }));
+
+        test("Board: only the characters moves are written with are taken", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    // the keys that mean enter, backspace and a space all arrive as characters too
+                    typeInto(board, "e\n4 \b!");
+                    checkEqual("e4", board.getTypedMove(), "everything that appears in no move must be dropped");
+
+                    board.clearTypedMove();
+                    checkEqual("", board.getTypedMove(), "clearing must empty the line");
+                }));
+
+        test("Board: a typed move may carry a check mark, and castling may be typed with zeros", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    GameSession session = board.getSession();
+
+                    // 1. e4 f5 2. Qh5+, where the check mark is part of what a player would read
+                    playMoveOn(board, "e2", "e4");
+                    playMoveOn(board, "f7", "f5");
+                    typeInto(board, "Qh5+");
+                    check(board.submitTypedMove(), "a move written with its check mark must be understood");
+                    checkEqual("Qh5+", session.getMoveLog().get(2), "and must be the move that was meant");
+
+                    // clear the way for White to castle. The queen goes back to d1 rather than to
+                    // e2, which would stand in the way of the bishop that has to reach c4.
+                    playMoveOn(board, "g7", "g6");
+                    playMoveOn(board, "h5", "d1");
+                    playMoveOn(board, "f8", "h6");
+                    playMoveOn(board, "g1", "f3");
+                    playMoveOn(board, "g8", "f6");
+                    playMoveOn(board, "f1", "c4");
+                    playMoveOn(board, "h8", "g8");
+
+                    typeInto(board, "0-0");
+                    check(board.submitTypedMove(), "a castling typed with zeros must be understood");
+                    check(session.getMoveLog().get(session.getMoveLog().size() - 1).startsWith("O-O"),
+                            "and must be written down as a castling, got: "
+                                    + session.getMoveLog().get(session.getMoveLog().size() - 1));
+                }));
+
+        test("Board: the move being typed is really drawn on the board", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    int width = board.getPreferredSize().width;
+                    int height = board.getPreferredSize().height;
+                    board.setSize(width, height);
+
+                    // only the bottom row of squares, where the typed move is drawn. The clock bars
+                    // are painted as well and a clock that counts would differ on its own.
+                    int tile = board.getTileSize();
+                    int top = tile + 7 * tile;
+                    int bottom = tile + 8 * tile;
+
+                    BufferedImage quiet = paintBoard(board, width, height);
+                    typeInto(board, "e4");
+                    BufferedImage typing = paintBoard(board, width, height);
+
+                    check(!sameRows(quiet, typing, top, bottom), "a move being typed must show up on the board");
+
+                    board.clearTypedMove();
+                    check(sameRows(quiet, paintBoard(board, width, height), top, bottom),
+                            "and the board must look untouched again once the line is cleared");
+                }));
+
+        test("Input: clicking a piece and then a square plays the move", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    Input input = new Input(board, board.getSession());
+
+                    clickOn(input, board, "e2");
+                    checkEqual(Bitboards.squareOf("e2"), board.getSelectedSquare(),
+                            "the clicked piece must stay picked up, waiting for its target");
+                    check(board.getTargetCount() > 0, "and must keep showing where it may go");
+
+                    clickOn(input, board, "e4");
+                    checkEqual(1, board.getSession().getMoveLog().size(), "the second click must play the move");
+                    checkEqual("e4", board.getSession().getMoveLog().get(0), "and it must be the move that was meant");
+                    check(board.getSelectedSquare() < 0, "nothing may stay picked up afterwards");
+                }));
+
+        test("Input: clicking the picked up piece again puts it down", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    Input input = new Input(board, board.getSession());
+
+                    clickOn(input, board, "e2");
+                    clickOn(input, board, "e2");
+                    check(board.getSelectedSquare() < 0, "clicking it again must put the piece down");
+                    check(board.getSession().getMoveLog().isEmpty(), "and must not play anything");
+                }));
+
+        test("Input: clicking another of your own pieces picks that one up instead", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    Input input = new Input(board, board.getSession());
+
+                    clickOn(input, board, "e2");
+                    // d2 is no square the e2 pawn can reach, so it is a change of mind
+                    clickOn(input, board, "d2");
+                    checkEqual(Bitboards.squareOf("d2"), board.getSelectedSquare(),
+                            "the second piece must be the one that is picked up now");
+                    check(board.getSession().getMoveLog().isEmpty(), "and nothing may have been played");
+
+                    clickOn(input, board, "d4");
+                    checkEqual("d4", board.getSession().getMoveLog().get(0),
+                            "and it must be the second piece that moves");
+                }));
+
+        test("Input: dragging a piece still works as it always did", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    Input input = new Input(board, board.getSession());
+
+                    pressOn(input, board, "g1");
+                    releaseOn(input, board, "f3");
+                    checkEqual("Nf3", board.getSession().getMoveLog().get(0),
+                            "a drag must play the move without any clicking");
+                    check(board.getSelectedSquare() < 0, "and must leave nothing picked up");
+                }));
+
+        test("Board: the move that was just played is remembered", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    check(board.getLastMoveFrom() < 0, "a game nobody has moved in has no last move");
+
+                    GameSession session = board.getSession();
+                    int from = Bitboards.squareOf("e2");
+                    int to = Bitboards.squareOf("e4");
+                    check(board.playMove(session.moveFor(from, to)), "the move must be played");
+                    checkEqual(from, board.getLastMoveFrom(), "the square it came from must be remembered");
+                    checkEqual(to, board.getLastMoveTo(), "and the square it went to");
+                }));
+
+        test("Board: the last move follows a takeback and a move played again", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    GameSession session = board.getSession();
+                    int e2 = Bitboards.squareOf("e2");
+                    int e7 = Bitboards.squareOf("e7");
+                    board.playMove(session.moveFor(e2, Bitboards.squareOf("e4")));
+                    board.playMove(session.moveFor(e7, Bitboards.squareOf("e5")));
+
+                    session.undo();
+                    checkEqual(e2, board.getLastMoveFrom(), "a taken back move must hand the mark to the move before it");
+                    session.undo();
+                    check(board.getLastMoveFrom() < 0, "and with every move taken back nothing is marked");
+
+                    session.redo();
+                    checkEqual(e2, board.getLastMoveFrom(), "a move played again is the last move once more");
+                }));
+
+        test("Board: a paused game takes no typed or played move", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    GameSession session = board.getSession();
+                    board.setPaused(true);
+
+                    board.typeCharacter('e');
+                    checkEqual("", board.getTypedMove(), "nothing may be typed while the game is paused");
+                    check(!board.playMove(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4"))),
+                            "a move must be refused while the game is paused");
+                    check(session.getMoveLog().isEmpty(), "and must not reach the game");
+                }));
+
+        test("Board: a move nobody can play marks nothing", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    check(!board.playMove(Moves.NONE), "a pair of squares that is no move must be refused");
+                    check(board.getLastMoveFrom() < 0, "and must not mark a square");
+                    check(board.getSession().getMoveLog().isEmpty(), "and must not reach the game");
+                }));
+
+        test("Board: the king that is in check is the square that gets marked", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    GameSession session = board.getSession();
+                    check(board.checkSquare() < 0, "nobody is in check at the start");
+
+                    // 1. e4 f5 2. Qh5+, the quickest check there is, once f7 is out of the way
+                    board.playMove(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+                    board.playMove(session.moveFor(Bitboards.squareOf("f7"), Bitboards.squareOf("f5")));
+                    check(board.checkSquare() < 0, "still nobody is in check");
+
+                    board.playMove(session.moveFor(Bitboards.squareOf("d1"), Bitboards.squareOf("h5")));
+                    checkEqual(Bitboards.squareOf("e8"), board.checkSquare(),
+                            "the black king must be the square that is marked");
+                }));
+
+        test("Board: the square a piece came from is really marked on the board", () ->
+                SwingUtilities.invokeAndWait(() -> {
+                    Board board = new Board(GameConfig.unlimited());
+                    GameSession session = board.getSession();
+                    board.playMove(session.moveFor(Bitboards.squareOf("e2"), Bitboards.squareOf("e4")));
+
+                    int width = board.getPreferredSize().width;
+                    int height = board.getPreferredSize().height;
+                    board.setSize(width, height);
+                    BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+                    Graphics2D graphics = image.createGraphics();
+                    board.paintComponent(graphics);
+                    graphics.dispose();
+
+                    // e2 stands empty now and carries the mark, b3 is an empty square of the same
+                    // shade that nothing marked, so the two may not come out the same colour
+                    int marked = centreColour(board, image, Bitboards.squareOf("e2"));
+                    int plain = centreColour(board, image, Bitboards.squareOf("b3"));
+                    check(marked != plain, "the square the pawn came from must be marked");
+                }));
+
+        test("Theme: the board markings can be told apart without seeing colour", () -> {
+            Color[] markings = {Theme.HINT, Theme.LAST_MOVE, Theme.CHECK};
+            String[] names = {"the hint", "the last move", "the check"};
+
+            for (int first = 0; first < markings.length; first++) {
+                for (int second = first + 1; second < markings.length; second++) {
+                    // two markings that only differ in hue vanish into each other on a monochrome
+                    // screen, and for somebody who sees no colour at all
+                    int difference = Math.abs(brightnessOf(markings[first]) - brightnessOf(markings[second]));
+                    check(difference >= 15, names[first] + " and " + names[second]
+                            + " must differ in brightness as well as in hue, got " + difference);
+                }
+            }
+        });
+
+        test("Theme: the hints are no longer the green that disappeared against a red marker", () -> {
+            // green against red is the pair a red green blind player cannot separate, and the hints
+            // used to be exactly the accent green
+            check(Theme.HINT.getBlue() > Theme.HINT.getGreen(),
+                    "the hint must lean blue rather than green, got: " + Theme.HINT);
+            check(Theme.HINT.getRed() < Theme.HINT.getBlue(),
+                    "and must not lean red either, got: " + Theme.HINT);
+            check(!Theme.HINT.equals(Theme.ACCENT), "the hint must not be the accent green any more");
+        });
+
+        test("Theme: every board marking lets the piece underneath show through", () -> {
+            // a marking that covered its square would hide the piece standing on it
+            check(Theme.HINT.getAlpha() < 255, "the hint must be see through, got: " + Theme.HINT.getAlpha());
+            check(Theme.LAST_MOVE.getAlpha() < 255,
+                    "the last move must be see through, got: " + Theme.LAST_MOVE.getAlpha());
+            check(Theme.CHECK.getAlpha() < 255, "the check must be see through, got: " + Theme.CHECK.getAlpha());
         });
 
         // =================================================================

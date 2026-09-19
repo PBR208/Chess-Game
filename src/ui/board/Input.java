@@ -1,11 +1,12 @@
 package ui.board;
 
 /*
- * Purpose: Input turns mouse actions on the board into moves of the game session. Pressing on a
- * piece picks it up and shows where it may go, dragging carries it with the mouse and releasing it
- * asks the session for the move between the two squares and plays it when there is one. I keep this
- * apart from the painting so the mouse handling can be tested with synthetic events. Only points on
- * the 8 by 8 squares count, so the clock bars and everything outside the board are ignored.
+ * Purpose: Input turns mouse actions on the board into moves of the game session. A piece can be
+ * dragged, pressed to pick it up, carried with the mouse and dropped on its square, or moved with
+ * two clicks, one on the piece and one on where it should go, which is what a player with a shaky
+ * hand or a touchpad needs since a drag that slips cancels the move. I keep this apart from the
+ * painting so the mouse handling can be tested with synthetic events. Only points on the 8 by 8
+ * squares count, so the clock bars and everything outside the board are ignored.
  *
  * Owner: PBR208 - https://github.com/PBR208/
  * Version: 2.0
@@ -19,8 +20,16 @@ import java.awt.event.MouseEvent;
 
 public class Input extends MouseAdapter {
 
+    // stands for "no square", the same way the board counts
+    private static final int NO_SQUARE = -1;
+
     private final Board board;
     private final GameSession session;
+
+    // a piece that was clicked and is waiting for a second click to say where it goes
+    private int armedSquare = NO_SQUARE;
+    // square the mouse went down on, so releasing can tell a click from a drag
+    private int pressedSquare = NO_SQUARE;
 
     public Input(Board pBoard, GameSession pSession) {
         this.board = pBoard;
@@ -52,6 +61,24 @@ public class Input extends MouseAdapter {
         }
 
         int square = Board.squareAt(board.toLogicalCol(pEvent.getX()), board.toLogicalRow(pEvent.getY()));
+
+        if (armedSquare >= 0) {
+            // pressing the armed piece again puts it back down
+            if (square == armedSquare) {
+                disarm();
+                return;
+            }
+            int move = session.moveFor(armedSquare, square);
+            // a square the armed piece may go to finishes the move that the first click began
+            if (move != Moves.NONE) {
+                board.playMove(move);
+                disarm();
+                return;
+            }
+            // anything else falls through, which arms another piece or clears the selection
+        }
+
+        pressedSquare = square;
         // keep the piece centred under the mouse while it is dragged
         board.setDragPosition(pEvent.getX() - board.getTileSize() / 2, pEvent.getY() - board.getTileSize() / 2);
         board.selectSquare(square);
@@ -99,13 +126,29 @@ public class Input extends MouseAdapter {
 
         if (from >= 0 && board.isOnBoard(pEvent.getX(), pEvent.getY())) {
             int to = Board.squareAt(board.toLogicalCol(pEvent.getX()), board.toLogicalRow(pEvent.getY()));
-            int move = session.moveFor(from, to);
-            // a pair of squares that is no legal move simply puts the piece back
-            if (move != Moves.NONE) {
-                session.play(move);
+
+            // letting go on the square the press began on is a click rather than a drag, so the
+            // piece stays picked up with its hints showing and waits for a second click
+            if (to == from && to == pressedSquare) {
+                armedSquare = from;
+                board.repaint();
+                return;
             }
+            // the board plays it, so the move that was just made is marked whoever entered it
+            board.playMove(session.moveFor(from, to));
         }
 
+        disarm();
+    }
+
+    /**
+     * Puts down whatever was picked up or armed.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
+    private void disarm() {
+        armedSquare = NO_SQUARE;
+        pressedSquare = NO_SQUARE;
         board.clearSelection();
         board.repaint();
     }

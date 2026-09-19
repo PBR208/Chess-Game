@@ -732,6 +732,21 @@ public final class GameSession {
     }
 
     /**
+     * Returns the move that was played last.
+     * <p>
+     * The board marks the last move, and a move can reach the game by a drag, a click, a typed move,
+     * a move played again after a takeback or a jump through the log. The session sees every one of
+     * them, so it is the one to ask, and a move that was taken back is no longer the last one.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the packed move played last, or Moves.NONE before the first move
+     */
+    public int lastMove() {
+        return playedMoves.isEmpty() ? Moves.NONE : playedMoves.get(playedMoves.size() - 1);
+    }
+
+    /**
      * Counts the positions of the current stretch again from the start.
      * <p>
      * A repetition count cannot be decremented on the way back, because an irreversible move clears
