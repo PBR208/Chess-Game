@@ -18,8 +18,10 @@ import engine.core.GameSession;
 import engine.core.MoveGen;
 import engine.core.Moves;
 import engine.core.Pieces;
+import engine.core.Position;
 import engine.core.San;
 import engine.model.GameConfig;
+import ui.i18n.Messages;
 import ui.theme.Theme;
 
 import javax.swing.*;
@@ -28,6 +30,7 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.util.ArrayList;
 import java.util.Locale;
 
 public class Board extends JPanel implements GameSession.View {
@@ -60,10 +63,6 @@ public class Board extends JPanel implements GameSession.View {
     private int dragX;
     private int dragY;
 
-    // the two squares of the move that was played last, or NO_SQUARE before anybody has moved
-    private int lastMoveFrom = NO_SQUARE;
-    private int lastMoveTo = NO_SQUARE;
-
     // the click that says a move was accepted, silent on a machine with no audio
     private final MoveSounds sounds = new MoveSounds();
 
@@ -82,8 +81,13 @@ public class Board extends JPanel implements GameSession.View {
 
     private final ChessClock whiteClock;
     private final ChessClock blackClock;
-    // added to a player's clock after each of their moves
-    private final long incrementMs;
+    // while a game is paused both clocks stand still and the board takes no moves
+    private boolean paused;
+
+    // laid over the squares while the game is paused, dark enough to say "not now"
+    private static final Color PAUSE_VEIL = new Color(0, 0, 0, 150);
+    // what both clocks showed after each ply, White's first, index 0 being the start of the game
+    private final ArrayList<ChessClock.Reading[]> clockSnapshots = new ArrayList<>();
 
     private final Color LIGHT_TILE = new Color(232, 235, 239);
     private final Color DARK_TILE = new Color(125, 135, 150);
@@ -107,13 +111,10 @@ public class Board extends JPanel implements GameSession.View {
     }
 
     /**
-     * Builds the game board for a new game with squares of a given size.
+     * Builds the game board for a new game from the standard starting position.
      * <p>
-     * A game needs a session to play in, two clocks, mouse input and a size that fits the player's
-     * screen. I store the square size first, since everything else is measured in squares, create
-     * the session on the starting position and hand it this board as its view, the promotion dialog
-     * and the draw dialogs, build both clocks with the configured times, size the panel for the board
-     * and the two clock bars, hook up the mouse and start White's clock.
+     * Almost every game begins where chess begins, so this is the constructor the New Game screen
+     * uses. I forward to the full one with the standard starting position.
      * <p>
      * Time complexity: O(p) for the p starting pieces. Space complexity: O(s^2) for the sprites
      * scaled to squares of s pixels.
@@ -124,6 +125,30 @@ public class Board extends JPanel implements GameSession.View {
      * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
      */
     public Board(GameConfig pConfig, int pTileSize) {
+        this(pConfig, pTileSize, Position.startPosition());
+    }
+
+    /**
+     * Builds the game board for a game that starts from a given position.
+     * <p>
+     * A game does not have to begin from the standard position: it can start from one that was set
+     * up in the position editor or loaded from a FEN, which is what studying an endgame needs. The
+     * session already accepts a position to begin from, so this only has to pass one on rather than
+     * place any pieces itself. I store the square size first, since everything else is measured in
+     * squares, create the session on that position and hand it this board as its view, the promotion
+     * dialog and the draw dialogs, build both clocks with the configured times, size the panel for
+     * the board and the two clock bars, hook up the mouse and start the clock of the side to move.
+     * <p>
+     * Time complexity: O(p) for the p pieces of the position. Space complexity: O(s^2) for the
+     * sprites scaled to squares of s pixels.
+     *
+     * @param pConfig   names, times and increment of the new game, never null
+     * @param pTileSize edge length of one square in pixels, at least MIN_TILE_SIZE
+     * @param pStart    position the game begins from, never null
+     * @throws NullPointerException     if pConfig or pStart is null
+     * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
+     */
+    public Board(GameConfig pConfig, int pTileSize, Position pStart) {
         // pieces this small would be hard to see and click
         if (pTileSize < MIN_TILE_SIZE) {
             throw new IllegalArgumentException("tile size " + pTileSize + " is below " + MIN_TILE_SIZE);
@@ -133,15 +158,25 @@ public class Board extends JPanel implements GameSession.View {
         // the board draws the pieces, so it owns their images
         this.sprites = new PieceSprites(pTileSize);
 
-        this.session = new GameSession();
+        this.session = new GameSession(pStart);
         session.setView(this);
         session.setPromotionPicker(new SwingPromotionChooser(this));
         session.setDrawArbiter(new SwingDrawOfferResolver(this));
+        // a draw one player offers the other is a different question from a draw the rules allow
+        session.setDrawOfferArbiter(new SwingDrawOfferArbiter(this));
+        // a game on a clock asks the opponent before a move is taken back, a casual one does not
+        session.setTakebackArbiter(new SwingTakebackArbiter(this, pConfig.whiteTimeMs() > 0));
 
-        this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), this::repaint, this::onTimeExpired);
-        this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), this::repaint, this::onTimeExpired);
-        // the same increment applies to both players
-        this.incrementMs = pConfig.incrementMs();
+        // both clocks play the same time control, but they may start from different times
+        this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), pConfig.clockMode(),
+                pConfig.incrementMs(), pConfig.delayMs(), this::repaint, this::onTimeExpired);
+        this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), pConfig.clockMode(),
+                pConfig.incrementMs(), pConfig.delayMs(), this::repaint, this::onTimeExpired);
+        // both players play the same tournament control, each counting their own moves through it
+        this.whiteClock.setStages(pConfig.stages());
+        this.blackClock.setStages(pConfig.stages());
+        // the clocks before a single move was played, which is where taking back the first move leads
+        clockSnapshots.add(readClocks());
 
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
 
@@ -177,7 +212,12 @@ public class Board extends JPanel implements GameSession.View {
             }
         });
 
-        whiteClock.start();
+        // a position that was set up may have Black to move, and then Black's time runs first
+        if (session.isWhiteToMove()) {
+            whiteClock.start();
+        } else {
+            blackClock.start();
+        }
     }
 
     /**
@@ -241,10 +281,12 @@ public class Board extends JPanel implements GameSession.View {
         }
 
         // the move that was just played, under the hints so a square a piece may go to still wins
-        if (lastMoveFrom >= 0) {
+        int lastFrom = getLastMoveFrom();
+        if (lastFrom >= 0) {
+            int lastTo = getLastMoveTo();
             g2d.setColor(Theme.LAST_MOVE);
-            g2d.fillRect(toVisualX(colOf(lastMoveFrom)), toVisualY(rowOf(lastMoveFrom)), tileSize, tileSize);
-            g2d.fillRect(toVisualX(colOf(lastMoveTo)), toVisualY(rowOf(lastMoveTo)), tileSize, tileSize);
+            g2d.fillRect(toVisualX(colOf(lastFrom)), toVisualY(rowOf(lastFrom)), tileSize, tileSize);
+            g2d.fillRect(toVisualX(colOf(lastTo)), toVisualY(rowOf(lastTo)), tileSize, tileSize);
         }
 
         // the squares a picked up piece may go to
@@ -280,8 +322,20 @@ public class Board extends JPanel implements GameSession.View {
             blackClock.draw(g2d, bottomY, boardWidth, clockHeight);
         }
 
-        // last, so a move being typed is never hidden behind a piece
+        // after the pieces, so a move being typed is never hidden behind one
         drawTypedMove(g2d);
+
+        // a paused game has to look paused, or a player waits for a board that is ignoring them
+        if (paused) {
+            g2d.setColor(PAUSE_VEIL);
+            g2d.fillRect(0, clockHeight, boardWidth, rows * tileSize);
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font(Font.SANS_SERIF, Font.BOLD, tileSize / 2));
+            FontMetrics metrics = g2d.getFontMetrics();
+            String text = Messages.get("game.paused");
+            g2d.drawString(text, (boardWidth - metrics.stringWidth(text)) / 2,
+                    clockHeight + rows * tileSize / 2);
+        }
     }
 
     /**
@@ -318,12 +372,12 @@ public class Board extends JPanel implements GameSession.View {
     }
 
     /**
-     * Plays a move and remembers which two squares it used.
+     * Plays a move a player made on this board.
      * <p>
-     * Every move a player makes comes through here, whether it was dragged, clicked or typed, so one
-     * place knows what was played last and the board can mark it. A player who looked away for a
-     * moment otherwise has to work out what changed by comparing the position with their memory of
-     * it. The session still decides whether the move is legal, and a move it refuses marks nothing.
+     * Every move a player makes comes through here, whether it was dragged, clicked or typed, so this
+     * is where a paused game refuses it and where an accepted move clicks. The session still decides
+     * whether the move is legal, and it is also what remembers the move, so the board can mark the
+     * last move however it was played, including one played again after a takeback.
      * <p>
      * Time complexity: O(m) for the m legal moves the session checks, plus the cost of the move.
      * Space complexity: O(1).
@@ -332,12 +386,14 @@ public class Board extends JPanel implements GameSession.View {
      * @return true if the move was played
      */
     public boolean playMove(int pMove) {
+        // a paused game takes no moves, whichever way they arrive
+        if (paused) {
+            return false;
+        }
         // a pair of squares that is no legal move simply puts the piece back
         if (pMove == Moves.NONE || !session.play(pMove)) {
             return false;
         }
-        lastMoveFrom = Moves.from(pMove);
-        lastMoveTo = Moves.to(pMove);
         // a move that was accepted should say so through more than one sense
         sounds.playMove();
         repaint();
@@ -371,7 +427,9 @@ public class Board extends JPanel implements GameSession.View {
      * @return the square, or -1 before anybody has moved
      */
     public int getLastMoveFrom() {
-        return lastMoveFrom;
+        // the session knows the last move however it was played, and forgets one that was taken back
+        int move = session.lastMove();
+        return move == Moves.NONE ? NO_SQUARE : Moves.from(move);
     }
 
     /**
@@ -382,7 +440,8 @@ public class Board extends JPanel implements GameSession.View {
      * @return the square, or -1 before anybody has moved
      */
     public int getLastMoveTo() {
-        return lastMoveTo;
+        int move = session.lastMove();
+        return move == Moves.NONE ? NO_SQUARE : Moves.to(move);
     }
 
     /**
@@ -402,7 +461,7 @@ public class Board extends JPanel implements GameSession.View {
      * Moving with the mouse asks a player to place a piece inside a square, which is a demand a
      * keyboard does not make. Typing the move is also how anybody reading the move log already
      * thinks about it. Characters that appear in no move are dropped, which is what the keys that
-     * mean enter or backspace look like from here, and a finished game accepts nothing at all.
+     * mean enter or backspace look like from here, and a paused or finished game accepts nothing.
      * <p>
      * Time complexity: O(1). Space complexity: O(1), the text has a fixed limit.
      *
@@ -410,7 +469,7 @@ public class Board extends JPanel implements GameSession.View {
      */
     public void typeCharacter(char pCharacter) {
         boolean acceptable = MOVE_CHARACTERS.indexOf(pCharacter) >= 0;
-        if (!acceptable || session.result().isFinished() || typedMove.length() >= MAX_TYPED_LENGTH) {
+        if (!acceptable || paused || session.result().isFinished() || typedMove.length() >= MAX_TYPED_LENGTH) {
             return;
         }
         typedMove.append(pCharacter);
@@ -637,14 +696,14 @@ public class Board extends JPanel implements GameSession.View {
      */
     @Override
     public void switchClocks(boolean pWhiteToMove) {
-        // only the side to move uses up time, the side that just moved earns its increment
+        // only the side to move uses up time, and the clock that just stopped settles its own mode
         if (pWhiteToMove) {
             blackClock.stop();
-            blackClock.addTime(incrementMs);
+            blackClock.onMoveFinished();
             whiteClock.start();
         } else {
             whiteClock.stop();
-            whiteClock.addTime(incrementMs);
+            whiteClock.onMoveFinished();
             blackClock.start();
         }
     }
@@ -670,6 +729,124 @@ public class Board extends JPanel implements GameSession.View {
         whiteClock.reset();
         blackClock.reset();
         whiteClock.start();
+        // a new game keeps none of the times the finished one left behind
+        clockSnapshots.clear();
+        clockSnapshots.add(readClocks());
+    }
+
+    /**
+     * Remembers what both clocks show after the move that was just played.
+     * <p>
+     * Taking a move back has to give both players the time they had before it, and only the clocks
+     * themselves know that. I store both clocks under the ply the game is at now, including how far
+     * each player has got through a tournament control, so a move that is taken back no longer
+     * counts towards the end of a stage either. A move played after something was taken back drops
+     * the snapshots of the line that was abandoned, so the list always describes the game as it
+     * really went.
+     * <p>
+     * Time complexity: O(d) for the d snapshots of an abandoned line, O(1) otherwise.
+     * Space complexity: O(1) per played move.
+     *
+     * @param pPly how many moves have been played, 1 after the first move
+     */
+    @Override
+    public void recordClocks(int pPly) {
+        // a new move after an undo replaces the times of the line nobody is playing any more
+        while (clockSnapshots.size() > pPly) {
+            clockSnapshots.remove(clockSnapshots.size() - 1);
+        }
+        clockSnapshots.add(readClocks());
+    }
+
+    /**
+     * Reads both clocks at this moment.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return White's reading followed by Black's, never null
+     */
+    private ChessClock.Reading[] readClocks() {
+        return new ChessClock.Reading[]{whiteClock.reading(), blackClock.reading()};
+    }
+
+    /**
+     * Puts both clocks back to what they showed at a ply and starts the one of the player to move.
+     * <p>
+     * A taken back move gives the time back that was spent on it. I stop both clocks, set them to
+     * what was recorded for that ply and start the clock of whoever is to move there. A ply nobody
+     * recorded, which can only happen for a game that was loaded rather than played, leaves the
+     * times alone and only hands the clock over. A paused game stays paused, so neither clock starts
+     * until the players resume it.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pPly         how many moves are played now, 0 at the starting position
+     * @param pWhiteToMove true if White is to move at that ply
+     */
+    @Override
+    public void restoreClocks(int pPly, boolean pWhiteToMove) {
+        whiteClock.stop();
+        blackClock.stop();
+
+        if (pPly < clockSnapshots.size()) {
+            ChessClock.Reading[] readings = clockSnapshots.get(pPly);
+            whiteClock.restore(readings[0]);
+            blackClock.restore(readings[1]);
+        }
+
+        // the player to move is the one whose clock runs, and resuming a paused game starts it
+        if (!paused) {
+            if (pWhiteToMove) {
+                whiteClock.start();
+            } else {
+                blackClock.start();
+            }
+        }
+    }
+
+    /**
+     * Pauses or resumes the game.
+     * <p>
+     * Players step away from a board, and until now the only way to stop the clock was to finish the
+     * game. Pausing stops both clocks and makes the board ignore the mouse, so a piece cannot be
+     * moved while nobody is watching the time. Resuming starts the clock of whoever is to move, and
+     * never starts one at all when the game is already over. Asking for the state the game is
+     * already in does nothing, so a pause cannot be stacked.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pPaused true to pause the game, false to let it run again
+     */
+    public void setPaused(boolean pPaused) {
+        // nothing to do, and pausing twice must not lose track of whose clock was running
+        if (pPaused == paused) {
+            return;
+        }
+        paused = pPaused;
+
+        if (paused) {
+            whiteClock.stop();
+            blackClock.stop();
+        } else if (!session.result().isFinished()) {
+            // the clock of the player to move is the one that carries on
+            if (session.isWhiteToMove()) {
+                whiteClock.start();
+            } else {
+                blackClock.start();
+            }
+        }
+        repaint();
+    }
+
+    /**
+     * Tells whether the game is paused.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return true while both clocks stand still and the board takes no moves
+     */
+    public boolean isPaused() {
+        return paused;
     }
 
     /**
