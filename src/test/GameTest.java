@@ -16,6 +16,7 @@ import engine.imports.*;
 import engine.model.*;
 import engine.persistence.*;
 import engine.pieces.*;
+import engine.search.*;
 import ui.board.*;
 import ui.i18n.*;
 import ui.menu.*;
@@ -407,6 +408,70 @@ public class GameTest {
             }
         }
         return null;
+    }
+
+    /**
+     * Turns a position into its mirror image: the board upside down and the colours swapped.
+     * <p>
+     * Every evaluation term has to be written twice, once for each side, and forgetting one of them
+     * is the easiest mistake to make and the hardest to see. A mirrored position is the same position
+     * seen from the other side, so its score has to be the exact opposite. The side to move is left
+     * alone on purpose, which is what makes the score the opposite rather than the same: the same
+     * player is now looking at what used to be the other side's position.
+     * <p>
+     * Time complexity: O(c) in the length of the text. Space complexity: O(c) for the new text.
+     *
+     * @param pFen a position in Forsyth Edwards notation, never null
+     * @return the mirrored position, never null
+     */
+    private static String mirrorFen(String pFen) {
+        String[] fields = pFen.trim().split("\\s+");
+        String[] ranks = fields[0].split("/");
+
+        StringBuilder placement = new StringBuilder();
+        // the ranks come back in the opposite order and every piece changes colour
+        for (int index = ranks.length - 1; index >= 0; index--) {
+            if (placement.length() > 0) {
+                placement.append('/');
+            }
+            for (char symbol : ranks[index].toCharArray()) {
+                placement.append(swapCase(symbol));
+            }
+        }
+
+        String castling = "-";
+        if (!fields[2].equals("-")) {
+            StringBuilder rights = new StringBuilder();
+            // the rights change sides too, and have to come back in the order the standard asks for
+            for (char wanted : new char[]{'K', 'Q', 'k', 'q'}) {
+                if (fields[2].indexOf(swapCase(wanted)) >= 0) {
+                    rights.append(wanted);
+                }
+            }
+            castling = rights.length() == 0 ? "-" : rights.toString();
+        }
+
+        return placement + " " + fields[1] + " " + castling + " -"
+                + " " + (fields.length > 4 ? fields[4] : "0")
+                + " " + (fields.length > 5 ? fields[5] : "1");
+    }
+
+    /**
+     * Turns an upper case letter into a lower case one and the other way round.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pSymbol the character to swap, may be a digit or a slash
+     * @return the swapped letter, or the character itself when it is not a letter
+     */
+    private static char swapCase(char pSymbol) {
+        if (Character.isUpperCase(pSymbol)) {
+            return Character.toLowerCase(pSymbol);
+        }
+        if (Character.isLowerCase(pSymbol)) {
+            return Character.toUpperCase(pSymbol);
+        }
+        return pSymbol;
     }
 
     /**
@@ -2174,6 +2239,163 @@ public class GameTest {
             // 2 is the exit code Main uses for a missing display
             checkEqual(2, process.exitValue(), "a headless start must report a failure, output: " + text);
             check(text.contains("graphical display"), "the output must explain that a display is missing, got: " + text);
+        });
+
+        // =================================================================
+        System.out.println("\n-- Evaluation ----------------------------------------------------");
+        // =================================================================
+
+        test("Evaluator: a position is worth the exact opposite of its mirror image", () -> {
+            // turning the board round and swapping the colours has to turn the score round too,
+            // which catches every place a term was added for White but forgotten for Black
+            String[] positions = {
+                    Fen.START_POSITION,
+                    "4k3/8/8/8/8/8/8/3QK3 w - - 0 1",
+                    "r3k2r/pp3ppp/2n2n2/2bpp3/4P3/2NP1N2/PPP2PPP/R1B1KB1R w - - 4 8",
+                    "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1",
+                    "4k3/pp4pp/8/8/8/8/PPP3PP/4K3 b - - 0 1",
+            };
+            for (String fen : positions) {
+                int score = Evaluator.evaluate(Fen.parse(fen));
+                int mirrored = Evaluator.evaluate(Fen.parse(mirrorFen(fen)));
+                checkEqual(-score, mirrored,
+                        "the mirror of " + fen + " must be worth the opposite, got " + score + " and " + mirrored);
+            }
+        });
+
+        test("Evaluator: the starting position is level", () -> {
+            // it is its own mirror image, so anything other than zero would mean a lopsided table
+            checkEqual(0, Evaluator.evaluate(Fen.parse(Fen.START_POSITION)),
+                    "neither side may start out better off");
+        });
+
+        test("Evaluator: a queen more is worth about a queen", () -> {
+            int score = Evaluator.evaluate(Fen.parse("4k3/8/8/8/8/8/8/3QK3 w - - 0 1"));
+            check(score > 800, "an extra queen must be worth a lot, got " + score);
+            check(score < 1400, "but not more than a queen and a half, got " + score);
+        });
+
+        test("Evaluator: the king belongs behind its pawns early and in the middle late", () -> {
+            // Both sides hold a queen, two rooks and eight pawns, and the two positions differ in
+            // nothing but the square the white king stands on, so only that can decide between
+            // them. Material has to match exactly here: an extra piece is worth several times what
+            // a king's shelter is, and would decide the comparison on its own.
+            int castled = Evaluator.evaluate(Fen.parse("r2qk2r/pppppppp/8/8/8/8/PPPPPPPP/R2Q1RK1 w kq - 0 1"));
+            int exposed = Evaluator.evaluate(Fen.parse("r2qk2r/pppppppp/8/8/4K3/8/PPPPPPPP/R2Q1R2 w kq - 0 1"));
+            check(castled > exposed,
+                    "a sheltered king must beat one in the open while the board is full, got "
+                            + castled + " and " + exposed);
+
+            // with the pieces gone it is the other way round, which is what tapering is for
+            int central = Evaluator.evaluate(Fen.parse("4k3/8/8/8/4K3/8/8/8 w - - 0 1"));
+            int corner = Evaluator.evaluate(Fen.parse("4k3/8/8/8/8/8/8/K7 w - - 0 1"));
+            check(central > corner,
+                    "a central king must beat one in the corner in an endgame, got "
+                            + central + " and " + corner);
+        });
+
+        test("Evaluator: a passed pawn is worth more the further it has come", () -> {
+            // the same material either way, so only how far the pawn has come can decide it
+            int advanced = Evaluator.evaluate(Fen.parse("4k3/p7/4P3/8/8/8/8/4K3 w - - 0 1"));
+            int athome = Evaluator.evaluate(Fen.parse("4k3/p7/8/8/8/8/4P3/4K3 w - - 0 1"));
+            check(advanced > athome,
+                    "a pawn two squares from queening must beat one still at home, got "
+                            + advanced + " and " + athome);
+        });
+
+        // =================================================================
+        System.out.println("\n-- Search --------------------------------------------------------");
+        // =================================================================
+
+        test("Searcher: finds a mate in one", () -> {
+            // the black king is walled in by its own pawns, so the rook mates on the back rank
+            Position position = Fen.parse("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1");
+            Searcher.Result result = new Searcher().search(position, Searcher.Limits.toDepth(3));
+
+            checkEqual("a1a8", Moves.toUci(result.bestMove), "the rook must go to the back rank");
+            check(result.isMate(), "and the score must say it is mate, got " + result.score);
+            check(result.score > 0, "in favour of the side giving it, got " + result.score);
+        });
+
+        test("Searcher: takes a piece that is there for the taking", () -> {
+            // the black queen stands on a square a pawn attacks and nothing defends
+            Position position = Fen.parse("4k3/8/8/3q4/4P3/8/8/4K3 w - - 0 1");
+            int standingStill = Evaluator.evaluate(position);
+            Searcher.Result result = new Searcher().search(position, Searcher.Limits.toDepth(4));
+
+            checkEqual("e4d5", Moves.toUci(result.bestMove), "the pawn must take the queen");
+            // A score says what the position becomes, not what changed hands. White starts a queen
+            // down and ends a pawn up against a bare king, so the number to expect is a modest plus
+            // rather than the value of a queen. What proves the capture was found is the distance
+            // from where the position stood before it.
+            check(result.score > 0, "taking the queen must leave White ahead, got " + result.score);
+            check(result.score > standingStill + 700,
+                    "and far better than leaving it there, which stood at " + standingStill
+                            + ", got " + result.score);
+        });
+
+        test("Searcher: does not walk into a recapture it cannot afford", () -> {
+            // taking the pawn on d5 loses the queen to the pawn on c6, so a search that stops in the
+            // middle of the exchange would play it and one that follows captures out will not
+            Position position = Fen.parse("4k3/8/2p5/3p4/8/8/8/3QK3 w - - 0 1");
+            Searcher.Result result = new Searcher().search(position, Searcher.Limits.toDepth(4));
+
+            check(!"d1d5".equals(Moves.toUci(result.bestMove)),
+                    "the queen must not take a defended pawn, got " + Moves.toUci(result.bestMove));
+        });
+
+        test("Searcher: leaves the position exactly as it found it", () -> {
+            // a search makes and takes back thousands of moves, and one that does not match up
+            // leaves a board that looks right long before anybody notices it is not
+            String fen = "r3k2r/pp3ppp/2n2n2/2bpp3/4P3/2NP1N2/PPP2PPP/R1B1KB1R w KQkq - 4 8";
+            Position position = Fen.parse(fen);
+            long keyBefore = position.key();
+
+            new Searcher().search(position, Searcher.Limits.toDepth(4));
+
+            checkEqual(fen, Fen.write(position), "every move must have been taken back");
+            checkEqual(keyBefore, position.key(), "and the position key must be back where it was");
+            checkEqual(position.computeKey(), position.key(), "and must still be the honest one");
+        });
+
+        test("Searcher: a position with no move at all reports none", () -> {
+            // stalemate: Black is not in check and has nothing to play
+            Position stalemate = Fen.parse("7k/5Q2/6K1/8/8/8/8/8 b - - 0 1");
+            Searcher.Result result = new Searcher().search(stalemate, Searcher.Limits.toDepth(2));
+
+            checkEqual(Moves.NONE, result.bestMove, "there is no move to report");
+            checkEqual(0, result.score, "and a stalemate is a draw");
+        });
+
+        test("Searcher: a node limit stops it early", () -> {
+            Position position = Fen.parse(Fen.START_POSITION);
+            Searcher.Result limited = new Searcher().search(position,
+                    new Searcher.Limits(64, 4000, Long.MAX_VALUE));
+
+            check(limited.nodes <= 4000 + MoveGen.MAX_MOVES,
+                    "the search must stop near its node limit, visited " + limited.nodes);
+            check(limited.depth < 64, "and must not have finished all 64 depths, got " + limited.depth);
+        });
+
+        test("Searcher: looking deeper finds the line it expects to follow", () -> {
+            Position position = Fen.parse("6k1/5ppp/8/8/8/8/8/R5K1 w - - 0 1");
+            Searcher.Result result = new Searcher().search(position, Searcher.Limits.toDepth(3));
+
+            check(result.line.length >= 1, "a search that found a move must say what it expects");
+            checkEqual(result.bestMove, result.line[0], "the line must start with the move it would play");
+            check(result.lineText().startsWith("a1a8"),
+                    "and must read as moves, got: " + result.lineText());
+        });
+
+        test("Searcher: searching on its own thread leaves the original position alone", () -> {
+            String fen = "r3k2r/pp3ppp/2n2n2/2bpp3/4P3/2NP1N2/PPP2PPP/R1B1KB1R w KQkq - 4 8";
+            Position position = Fen.parse(fen);
+
+            Searcher.Result result = Searcher.searchOnThread(position, Searcher.Limits.toDepth(3));
+
+            checkNotNull(result, "the thread must hand a result back");
+            check(result.bestMove != Moves.NONE, "and must have found a move");
+            checkEqual(fen, Fen.write(position), "the position handed in must not have been touched");
         });
 
         // =================================================================
