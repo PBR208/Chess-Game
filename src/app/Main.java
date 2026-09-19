@@ -13,6 +13,7 @@ package app;
 
 import engine.core.GameResult;
 import engine.core.GameSession;
+import engine.core.Pieces;
 import engine.core.Termination;
 import engine.model.GameConfig;
 import engine.model.GameRecord;
@@ -175,29 +176,43 @@ public class Main {
     }
 
     /**
-     * Builds the row of actions under the board.
+     * Builds the rows of actions under the board.
      * <p>
      * Players need a way to take a move back and to play it again, and both only make sense while
-     * there is something to take back or replay. I build the two buttons, hand the clicks to the
-     * session, which asks the opponent in a timed game, and let the board tell me whenever the game
-     * changed so the buttons can be greyed out exactly when they would do nothing.
+     * there is something to take back or replay. The session asks the opponent before a move comes
+     * back in a timed game, so the button only hands the click over. Players also step away from a
+     * game, and stopping the clock should not mean ending it. The pause button pauses and resumes the
+     * board and says which of the two it will do next, so a player always reads the action rather
+     * than the state. Everything it needs is on the board itself, which stops the clocks and refuses
+     * moves while it is paused.
      * <p>
-     * Players also step away from a game, and stopping the clock should not mean ending it. The
-     * pause button pauses and resumes the board and says which of the two it will do next, so a
-     * player always reads the action rather than the state. Everything it needs is on the board
-     * itself, which stops the clocks and refuses moves while it is paused.
+     * Games between people end by agreement or by resignation far more often than by mate, so the
+     * second row resigns, offers a draw and claims one. Resigning asks once, because it is final and a
+     * misclick would end the game. Offering a draw goes to the opponent, and claiming one goes to the
+     * rules, which is why claiming is only live while a rule actually allows it. The session says
+     * whenever the game changed, so every button is grey exactly when pressing it would do nothing.
+     * I keep the two groups on rows of their own, so the longer German labels still fit beside a
+     * small board.
      * <p>
-     * Time complexity: O(1). Space complexity: O(1) apart from the panel and its buttons.
+     * It is public for the same reason fitToScreen is: the rule about when each action is live is
+     * worth checking, and a test should be able to build the rows from a board without starting the
+     * whole application around it.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the panels and their six buttons.
      *
      * @param pBoard the board of the running game, never null
-     * @return the action row, never null
+     * @return the panel holding both rows of actions, never null
      * @throws NullPointerException if pBoard is null
      */
-    private static JPanel actionBar(Board pBoard) {
+    public static JPanel actionBar(Board pBoard) {
         GameSession session = pBoard.getSession();
 
-        JPanel bar = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 6));
+        JPanel bar = new JPanel(new GridLayout(2, 1));
         bar.setBackground(Theme.PANEL_BG);
+        JPanel moveRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 6));
+        moveRow.setBackground(Theme.PANEL_BG);
+        JPanel endRow = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 6));
+        endRow.setBackground(Theme.PANEL_BG);
 
         Font buttonFont = new Font(Font.SANS_SERIF, Font.PLAIN, 13);
         JButton takeBack = UiComponents.button(Messages.get("game.takeBack"), buttonFont, Theme.BUTTON_SECONDARY);
@@ -206,6 +221,12 @@ public class Main {
         replay.setName("replayMove");
         JButton pause = UiComponents.button(Messages.get("game.pause"), buttonFont, Theme.BUTTON_SECONDARY);
         pause.setName("pause");
+        JButton resign = UiComponents.button(Messages.get("game.resign"), buttonFont, Theme.BUTTON_SECONDARY);
+        resign.setName("resign");
+        JButton offerDraw = UiComponents.button(Messages.get("game.offerDraw"), buttonFont, Theme.BUTTON_SECONDARY);
+        offerDraw.setName("offerDraw");
+        JButton claimDraw = UiComponents.button(Messages.get("game.claimDraw"), buttonFont, Theme.BUTTON_SECONDARY);
+        claimDraw.setName("claimDraw");
 
         // the session decides whether the move really comes back, since a timed game asks the opponent
         takeBack.addActionListener(e -> session.requestTakeback());
@@ -215,18 +236,39 @@ public class Main {
             // the button names what pressing it will do next, not what the game is doing now
             pause.setText(Messages.get(pBoard.isPaused() ? "game.resume" : "game.pause"));
         });
+        resign.addActionListener(e -> {
+            // giving up is final, so it is the one action worth asking about twice
+            int answer = JOptionPane.showConfirmDialog(pBoard, Messages.get("game.resignQuestion"),
+                    Messages.get("game.resign"), JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE);
+            if (answer == JOptionPane.YES_OPTION) {
+                // the player to move is the one who gives up
+                session.resign(session.isWhiteToMove() ? Pieces.WHITE : Pieces.BLACK);
+            }
+        });
+        // the session asks the opponent, and the rules answer the claim
+        offerDraw.addActionListener(e -> session.offerDraw());
+        claimDraw.addActionListener(e -> session.claimDraw());
 
         // a button that would do nothing says so by being grey
         Runnable refresh = () -> {
+            boolean running = !session.result().isFinished();
             takeBack.setEnabled(session.canUndo());
             replay.setEnabled(session.canRedo());
+            resign.setEnabled(running);
+            offerDraw.setEnabled(running);
+            claimDraw.setEnabled(running && session.isDrawClaimable());
         };
-        pBoard.setGameChangedListener(refresh);
+        session.setStateListener(refresh);
         refresh.run();
 
-        bar.add(takeBack);
-        bar.add(replay);
-        bar.add(pause);
+        moveRow.add(takeBack);
+        moveRow.add(replay);
+        moveRow.add(pause);
+        endRow.add(resign);
+        endRow.add(offerDraw);
+        endRow.add(claimDraw);
+        bar.add(moveRow);
+        bar.add(endRow);
         return bar;
     }
 
