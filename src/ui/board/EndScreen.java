@@ -11,6 +11,7 @@ package ui.board;
  * Version: 1.0
  */
 
+import ui.i18n.Messages;
 import ui.theme.Theme;
 import ui.theme.UiComponents;
 
@@ -60,7 +61,8 @@ public class EndScreen extends JDialog {
 
         textPanel.add(txt, BorderLayout.CENTER);
 
-        JButton returnButton = UiComponents.button("Return to Menu", new Font(Font.DIALOG, Font.PLAIN, Math.max(pTileSize / 8, 12)), Theme.ACCENT);
+        JButton returnButton = UiComponents.button(Messages.get("end.returnToMenu"),
+                new Font(Font.DIALOG, Font.PLAIN, Math.max(pTileSize / 8, 12)), Theme.ACCENT);
         // the button closes the dialog and leaves the finished game
         returnButton.addActionListener(e -> {
             dispose();

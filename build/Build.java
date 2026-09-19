@@ -43,6 +43,18 @@ public class Build {
     private static final Path TEST_CLASSES = OUT.resolve("test-classes");
     private static final Path JAR = OUT.resolve("Chess-Game.jar");
 
+    // the finished application image and the runtime it carries
+    private static final Path PACKAGE_DIR = OUT.resolve("package");
+    // jpackage wants a folder holding nothing but the jar, so the jar is copied into this one
+    private static final Path PACKAGE_INPUT = OUT.resolve("package-input");
+    // the linked runtime is built outside the image folder on purpose. jpackage copies it into the
+    // image, so leaving it in there would mean shipping the whole runtime twice in every upload
+    private static final Path PACKAGE_RUNTIME = OUT.resolve("package-runtime");
+    // the only modules the game uses, which is what keeps the bundled runtime small
+    private static final String RUNTIME_MODULES = "java.base,java.desktop,java.logging";
+    // name of the packaged application, used for the folder and for the launcher inside it
+    private static final String APP_NAME = "Chess-Game";
+
     // entry point of the game, written into the jar manifest
     private static final String MAIN_CLASS = "app.Main";
 
@@ -91,7 +103,9 @@ public class Build {
                 case "test-gui" -> test(true);
                 case "jar" -> jar();
                 case "run" -> run();
-                default -> fail("unknown target '" + target + "', expected clean, compile, verify, test, test-gui, jar or run");
+                case "package" -> packageApp();
+                default -> fail("unknown target '" + target
+                        + "', expected clean, compile, verify, test, test-gui, jar, run or package");
             }
         }
     }
@@ -464,6 +478,105 @@ public class Build {
     }
 
     /**
+     * Builds a self contained application image with a Java runtime inside it.
+     * <p>
+     * The commonest way for this game to fail has nothing to do with chess: somebody downloads the
+     * jar, has no Java or the wrong one, and never gets to the board. An application image carries
+     * its own runtime, so there is nothing to install and nothing to match. I build the jar first,
+     * then link a runtime out of only the three modules the game actually uses, which is a fraction
+     * of a whole JDK, and hand that runtime to jpackage together with a folder holding nothing but
+     * the jar. The output folder is cleared first, because both tools refuse to write into one that
+     * already exists.
+     * <p>
+     * jpackage cannot build for another operating system, so this produces an image for the machine
+     * it runs on and each platform has to build its own. An app image needs no extra tooling, while
+     * the installer formats do: an msi or exe needs WiX on Windows, and a signed and notarized macOS
+     * app needs an Apple developer account, which is a manual step rather than something CI can do.
+     * <p>
+     * Time complexity: O(n + r) for n bytes of application and r bytes of runtime that get copied.
+     * Space complexity: O(n + r) on disk for the finished image.
+     *
+     * @throws IOException          if the output cannot be written or the jar cannot be copied
+     * @throws InterruptedException if the script is interrupted while jlink or jpackage runs
+     */
+    private static void packageApp() throws IOException, InterruptedException {
+        // the image is built out of the jar, so the jar has to exist and be current
+        jar();
+
+        deleteRecursively(PACKAGE_DIR);
+        deleteRecursively(PACKAGE_INPUT);
+        deleteRecursively(PACKAGE_RUNTIME);
+        Files.createDirectories(PACKAGE_INPUT);
+        // jpackage copies everything it finds in the input folder, so it gets the jar alone
+        Files.copy(JAR, PACKAGE_INPUT.resolve(JAR.getFileName()), StandardCopyOption.REPLACE_EXISTING);
+
+        Path runtime = PACKAGE_RUNTIME;
+        int linked = runProcess(List.of(toolExecutable("jlink"),
+                "--add-modules", RUNTIME_MODULES,
+                "--strip-debug",
+                "--no-header-files",
+                "--no-man-pages",
+                "--output", runtime.toString()));
+        if (linked != 0) {
+            fail("jlink could not build the runtime");
+        }
+
+        int packaged = runProcess(List.of(toolExecutable("jpackage"),
+                "--type", "app-image",
+                "--name", APP_NAME,
+                "--app-version", packageVersion(),
+                "--input", PACKAGE_INPUT.toString(),
+                "--main-jar", JAR.getFileName().toString(),
+                "--main-class", MAIN_CLASS,
+                "--runtime-image", runtime.toString(),
+                "--dest", PACKAGE_DIR.toString()));
+        if (packaged != 0) {
+            fail("jpackage could not build the application image");
+        }
+
+        System.out.println("packaged the application image into " + PACKAGE_DIR
+                + " for " + System.getProperty("os.name"));
+    }
+
+    /**
+     * Returns a version jpackage is willing to accept.
+     * <p>
+     * jpackage only takes a version made of numbers and dots, and this script defaults to "dev" when
+     * nobody passes one, which would fail the whole packaging run over a label. A development build
+     * gets a stand in version instead, and a release passes its real one with -Dchess.version.
+     * <p>
+     * Time complexity: O(n) in the length of the version. Space complexity: O(1).
+     *
+     * @return the version to stamp on the application image, never null
+     */
+    private static String packageVersion() {
+        // anything that is not a number or a dot is a name rather than a version
+        for (char symbol : VERSION.toCharArray()) {
+            if (!Character.isDigit(symbol) && symbol != '.') {
+                return "1.0.0";
+            }
+        }
+        return VERSION.isEmpty() ? "1.0.0" : VERSION;
+    }
+
+    /**
+     * Returns one of the JDK's own tools, from the same installation that runs this script.
+     * <p>
+     * jlink and jpackage have to come from the JDK the build uses, not from whichever one happens to
+     * be first on the PATH, or the runtime inside the image would not be the one the jar was built
+     * for. I build the path from the java.home property. The name needs no .exe on Windows, because
+     * process creation adds it there.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pTool name of the tool, such as jlink or jpackage; never null
+     * @return the path of that tool, never null
+     */
+    private static String toolExecutable(String pTool) {
+        return Paths.get(System.getProperty("java.home"), "bin", pTool).toString();
+    }
+
+    /**
      * Returns the java launcher of the JDK that runs this script.
      * <p>
      * Child JVMs should use the same Java installation as the build, not whichever java comes first
@@ -518,6 +631,10 @@ public class Build {
         try (Stream<Path> paths = Files.walk(pDirectory)) {
             // children sort after their parents, so reverse order deletes children first
             for (Path path : paths.sorted(Comparator.reverseOrder()).collect(Collectors.toList())) {
+                // jpackage leaves its launcher read only, and Windows refuses to delete a read only
+                // file, which made a second packaging run fail with an access denied error every
+                // time. Clearing the flag first costs nothing anywhere else.
+                path.toFile().setWritable(true);
                 Files.delete(path);
             }
         }
