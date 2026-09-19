@@ -2,12 +2,14 @@ package ui.board;
 
 /*
  * Purpose: Board is the Swing panel that shows a running game. It paints the tiles, the pieces, the
- * legal move hints and both player clocks, and it translates between screen pixels and the squares
- * the engine counts in. Between two people at one screen it turns the view towards whoever is to
- * move; against the program it holds still and faces the person, because there is only one of them
- * and a board that turned would hand them their opponent's view. The game itself lives in
- * a GameSession on the bitboard core, so this class holds no position data of its own and only asks
- * the session what stands where and which squares a picked up piece may go to.
+ * legal move hints, the move that was just played, a king in check and both player clocks, and it
+ * translates between screen pixels and the squares the engine counts in. Between two people at one
+ * screen it turns the view towards whoever is to move; against the program it holds still and faces
+ * the person, because there is only one of them and a board that turned would hand them their
+ * opponent's view. A move can also be typed rather than moved with the mouse, which is why this panel
+ * takes the keyboard focus. The game itself lives in a GameSession on the bitboard core, so this
+ * class holds no position data of its own and only asks the session what stands where and which
+ * squares a picked up piece may go to.
  *
  * Owner: PBR208 - https://github.com/PBR208/
  * Version: 2.0
@@ -16,12 +18,23 @@ package ui.board;
 import engine.core.Bitboards;
 import engine.core.GameSession;
 import engine.core.MoveGen;
+import engine.core.Moves;
 import engine.core.Pieces;
+import engine.core.Position;
+import engine.core.San;
 import engine.model.EngineSettings;
 import engine.model.GameConfig;
+import ui.i18n.Messages;
+import ui.theme.Theme;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.Locale;
 
 public class Board extends JPanel implements GameSession.View {
 
@@ -56,17 +69,41 @@ public class Board extends JPanel implements GameSession.View {
     private int dragX;
     private int dragY;
 
+    // the click that says a move was accepted, silent on a machine with no audio
+    private final MoveSounds sounds = new MoveSounds();
+
+    // the move a player is typing, empty while nobody is typing one
+    private final StringBuilder typedMove = new StringBuilder();
+
+    // longer than any move ever written, so a key held down cannot grow this without end
+    private static final int MAX_TYPED_LENGTH = 10;
+
+    // the characters moves are written with, in algebraic notation and in the plain square to
+    // square form. Everything else, including the keys that mean enter and backspace, is ignored.
+    private static final String MOVE_CHARACTERS = "abcdefgh12345678NBRQKOox=-+#0";
+
     // piece images scaled to this board's square size
     private final PieceSprites sprites;
 
     private final ChessClock whiteClock;
     private final ChessClock blackClock;
-    // added to a player's clock after each of their moves
-    private final long incrementMs;
+    // while a game is paused both clocks stand still and the board takes no moves
+    private boolean paused;
+
+    // told when a paused game runs again, so the program can take a turn it was holding back
+    private Runnable onResume = () -> {
+    };
+
+    // laid over the squares while the game is paused, dark enough to say "not now"
+    private static final Color PAUSE_VEIL = new Color(0, 0, 0, 150);
+    // what both clocks showed after each ply, White's first, index 0 being the start of the game
+    private final ArrayList<ChessClock.Reading[]> clockSnapshots = new ArrayList<>();
 
     private final Color LIGHT_TILE = new Color(232, 235, 239);
     private final Color DARK_TILE = new Color(125, 135, 150);
-    private final Color HINT_COLOR = new Color(81, 168, 0, 200);
+    // the square markings live in the theme, because which colours can be told apart is a decision
+    // about the whole program rather than about this panel
+    private final Color HINT_COLOR = Theme.HINT;
 
     /**
      * Builds the game board for a new game with squares of the default size.
@@ -86,9 +123,10 @@ public class Board extends JPanel implements GameSession.View {
     /**
      * Builds the game board for a game between two people at one screen.
      * <p>
-     * Most games are played by two people taking turns at one screen, so this is the ordinary way in.
-     * I forward to the full constructor with settings that have no engine in them, which is also what
-     * makes the board turn round after every move.
+     * Most games are played by two people taking turns at one screen and begin where chess begins,
+     * so this is the ordinary way in. I forward to the full constructor with the standard starting
+     * position and settings that have no engine in them, which is also what makes the board turn
+     * round after every move.
      * <p>
      * Time complexity: O(p) for the p starting pieces. Space complexity: O(s^2) for the sprites
      * scaled to squares of s pixels.
@@ -99,18 +137,11 @@ public class Board extends JPanel implements GameSession.View {
      * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
      */
     public Board(GameConfig pConfig, int pTileSize) {
-        this(pConfig, pTileSize, EngineSettings.humanOpponent());
+        this(pConfig, pTileSize, Position.startPosition(), EngineSettings.humanOpponent());
     }
 
     /**
      * Builds the game board for a new game against a given opponent.
-     * <p>
-     * A game needs a session to play in, two clocks, mouse input and a size that fits the player's
-     * screen. I store the square size first, since everything else is measured in squares, create
-     * the session on the starting position and hand it this board as its view, the promotion dialog
-     * and the draw dialogs, build both clocks with the configured times, size the panel for the board
-     * and the two clock bars, hook up the mouse and start White's clock. The settings are kept
-     * because they decide which way round the board is drawn.
      * <p>
      * Time complexity: O(p) for the p starting pieces. Space complexity: O(s^2) for the sprites
      * scaled to squares of s pixels.
@@ -122,6 +153,50 @@ public class Board extends JPanel implements GameSession.View {
      * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
      */
     public Board(GameConfig pConfig, int pTileSize, EngineSettings pSettings) {
+        this(pConfig, pTileSize, Position.startPosition(), pSettings);
+    }
+
+    /**
+     * Builds the game board for a game between two people that starts from a given position.
+     * <p>
+     * Time complexity: O(p) for the p pieces of the position. Space complexity: O(s^2) for the
+     * sprites scaled to squares of s pixels.
+     *
+     * @param pConfig   names, times and increment of the new game, never null
+     * @param pTileSize edge length of one square in pixels, at least MIN_TILE_SIZE
+     * @param pStart    position the game begins from, never null
+     * @throws NullPointerException     if pConfig or pStart is null
+     * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
+     */
+    public Board(GameConfig pConfig, int pTileSize, Position pStart) {
+        this(pConfig, pTileSize, pStart, EngineSettings.humanOpponent());
+    }
+
+    /**
+     * Builds the game board for a game from a given position against a given opponent.
+     * <p>
+     * A game does not have to begin from the standard position: it can start from one that was set
+     * up in the position editor or loaded from a FEN, which is what studying an endgame needs. The
+     * session already accepts a position to begin from, so this only has to pass one on rather than
+     * place any pieces itself. I store the square size first, since everything else is measured in
+     * squares, create the session on that position and hand it this board as its view, the promotion
+     * dialog and the draw dialogs, build both clocks with the configured times, size the panel for
+     * the board and the two clock bars, hook up the mouse and start the clock of the side to move.
+     * The settings are kept because they decide which way round the board is drawn, and against the
+     * program they also decide who answers a draw offer or a takeback: the program itself, rather than
+     * a dialog the person would have to answer on its behalf.
+     * <p>
+     * Time complexity: O(p) for the p pieces of the position. Space complexity: O(s^2) for the
+     * sprites scaled to squares of s pixels.
+     *
+     * @param pConfig   names, times and increment of the new game, never null
+     * @param pTileSize edge length of one square in pixels, at least MIN_TILE_SIZE
+     * @param pStart    position the game begins from, never null
+     * @param pSettings who the second player is and which way the board faces, never null
+     * @throws NullPointerException     if pConfig, pStart or pSettings is null
+     * @throws IllegalArgumentException if pTileSize is smaller than MIN_TILE_SIZE
+     */
+    public Board(GameConfig pConfig, int pTileSize, Position pStart, EngineSettings pSettings) {
         // pieces this small would be hard to see and click
         if (pTileSize < MIN_TILE_SIZE) {
             throw new IllegalArgumentException("tile size " + pTileSize + " is below " + MIN_TILE_SIZE);
@@ -132,15 +207,29 @@ public class Board extends JPanel implements GameSession.View {
         // the board draws the pieces, so it owns their images
         this.sprites = new PieceSprites(pTileSize);
 
-        this.session = new GameSession();
+        this.session = new GameSession(pStart);
         session.setView(this);
         session.setPromotionPicker(new SwingPromotionChooser(this));
         session.setDrawArbiter(new SwingDrawOfferResolver(this));
+        // a draw one player offers the other is a different question from a draw the rules allow, and
+        // the program answers an offer itself rather than asking the person to answer for it
+        session.setDrawOfferArbiter(pSettings.engineOpponent()
+                ? new EngineDrawOfferArbiter(this) : new SwingDrawOfferArbiter(this));
+        // a game on a clock asks the opponent before a move is taken back, a casual one does not, and
+        // the program never minds
+        session.setTakebackArbiter(new SwingTakebackArbiter(this,
+                pConfig.whiteTimeMs() > 0 && !pSettings.engineOpponent()));
 
-        this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), this::repaint, this::onTimeExpired);
-        this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), this::repaint, this::onTimeExpired);
-        // the same increment applies to both players
-        this.incrementMs = pConfig.incrementMs();
+        // both clocks play the same time control, but they may start from different times
+        this.whiteClock = new ChessClock(true, pConfig.whiteTimeMs(), pConfig.clockMode(),
+                pConfig.incrementMs(), pConfig.delayMs(), this::repaint, this::onTimeExpired);
+        this.blackClock = new ChessClock(false, pConfig.blackTimeMs(), pConfig.clockMode(),
+                pConfig.incrementMs(), pConfig.delayMs(), this::repaint, this::onTimeExpired);
+        // both players play the same tournament control, each counting their own moves through it
+        this.whiteClock.setStages(pConfig.stages());
+        this.blackClock.setStages(pConfig.stages());
+        // the clocks before a single move was played, which is where taking back the first move leads
+        clockSnapshots.add(readClocks());
 
         this.setPreferredSize(new Dimension(cols * tileSize, rows * tileSize + clockHeight * 2));
 
@@ -148,7 +237,40 @@ public class Board extends JPanel implements GameSession.View {
         this.addMouseListener(input);
         this.addMouseMotionListener(input);
 
-        whiteClock.start();
+        // typing only reaches a component that holds the keyboard focus, and a player who clicks
+        // the board has said plainly enough that this is what they are working with
+        this.setFocusable(true);
+        this.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent pEvent) {
+                requestFocusInWindow();
+            }
+        });
+        this.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyTyped(KeyEvent pEvent) {
+                typeCharacter(pEvent.getKeyChar());
+            }
+
+            @Override
+            public void keyPressed(KeyEvent pEvent) {
+                switch (pEvent.getKeyCode()) {
+                    case KeyEvent.VK_ENTER -> submitTypedMove();
+                    case KeyEvent.VK_BACK_SPACE -> backspaceTypedMove();
+                    case KeyEvent.VK_ESCAPE -> clearTypedMove();
+                    default -> {
+                        // every other key is either a move character or none of my business
+                    }
+                }
+            }
+        });
+
+        // a position that was set up may have Black to move, and then Black's time runs first
+        if (session.isWhiteToMove()) {
+            whiteClock.start();
+        } else {
+            blackClock.start();
+        }
     }
 
     /**
@@ -211,10 +333,26 @@ public class Board extends JPanel implements GameSession.View {
             }
         }
 
+        // the move that was just played, under the hints so a square a piece may go to still wins
+        int lastFrom = getLastMoveFrom();
+        if (lastFrom >= 0) {
+            int lastTo = getLastMoveTo();
+            g2d.setColor(Theme.LAST_MOVE);
+            g2d.fillRect(toVisualX(colOf(lastFrom)), toVisualY(rowOf(lastFrom)), tileSize, tileSize);
+            g2d.fillRect(toVisualX(colOf(lastTo)), toVisualY(rowOf(lastTo)), tileSize, tileSize);
+        }
+
         // the squares a picked up piece may go to
         for (int index = 0; index < targetCount; index++) {
             g2d.setColor(HINT_COLOR);
             g2d.fillRect(toVisualX(colOf(targets[index])), toVisualY(rowOf(targets[index])), tileSize, tileSize);
+        }
+
+        // a king in check, over everything else, because it is the most urgent thing on the board
+        int checkedKing = checkSquare();
+        if (checkedKing >= 0) {
+            g2d.setColor(Theme.CHECK);
+            g2d.fillRect(toVisualX(colOf(checkedKing)), toVisualY(rowOf(checkedKing)), tileSize, tileSize);
         }
 
         for (int square = 0; square < Bitboards.SQUARE_COUNT; square++) {
@@ -235,6 +373,21 @@ public class Board extends JPanel implements GameSession.View {
             whiteClock.draw(g2d, bottomY, boardWidth, clockHeight);
         } else {
             blackClock.draw(g2d, bottomY, boardWidth, clockHeight);
+        }
+
+        // after the pieces, so a move being typed is never hidden behind one
+        drawTypedMove(g2d);
+
+        // a paused game has to look paused, or a player waits for a board that is ignoring them
+        if (paused) {
+            g2d.setColor(PAUSE_VEIL);
+            g2d.fillRect(0, clockHeight, boardWidth, rows * tileSize);
+            g2d.setColor(Color.WHITE);
+            g2d.setFont(new Font(Font.SANS_SERIF, Font.BOLD, tileSize / 2));
+            FontMetrics metrics = g2d.getFontMetrics();
+            String text = Messages.get("game.paused");
+            g2d.drawString(text, (boardWidth - metrics.stringWidth(text)) / 2,
+                    clockHeight + rows * tileSize / 2);
         }
     }
 
@@ -302,6 +455,344 @@ public class Board extends JPanel implements GameSession.View {
     }
 
     /**
+     * Plays a move a player made on this board.
+     * <p>
+     * Every move a player makes comes through here, whether it was dragged, clicked or typed, so this
+     * is where a paused game refuses it, where a move on the program's turn is refused, and where an
+     * accepted move clicks. The session still decides
+     * whether the move is legal, and it is also what remembers the move, so the board can mark the
+     * last move however it was played, including one played again after a takeback.
+     * <p>
+     * Time complexity: O(m) for the m legal moves the session checks, plus the cost of the move.
+     * Space complexity: O(1).
+     *
+     * @param pMove packed move to play, or Moves.NONE when the two squares make no move at all
+     * @return true if the move was played
+     */
+    public boolean playMove(int pMove) {
+        // a paused game takes no moves, whichever way they arrive, and the program moves its own pieces
+        if (paused || settings.playsFor(session.position().sideToMove())) {
+            return false;
+        }
+        // a pair of squares that is no legal move simply puts the piece back
+        if (pMove == Moves.NONE || !session.play(pMove)) {
+            return false;
+        }
+        // a move that was accepted should say so through more than one sense
+        sounds.playMove();
+        repaint();
+        return true;
+    }
+
+    /**
+     * Takes the last move back, or against the program the last move the person made.
+     * <p>
+     * The session decides whether a move comes back at all, because a timed game between two people
+     * asks the opponent first. Against the program one move back would hand the turn to the program,
+     * which would simply play its answer again, so I keep taking moves back until the person is to
+     * move, which also covers a takeback while the program is still thinking.
+     * <p>
+     * Time complexity: O(p) for the p plies each undo rebuilds its repetition counts from.
+     * Space complexity: O(1).
+     *
+     * @return true if a move was taken back
+     */
+    public boolean takeBack() {
+        if (!session.requestTakeback()) {
+            return false;
+        }
+        while (session.canUndo() && settings.playsFor(session.position().sideToMove())) {
+            session.undo();
+        }
+        return true;
+    }
+
+    /**
+     * Plays a taken back move again, and against the program the answer it had given as well.
+     * <p>
+     * Time complexity: O(m) for the m legal moves of each move played again. Space complexity: O(1).
+     *
+     * @return true if a move was played again
+     */
+    public boolean replayMove() {
+        if (!session.redo()) {
+            return false;
+        }
+        // the program's answer was taken back together with the person's move, so it comes back too
+        while (session.canRedo() && settings.playsFor(session.position().sideToMove())) {
+            session.redo();
+        }
+        return true;
+    }
+
+    /**
+     * Returns the square of a king that is in check.
+     * <p>
+     * A check is the one thing on the board a player must not miss, and spotting it means scanning
+     * the whole position for whatever is attacking the king. Only the side to move can be in check,
+     * because the other side being in check would mean the move before it was illegal.
+     * <p>
+     * Time complexity: O(1), a handful of attack lookups. Space complexity: O(1).
+     *
+     * @return the square the king in check stands on, or -1 when nobody is in check
+     */
+    public int checkSquare() {
+        int sideToMove = session.position().sideToMove();
+        if (!MoveGen.isInCheck(session.position(), sideToMove)) {
+            return NO_SQUARE;
+        }
+        return session.position().kingSquare(sideToMove);
+    }
+
+    /**
+     * Returns the square the last move started from.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the square, or -1 before anybody has moved
+     */
+    public int getLastMoveFrom() {
+        // the session knows the last move however it was played, and forgets one that was taken back
+        int move = session.lastMove();
+        return move == Moves.NONE ? NO_SQUARE : Moves.from(move);
+    }
+
+    /**
+     * Returns the square the last move ended on.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the square, or -1 before anybody has moved
+     */
+    public int getLastMoveTo() {
+        int move = session.lastMove();
+        return move == Moves.NONE ? NO_SQUARE : Moves.to(move);
+    }
+
+    /**
+     * Returns the move sound of this board, so it can be switched off.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return the move sound, never null
+     */
+    public MoveSounds getSounds() {
+        return sounds;
+    }
+
+    /**
+     * Adds one typed character to the move being entered.
+     * <p>
+     * Moving with the mouse asks a player to place a piece inside a square, which is a demand a
+     * keyboard does not make. Typing the move is also how anybody reading the move log already
+     * thinks about it. Characters that appear in no move are dropped, which is what the keys that
+     * mean enter or backspace look like from here, and a paused or finished game accepts nothing.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1), the text has a fixed limit.
+     *
+     * @param pCharacter the character that was typed
+     */
+    public void typeCharacter(char pCharacter) {
+        boolean acceptable = MOVE_CHARACTERS.indexOf(pCharacter) >= 0;
+        if (!acceptable || paused || session.result().isFinished() || typedMove.length() >= MAX_TYPED_LENGTH) {
+            return;
+        }
+        typedMove.append(pCharacter);
+        repaint();
+    }
+
+    /**
+     * Removes the last typed character.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
+    public void backspaceTypedMove() {
+        if (typedMove.length() > 0) {
+            typedMove.setLength(typedMove.length() - 1);
+            repaint();
+        }
+    }
+
+    /**
+     * Throws away the move being typed.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     */
+    public void clearTypedMove() {
+        if (typedMove.length() > 0) {
+            typedMove.setLength(0);
+            repaint();
+        }
+    }
+
+    /**
+     * Returns the move that is being typed.
+     * <p>
+     * Time complexity: O(n) in the length of the text. Space complexity: O(n) for the copy.
+     *
+     * @return what has been typed so far, empty when nothing is being typed; never null
+     */
+    public String getTypedMove() {
+        return typedMove.toString();
+    }
+
+    /**
+     * Plays the move that was typed, if it is one.
+     * <p>
+     * A move that was played clears the line, ready for the next one. A move that means nothing in
+     * this position leaves the text alone, because throwing away what somebody typed over a single
+     * wrong character is a poor answer when the fix is one backspace away.
+     * <p>
+     * Time complexity: O(m) for the m legal moves of the position. Space complexity: O(1).
+     *
+     * @return true if a move was played
+     */
+    public boolean submitTypedMove() {
+        int move = moveForText(getTypedMove());
+        if (!playMove(move)) {
+            return false;
+        }
+        typedMove.setLength(0);
+        repaint();
+        return true;
+    }
+
+    /**
+     * Works out which legal move a piece of text names.
+     * <p>
+     * Two ways of writing a move are worth understanding. The square to square form, e2e4, needs no
+     * knowledge of the position at all and is what a chess engine speaks, so I try it first. Failing
+     * that the text is read as algebraic notation, which is what the move log shows, so a player can
+     * type back exactly what they have just read. I compare against the notation of every legal move
+     * rather than taking the text apart, which means the one place that writes notation is also the
+     * one place that decides what it means. Check and mate marks are ignored, because a player who
+     * types them is right and should not be punished for it, and a castling written with zeros is
+     * read as the letter O that the standard actually asks for.
+     * <p>
+     * Time complexity: O(m) for the m legal moves of the position, each written out once.
+     * Space complexity: O(m) for the generated moves.
+     *
+     * @param pText the move as it was typed, may be anything; may be null
+     * @return the packed move, or Moves.NONE when the text names no legal move
+     */
+    public int moveForText(String pText) {
+        if (pText == null || pText.isBlank() || session.result().isFinished()) {
+            return Moves.NONE;
+        }
+        String wanted = pText.trim();
+
+        int[] legalMoves = new int[MoveGen.MAX_MOVES];
+        int count = MoveGen.generateLegal(session.position(), legalMoves, 0);
+
+        int square = squareToSquareMove(wanted, legalMoves, count);
+        if (square != Moves.NONE) {
+            return square;
+        }
+
+        String normalised = withoutMarks(wanted);
+        for (int index = 0; index < count; index++) {
+            if (withoutMarks(San.of(session.position(), legalMoves[index])).equals(normalised)) {
+                return legalMoves[index];
+            }
+        }
+        return Moves.NONE;
+    }
+
+    /**
+     * Reads a move written as the two squares it joins, such as e2e4 or e7e8q.
+     * <p>
+     * This is the form a chess engine speaks, and it is unambiguous without knowing the position.
+     * A promotion needs the letter of the piece, because the same two squares stand for four
+     * different moves, and without it I return nothing rather than guessing at a queen.
+     * <p>
+     * Time complexity: O(m) for the m legal moves. Space complexity: O(1).
+     *
+     * @param pText       the typed text, never null
+     * @param pMoves      the legal moves of this position, never null
+     * @param pCount      how many of them there are
+     * @return the packed move, or Moves.NONE when the text is not this form or names no legal move
+     */
+    private int squareToSquareMove(String pText, int[] pMoves, int pCount) {
+        if (pText.length() < 4 || pText.length() > 5) {
+            return Moves.NONE;
+        }
+        String lower = pText.toLowerCase(Locale.ROOT);
+        int from;
+        int to;
+        try {
+            from = Bitboards.squareOf(lower.substring(0, 2));
+            to = Bitboards.squareOf(lower.substring(2, 4));
+        } catch (IllegalArgumentException e) {
+            // not two square names, so this is not the square to square form
+            return Moves.NONE;
+        }
+
+        String promotion = lower.length() == 5 ? "=" + lower.substring(4) : "";
+        for (int index = 0; index < pCount; index++) {
+            int move = pMoves[index];
+            if (Moves.from(move) != from || Moves.to(move) != to) {
+                continue;
+            }
+            if (promotion.isEmpty()) {
+                // the same two squares mean four moves for a promoting pawn, so it has to be said
+                if (!Moves.isPromotion(move)) {
+                    return move;
+                }
+            } else if (San.of(session.position(), move).toLowerCase(Locale.ROOT).contains(promotion)) {
+                return move;
+            }
+        }
+        return Moves.NONE;
+    }
+
+    /**
+     * Strips the marks that say nothing about which move was meant.
+     * <p>
+     * Check and mate marks describe what the move does rather than which move it is, and zeros are
+     * what a keyboard offers somebody trying to write the letter O of a castling.
+     * <p>
+     * Time complexity: O(n) in the length of the text. Space complexity: O(n) for the result.
+     *
+     * @param pText move text, never null
+     * @return the text without check marks and with castling zeros turned into letters
+     */
+    private static String withoutMarks(String pText) {
+        return pText.replace("+", "").replace("#", "").replace('0', 'O');
+    }
+
+    /**
+     * Draws the move that is being typed along the bottom of the board.
+     * <p>
+     * A player typing a move has to see what the program thinks they typed, otherwise a mistyped
+     * character is only discovered when the move is refused. I draw nothing at all while nobody is
+     * typing, so the board is unchanged for anybody using the mouse.
+     * <p>
+     * Time complexity: O(n) in the length of the typed text. Space complexity: O(1).
+     *
+     * @param pGraphics graphics context of this panel, never null
+     */
+    private void drawTypedMove(Graphics2D pGraphics) {
+        if (typedMove.length() == 0) {
+            return;
+        }
+        String text = typedMove.toString();
+        // logical fonts exist on every platform, and a fixed width one keeps the box from jumping
+        pGraphics.setFont(new Font(Font.MONOSPACED, Font.BOLD, Math.max(12, tileSize / 3)));
+        FontMetrics metrics = pGraphics.getFontMetrics();
+
+        int padding = Math.max(4, tileSize / 6);
+        int boxWidth = metrics.stringWidth(text) + padding * 2;
+        int boxHeight = metrics.getHeight() + padding;
+        int x = (cols * tileSize - boxWidth) / 2;
+        int y = clockHeight + rows * tileSize - boxHeight - padding;
+
+        pGraphics.setColor(new Color(0, 0, 0, 190));
+        pGraphics.fillRect(x, y, boxWidth, boxHeight);
+        pGraphics.setColor(Theme.FG);
+        pGraphics.drawString(text, x + padding, y + padding / 2 + metrics.getAscent());
+    }
+
+    /**
      * Remembers where the dragged piece is drawn.
      * <p>
      * While a piece is dragged it hangs on the mouse instead of standing on a square. The board
@@ -330,14 +821,14 @@ public class Board extends JPanel implements GameSession.View {
      */
     @Override
     public void switchClocks(boolean pWhiteToMove) {
-        // only the side to move uses up time, the side that just moved earns its increment
+        // only the side to move uses up time, and the clock that just stopped settles its own mode
         if (pWhiteToMove) {
             blackClock.stop();
-            blackClock.addTime(incrementMs);
+            blackClock.onMoveFinished();
             whiteClock.start();
         } else {
             whiteClock.stop();
-            whiteClock.addTime(incrementMs);
+            whiteClock.onMoveFinished();
             blackClock.start();
         }
     }
@@ -363,6 +854,143 @@ public class Board extends JPanel implements GameSession.View {
         whiteClock.reset();
         blackClock.reset();
         whiteClock.start();
+        // a new game keeps none of the times the finished one left behind
+        clockSnapshots.clear();
+        clockSnapshots.add(readClocks());
+    }
+
+    /**
+     * Remembers what both clocks show after the move that was just played.
+     * <p>
+     * Taking a move back has to give both players the time they had before it, and only the clocks
+     * themselves know that. I store both clocks under the ply the game is at now, including how far
+     * each player has got through a tournament control, so a move that is taken back no longer
+     * counts towards the end of a stage either. A move played after something was taken back drops
+     * the snapshots of the line that was abandoned, so the list always describes the game as it
+     * really went.
+     * <p>
+     * Time complexity: O(d) for the d snapshots of an abandoned line, O(1) otherwise.
+     * Space complexity: O(1) per played move.
+     *
+     * @param pPly how many moves have been played, 1 after the first move
+     */
+    @Override
+    public void recordClocks(int pPly) {
+        // a new move after an undo replaces the times of the line nobody is playing any more
+        while (clockSnapshots.size() > pPly) {
+            clockSnapshots.remove(clockSnapshots.size() - 1);
+        }
+        clockSnapshots.add(readClocks());
+    }
+
+    /**
+     * Reads both clocks at this moment.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return White's reading followed by Black's, never null
+     */
+    private ChessClock.Reading[] readClocks() {
+        return new ChessClock.Reading[]{whiteClock.reading(), blackClock.reading()};
+    }
+
+    /**
+     * Puts both clocks back to what they showed at a ply and starts the one of the player to move.
+     * <p>
+     * A taken back move gives the time back that was spent on it. I stop both clocks, set them to
+     * what was recorded for that ply and start the clock of whoever is to move there. A ply nobody
+     * recorded, which can only happen for a game that was loaded rather than played, leaves the
+     * times alone and only hands the clock over. A paused game stays paused, so neither clock starts
+     * until the players resume it.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pPly         how many moves are played now, 0 at the starting position
+     * @param pWhiteToMove true if White is to move at that ply
+     */
+    @Override
+    public void restoreClocks(int pPly, boolean pWhiteToMove) {
+        whiteClock.stop();
+        blackClock.stop();
+
+        if (pPly < clockSnapshots.size()) {
+            ChessClock.Reading[] readings = clockSnapshots.get(pPly);
+            whiteClock.restore(readings[0]);
+            blackClock.restore(readings[1]);
+        }
+
+        // the player to move is the one whose clock runs, and resuming a paused game starts it
+        if (!paused) {
+            if (pWhiteToMove) {
+                whiteClock.start();
+            } else {
+                blackClock.start();
+            }
+        }
+    }
+
+    /**
+     * Pauses or resumes the game.
+     * <p>
+     * Players step away from a board, and until now the only way to stop the clock was to finish the
+     * game. Pausing stops both clocks and makes the board ignore the mouse, so a piece cannot be
+     * moved while nobody is watching the time. Resuming starts the clock of whoever is to move, and
+     * never starts one at all when the game is already over. Asking for the state the game is
+     * already in does nothing, so a pause cannot be stacked.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pPaused true to pause the game, false to let it run again
+     */
+    public void setPaused(boolean pPaused) {
+        // nothing to do, and pausing twice must not lose track of whose clock was running
+        if (pPaused == paused) {
+            return;
+        }
+        paused = pPaused;
+
+        if (paused) {
+            whiteClock.stop();
+            blackClock.stop();
+        } else if (!session.result().isFinished()) {
+            // the clock of the player to move is the one that carries on
+            if (session.isWhiteToMove()) {
+                whiteClock.start();
+            } else {
+                blackClock.start();
+            }
+        }
+        repaint();
+        // a program that held its move back while the game was paused may move now
+        if (!paused) {
+            onResume.run();
+        }
+    }
+
+    /**
+     * Sets who is told when a paused game runs again.
+     * <p>
+     * A program opponent does not move while the game is paused, so it needs to hear when the game
+     * goes on, since nothing else about the game changes at that moment.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pListener run whenever the game is resumed, or null for nobody
+     */
+    public void setResumeListener(Runnable pListener) {
+        this.onResume = pListener == null ? () -> {
+        } : pListener;
+    }
+
+    /**
+     * Tells whether the game is paused.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @return true while both clocks stand still and the board takes no moves
+     */
+    public boolean isPaused() {
+        return paused;
     }
 
     /**

@@ -19,6 +19,7 @@ import engine.model.EngineSettings;
 import engine.search.Searcher;
 
 import javax.swing.SwingUtilities;
+import java.util.function.BooleanSupplier;
 
 public class EnginePlayer {
 
@@ -26,6 +27,9 @@ public class EnginePlayer {
 
     // true while a move is being thought about, so one turn cannot be started twice
     private volatile boolean thinking;
+
+    // true while the program must not move, which is what a paused game asks of it
+    private BooleanSupplier onHold = () -> false;
 
     /**
      * Builds the program's side of a game.
@@ -44,7 +48,8 @@ public class EnginePlayer {
      * <p>
      * A game that has ended has no turn left, and a game against another person never has one that
      * belongs here. A turn already being thought about is not a second turn either, which is what
-     * stops a repaint or a stray event from starting the same move twice.
+     * stops a repaint or a stray event from starting the same move twice, and a paused game holds
+     * the program's turn back until it runs again.
      * <p>
      * Time complexity: O(1). Space complexity: O(1).
      *
@@ -53,7 +58,7 @@ public class EnginePlayer {
      * @throws NullPointerException if pSession is null
      */
     public boolean isEngineTurn(GameSession pSession) {
-        if (!settings.engineOpponent() || thinking || pSession.result().isFinished()) {
+        if (!settings.engineOpponent() || thinking || onHold.getAsBoolean() || pSession.result().isFinished()) {
             return false;
         }
         int sideToMove = pSession.isWhiteToMove() ? Pieces.WHITE : Pieces.BLACK;
@@ -92,8 +97,10 @@ public class EnginePlayer {
      * The search happens away from the thread that draws the board, so the window stays alive while
      * the program thinks, and the move is played back on that thread, because that is where every
      * other change to a running game happens and a position changing under a repaint would tear.
-     * A move that has stopped being legal by the time it arrives is dropped rather than forced,
-     * which is what happens if the game ended while the search was still running.
+     * A move that arrives for a position the game has left is dropped rather than forced, which is
+     * what happens when the game ended, a move was taken back or the game was restarted while the
+     * search was still running, and the program then looks at the game as it stands now. A move that
+     * arrives while the game is paused is dropped as well, and resuming asks for it again.
      * <p>
      * Time complexity: O(1) here, the search costs what its limits allow on the other thread.
      * Space complexity: O(1).
@@ -108,15 +115,23 @@ public class EnginePlayer {
             return false;
         }
         thinking = true;
+        // what the move is worked out for, so an answer to a position that is gone can be recognised
+        long key = pSession.position().key();
+        int ply = pSession.getMoveLog().size();
 
         Runnable task = () -> {
             int move = chooseMove(pSession);
             SwingUtilities.invokeLater(() -> {
-                // the game may have ended while this was being worked out
-                if (move != Moves.NONE) {
+                // the game may have ended, been taken back or been restarted while this was worked out
+                boolean current = pSession.position().key() == key && pSession.getMoveLog().size() == ply;
+                if (move != Moves.NONE && current && !onHold.getAsBoolean()) {
                     pSession.play(move);
                 }
                 thinking = false;
+                // a game that moved on while the program was thinking may be the program's turn again
+                if (!current) {
+                    moveIfItsTurn(pSession, pAfterMove);
+                }
                 if (pAfterMove != null) {
                     pAfterMove.run();
                 }
@@ -166,8 +181,21 @@ public class EnginePlayer {
                 if (pDelegate != null) {
                     pDelegate.clear();
                 }
+                // a game taken back to its start, or started again, may open with the program's move
+                SwingUtilities.invokeLater(() -> moveIfItsTurn(pSession, pAfterMove));
             }
         };
+    }
+
+    /**
+     * Sets what keeps the program from moving, such as a paused game.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pOnHold true while the program must not move, or null for never
+     */
+    public void setHold(BooleanSupplier pOnHold) {
+        this.onHold = pOnHold == null ? () -> false : pOnHold;
     }
 
     /**
