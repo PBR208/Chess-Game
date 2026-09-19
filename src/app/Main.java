@@ -23,6 +23,8 @@ import ui.board.MoveLogPanel;
 import ui.i18n.Messages;
 import ui.menu.MainMenu;
 import ui.menu.PastGamesPanel;
+import ui.theme.Theme;
+import ui.theme.UiComponents;
 
 import javax.swing.*;
 import java.awt.*;
@@ -130,11 +132,15 @@ public class Main {
             MoveLogPanel logPanel = new MoveLogPanel(board.getPreferredSize().height);
             GameSession session = board.getSession();
             session.setMoveLogView(logPanel);
+            // clicking a move in the log takes the game back to it, or forward again
+            logPanel.setPlySelectedListener(session::goToPly);
 
             session.setEndListener((pResult, pTermination) -> {
-                // the session owns the moves and the result, the names and the time control come from the config
-                GameRecord record = new GameRecord(cfg, pResult.pgnToken(),
-                        session.getMoveLog(), session.getFenHistory());
+                // the session owns the moves and the result, the names and the clock come from the config,
+                // and the reason it ended is what the PGN Termination tag gets written from. The board
+                // always starts a game from the usual position, so there is no starting FEN to record.
+                GameRecord record = new GameRecord(cfg, pResult.pgnToken(), pTermination,
+                        session.getMoveLog(), session.getFenHistory(), null);
                 // a game that couldn't be written must not disappear without a word
                 boolean saved = PgnManager.save(record);
                 // the engine reports a result and a reason, the sentence the players read is built here
@@ -156,6 +162,7 @@ public class Main {
             gameContainer.setBackground(new Color(28, 28, 30));
             gameContainer.add(board, BorderLayout.CENTER);
             gameContainer.add(logPanel, BorderLayout.EAST);
+            gameContainer.add(actionBar(board), BorderLayout.SOUTH);
 
             JPanel wrapper = new JPanel(new GridBagLayout());
             wrapper.setBackground(new Color(28, 28, 30));
@@ -165,6 +172,62 @@ public class Main {
             frame.revalidate();
             frame.repaint();
         });
+    }
+
+    /**
+     * Builds the row of actions under the board.
+     * <p>
+     * Players need a way to take a move back and to play it again, and both only make sense while
+     * there is something to take back or replay. I build the two buttons, hand the clicks to the
+     * session, which asks the opponent in a timed game, and let the board tell me whenever the game
+     * changed so the buttons can be greyed out exactly when they would do nothing.
+     * <p>
+     * Players also step away from a game, and stopping the clock should not mean ending it. The
+     * pause button pauses and resumes the board and says which of the two it will do next, so a
+     * player always reads the action rather than the state. Everything it needs is on the board
+     * itself, which stops the clocks and refuses moves while it is paused.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1) apart from the panel and its buttons.
+     *
+     * @param pBoard the board of the running game, never null
+     * @return the action row, never null
+     * @throws NullPointerException if pBoard is null
+     */
+    private static JPanel actionBar(Board pBoard) {
+        GameSession session = pBoard.getSession();
+
+        JPanel bar = new JPanel(new FlowLayout(FlowLayout.CENTER, 8, 6));
+        bar.setBackground(Theme.PANEL_BG);
+
+        Font buttonFont = new Font(Font.SANS_SERIF, Font.PLAIN, 13);
+        JButton takeBack = UiComponents.button(Messages.get("game.takeBack"), buttonFont, Theme.BUTTON_SECONDARY);
+        takeBack.setName("takeBack");
+        JButton replay = UiComponents.button(Messages.get("game.replayMove"), buttonFont, Theme.BUTTON_SECONDARY);
+        replay.setName("replayMove");
+        JButton pause = UiComponents.button(Messages.get("game.pause"), buttonFont, Theme.BUTTON_SECONDARY);
+        pause.setName("pause");
+
+        // the session decides whether the move really comes back, since a timed game asks the opponent
+        takeBack.addActionListener(e -> session.requestTakeback());
+        replay.addActionListener(e -> session.redo());
+        pause.addActionListener(e -> {
+            pBoard.setPaused(!pBoard.isPaused());
+            // the button names what pressing it will do next, not what the game is doing now
+            pause.setText(Messages.get(pBoard.isPaused() ? "game.resume" : "game.pause"));
+        });
+
+        // a button that would do nothing says so by being grey
+        Runnable refresh = () -> {
+            takeBack.setEnabled(session.canUndo());
+            replay.setEnabled(session.canRedo());
+        };
+        pBoard.setGameChangedListener(refresh);
+        refresh.run();
+
+        bar.add(takeBack);
+        bar.add(replay);
+        bar.add(pause);
+        return bar;
     }
 
     /**

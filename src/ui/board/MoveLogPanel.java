@@ -2,12 +2,13 @@ package ui.board;
 
 /*
  * Purpose: MoveLogPanel shows the moves of the running game next to the board, together with the FEN
- * of the current position. It pairs White's and Black's moves on one line and scrolls to the latest
- * move. I keep it as a separate panel that only receives updates, so the rules engine never needs
- * to know how the log is displayed. The text uses logical font names, which every platform provides.
+ * of the current position. It pairs White's and Black's moves on one line, scrolls to the latest move
+ * and lets a player click any move to take the game back to it. I keep it as a separate panel that
+ * only receives updates and reports clicks, so the rules engine never needs to know how the log is
+ * displayed. The text uses logical font names, which every platform provides.
  *
  * Owner: PBR208 - https://github.com/PBR208/
- * Version: 1.0
+ * Version: 1.1
  */
 
 import engine.core.GameSession;
@@ -15,13 +16,23 @@ import engine.imports.MoveLogView;
 import ui.i18n.Messages;
 
 import javax.swing.*;
+import javax.swing.text.BadLocationException;
 import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.List;
+import java.util.function.IntConsumer;
 
 public class MoveLogPanel extends JPanel implements MoveLogView, GameSession.MoveLog {
 
+    // a line reads "  1.  e4        e5", so everything past this column belongs to Black's move
+    private static final int BLACK_MOVE_COLUMN = 15;
+
     private final JTextArea area = new JTextArea();
     private final JTextArea fenArea = new JTextArea();
+    // told which ply a player clicked, so somebody else can decide what to do about it
+    private IntConsumer onPlySelected = ply -> {
+    };
 
     /**
      * Builds the move log with its move history and current FEN sections.
@@ -45,6 +56,16 @@ public class MoveLogPanel extends JPanel implements MoveLogView, GameSession.Mov
         area.setForeground(new Color(210, 210, 210));
         area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13));
         area.setMargin(new Insets(8, 8, 8, 8));
+        // clicking a move means "show me the game as it stood after it"
+        area.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent pEvent) {
+                int ply = plyAt(pEvent.getPoint());
+                if (ply >= 0) {
+                    onPlySelected.accept(ply);
+                }
+            }
+        });
 
         // Header label for moves
         // the padding stays here, because a properties file drops the spaces in front of a value
@@ -139,5 +160,49 @@ public class MoveLogPanel extends JPanel implements MoveLogView, GameSession.Mov
     public void clear() {
         area.setText("");
         fenArea.setText("");
+    }
+
+    /**
+     * Sets who is told when a player clicks a move in the log.
+     * <p>
+     * The log knows which move was clicked but nothing about games, so it reports the ply and lets
+     * the caller decide what happens. Without a listener a click does nothing at all.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pListener told the number of moves the game should be at, or null for nobody
+     */
+    public void setPlySelectedListener(IntConsumer pListener) {
+        this.onPlySelected = pListener == null ? ply -> {
+        } : pListener;
+    }
+
+    /**
+     * Works out which move of the game a point in the log belongs to.
+     * <p>
+     * Every line of the log holds one full move, White's first and Black's behind it at a fixed
+     * column, because the text is laid out in a monospaced font. So the line gives the move number
+     * and the column says which of the two halves was hit. I report the number of moves the game
+     * would have played after that move, which is what jumping there means. A click past the end of
+     * the text belongs to no move.
+     * <p>
+     * Time complexity: O(1). Space complexity: O(1).
+     *
+     * @param pPoint point inside the move area, never null
+     * @return how many moves are played after the clicked move, or -1 when none was hit
+     */
+    private int plyAt(Point pPoint) {
+        try {
+            int offset = area.viewToModel2D(pPoint);
+            int line = area.getLineOfOffset(offset);
+            int column = offset - area.getLineStartOffset(line);
+            // the first half of the line is White's move, the rest is Black's
+            int half = column < BLACK_MOVE_COLUMN ? 0 : 1;
+            // the game stands after the move that was clicked, so one ply further than its index
+            return line * 2 + half + 1;
+        } catch (BadLocationException e) {
+            // a point outside the text names no move
+            return -1;
+        }
     }
 }
